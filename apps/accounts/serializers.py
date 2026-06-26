@@ -2,7 +2,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.db import transaction
 from rest_framework import serializers
 
-from apps.tenants.models import Tenant
+from apps.tenants.models import Jurisdiction, Tenant
 
 from .models import Role, User
 
@@ -42,6 +42,11 @@ class OnboardingSerializer(serializers.Serializer):
     org_slug = serializers.SlugField(max_length=50)
     org_address = serializers.CharField(required=False, allow_blank=True)
     org_contact = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    # The tenant's own jurisdiction (usually its local gov). Optional so signup
+    # still works offline of the tree; rollup just skips tenants with none.
+    jurisdiction = serializers.PrimaryKeyRelatedField(
+        queryset=Jurisdiction.objects.all(), required=False, allow_null=True
+    )
     phone = serializers.CharField()
     email = serializers.EmailField(required=False, allow_blank=True)
     password = serializers.CharField(write_only=True, validators=[validate_password])
@@ -63,6 +68,7 @@ class OnboardingSerializer(serializers.Serializer):
             slug=validated_data["org_slug"],
             address=validated_data.get("org_address", ""),
             contact=validated_data.get("org_contact", ""),
+            jurisdiction=validated_data.get("jurisdiction"),
             subscription_status=Tenant.SubscriptionStatus.PENDING,
         )
         user = User(
@@ -85,6 +91,7 @@ class OnboardingSerializer(serializers.Serializer):
                 "slug": tenant.slug,
                 "address": tenant.address,
                 "contact": tenant.contact,
+                "jurisdiction": tenant.jurisdiction_id,
             },
             "user": {"id": user.id, "phone": user.phone, "role": user.role},
         }

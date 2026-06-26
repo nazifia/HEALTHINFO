@@ -29,6 +29,24 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   bool _busy = false;
   bool _obscure = true;
   String? _error;
+  List<Map<String, dynamic>> _jurisdictions = [];
+  int? _stateId;
+  int? _localId;
+
+  // Cascade: states, then the locals under the picked state.
+  Iterable<Map<String, dynamic>> get _states =>
+      _jurisdictions.where((j) => j['level'] == 'state');
+  Iterable<Map<String, dynamic>> get _locals =>
+      _jurisdictions.where((j) => j['level'] == 'local' && j['parent'] == _stateId);
+
+  @override
+  void initState() {
+    super.initState();
+    // Best-effort: an empty/failed list just hides the optional picker.
+    api.jurisdictions().then((j) {
+      if (mounted) setState(() => _jurisdictions = j);
+    }).catchError((_) {});
+  }
 
   @override
   void dispose() {
@@ -61,6 +79,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         phone: _phone.text.trim(),
         email: _email.text.trim(),
         password: _pass.text,
+        jurisdictionId: _localId ?? _stateId,  // most specific picked
       );
       final slug = (res['tenant'] as Map?)?['slug'] ?? _orgSlug.text.trim();
       // Point the client at the tenant just created so the next login targets it.
@@ -94,6 +113,33 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           prefixIcon: Icon(icon),
           suffixIcon: suffix,
         ),
+      ),
+    );
+  }
+
+  Widget _jurisdictionDropdown({
+    required String label,
+    required int? value,
+    required Iterable<Map<String, dynamic>> rows,
+    required ValueChanged<int?> onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: DropdownButtonFormField<int>(
+        value: value,
+        isExpanded: true,
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: const Icon(Icons.account_tree_outlined),
+        ),
+        items: [
+          for (final j in rows)
+            DropdownMenuItem(
+              value: j['id'] as int,
+              child: Text(j['name'] as String, overflow: TextOverflow.ellipsis),
+            ),
+        ],
+        onChanged: onChanged,
       ),
     );
   }
@@ -166,6 +212,23 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               _field(_orgContact, 'Contact (phone or email)',
                                   Icons.contact_phone_outlined,
                                   validator: _required),
+                              if (_states.isNotEmpty)
+                                _jurisdictionDropdown(
+                                  label: 'State (optional)',
+                                  value: _stateId,
+                                  rows: _states,
+                                  onChanged: (v) => setState(() {
+                                    _stateId = v;
+                                    _localId = null;  // state changed, clear local
+                                  }),
+                                ),
+                              if (_locals.isNotEmpty)
+                                _jurisdictionDropdown(
+                                  label: 'Local government (optional)',
+                                  value: _localId,
+                                  rows: _locals,
+                                  onChanged: (v) => setState(() => _localId = v),
+                                ),
                               const Divider(height: 32),
                               _field(_phone, 'Admin phone',
                                   Icons.phone_outlined,

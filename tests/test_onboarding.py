@@ -47,6 +47,27 @@ def test_failure_uses_message_envelope(db, client):
     assert resp.data["errors"]  # field errors preserved for the form to use
 
 
+def test_onboarding_sets_jurisdiction(db, client):
+    from apps.tenants.models import Jurisdiction
+
+    lga = Jurisdiction.objects.create(name="Ikeja", level="local")
+    resp = client.post(
+        "/api/auth/onboarding/",
+        {
+            "org_name": "Geo Org",
+            "org_slug": "geo-org",
+            "jurisdiction": lga.id,
+            "phone": "+2348031230009",
+            "email": "geo@org.com",
+            "password": "Sup3r-Str0ng-Pw!",
+        },
+        format="json",
+    )
+    assert resp.status_code == 201, resp.content
+    assert resp.data["tenant"]["jurisdiction"] == lga.id
+    assert Tenant.objects.get(slug="geo-org").jurisdiction_id == lga.id
+
+
 def test_onboarding_rejects_duplicate_slug(db, client):
     Tenant.objects.create(name="Existing", slug="taken")
     resp = client.post(

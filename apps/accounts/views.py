@@ -7,6 +7,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from config.responses import success
 
+from apps.tenants.models import Jurisdiction
+
 from .models import Role, User
 from .permissions import IsTenantMember
 from .serializers import OnboardingSerializer, RegisterSerializer, UserSerializer
@@ -55,6 +57,14 @@ class OnboardingViewSet(viewsets.ViewSet):
         return success(
             "Organization created. Sign in to continue.", s.data, status=201
         )
+
+    @action(detail=False, methods=["get"])
+    def jurisdictions(self, request):
+        """Public list for the signup picker. Flat tree; client groups by level."""
+        rows = Jurisdiction.objects.values("id", "name", "level", "parent").order_by(
+            "level", "name"
+        )
+        return Response(list(rows))
 
 
 class UserViewSet(viewsets.ModelViewSet):
