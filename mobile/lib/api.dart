@@ -129,6 +129,7 @@ class Api {
     required String phone,
     required String email,
     required String password,
+    int? jurisdictionId,
   }) async {
     final r = await http.post(
       _uri('/api/auth/onboarding/'),
@@ -141,12 +142,26 @@ class Api {
         'phone': phone,
         'email': email,
         'password': password,
+        if (jurisdictionId != null) 'jurisdiction': jurisdictionId,
       }),
     );
     if (r.statusCode != 201) {
       throw ApiException('Onboarding failed (${r.statusCode})', r.body);
     }
     return jsonDecode(r.body) as Map<String, dynamic>;
+  }
+
+  /// GET /api/auth/onboarding/jurisdictions/ — public list for the signup
+  /// picker. Returns rows of {id, name, level, parent}.
+  Future<List<Map<String, dynamic>>> jurisdictions() async {
+    final r = await http.get(
+      _uri('/api/auth/onboarding/jurisdictions/'),
+      headers: _headers(auth: false),
+    );
+    if (r.statusCode != 200) {
+      throw ApiException('Jurisdictions failed (${r.statusCode})', r.body);
+    }
+    return (jsonDecode(r.body) as List).cast<Map<String, dynamic>>();
   }
 
   Future<bool> _refreshAccess() async {
