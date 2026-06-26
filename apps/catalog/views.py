@@ -221,7 +221,13 @@ class InteractionCheckView(APIView):
                 {"detail": "medication_ids must be a list of at least 2 ids"},
                 status=400,
             )
-        ids = {int(i) for i in ids}
+        try:
+            ids = {int(i) for i in ids}
+        except (TypeError, ValueError):
+            return Response(
+                {"detail": "medication_ids must be a list of integer ids"},
+                status=400,
+            )
         hits = DrugInteraction.objects.filter(
             medication_a_id__in=ids, medication_b_id__in=ids
         )
@@ -247,7 +253,12 @@ class DifferentialView(APIView):
             return Response(
                 {"detail": "symptom_ids must be a non-empty list"}, status=400
             )
-        ids = {int(i) for i in ids}
+        try:
+            ids = {int(i) for i in ids}
+        except (TypeError, ValueError):
+            return Response(
+                {"detail": "symptom_ids must be a list of integer ids"}, status=400
+            )
         ranked = (
             Disease.objects.filter(status="published", symptoms__in=ids)
             .annotate(matched=Count("symptoms", filter=Q(symptoms__in=ids), distinct=True))

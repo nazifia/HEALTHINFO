@@ -63,6 +63,7 @@ class OnboardingSerializer(serializers.Serializer):
             slug=validated_data["org_slug"],
             address=validated_data.get("org_address", ""),
             contact=validated_data.get("org_contact", ""),
+            subscription_status=Tenant.SubscriptionStatus.PENDING,
         )
         user = User(
             phone=validated_data["phone"],

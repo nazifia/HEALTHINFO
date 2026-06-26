@@ -2,13 +2,32 @@
 whole RAG path runs in dev/tests; set AI_EMBED_PROVIDER=openai for real ones."""
 import hashlib
 import json
+import os
 import urllib.request
 
 from django.conf import settings
 
 
+def _active_provider() -> str:
+    """Embedding provider, gated on runtime mode.
+
+    Explicit AI_EMBED_PROVIDER (non-default) always wins — e.g. force openai in
+    dev. Otherwise prod uses the real provider, dev/test stays on the keyless
+    fake so the RAG path runs with no API key.
+    """
+    if settings.AI_EMBED_PROVIDER != "fake":
+        return settings.AI_EMBED_PROVIDER
+    from apps.governance.models import is_prod
+
+    # ponytail: prod uses openai only when a key is actually present; without one
+    # we degrade to the keyless fake instead of 500ing keyless envs (dev/tests/CI).
+    if is_prod() and os.environ.get("OPENAI_API_KEY"):
+        return "openai"
+    return "fake"
+
+
 def embed(text: str) -> list[float]:
-    if settings.AI_EMBED_PROVIDER == "openai":
+    if _active_provider() == "openai":
         return _openai_embed(text)
     return _fake_embed(text)
 

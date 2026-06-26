@@ -11,8 +11,11 @@ load_dotenv(BASE_DIR / ".env")
 
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-insecure-change-me-0123456789-abcdef")
 DEBUG = os.getenv("DEBUG", "1") == "1"
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "*").split(",")
 BASE_DOMAIN = os.getenv("BASE_DOMAIN", "health.local")
+
+# Dev: wildcard. Prod (DEBUG=0): require explicit ALLOWED_HOSTS, no wildcard fallback.
+_hosts_default = "*" if DEBUG else ""
+ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", _hosts_default).split(",") if h.strip()]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -36,7 +39,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    "corsheaders.middleware.CorsMiddleware",
+    "config.cors.ModeAwareCorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -50,10 +53,12 @@ MIDDLEWARE = [
 ROOT_URLCONF = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"
 
-# CORS: dev-open so Flutter web (random localhost port) can call the API.
-# ponytail: allow-all is dev only — set CORS_ALLOWED_ORIGINS to the real
-# web origin(s) for prod.
-CORS_ALLOW_ALL_ORIGINS = True
+# CORS: dev-open vs prod-locked is toggled at runtime by ModeAwareCorsMiddleware
+# (admin: Governance -> Runtime config), not the startup DEBUG flag. Dev reflects
+# any Origin; prod allows only this explicit list (comma-separated env).
+CORS_ALLOWED_ORIGINS = [
+    o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()
+]
 # Custom tenant header the mobile/web client sends.
 CORS_ALLOW_HEADERS = list(default_cors_headers) + ["x-tenant-id"]
 

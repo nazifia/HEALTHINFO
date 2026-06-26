@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.http import JsonResponse
 
 from .current import clear_current_tenant, set_current_tenant
 from .models import Tenant
@@ -24,12 +25,27 @@ def _resolve_tenant(request):
     return None
 
 
+# Routes a pending/rejected tenant may still hit (so its admin can log in and
+# see the status). Prefix match.
+_SUBSCRIPTION_GATE_ALLOW = ("/api/auth/token/",)
+
+
 class TenantMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
         tenant = _resolve_tenant(request)
+        # Block tenants whose subscription isn't approved yet. Admin/super-admin
+        # traffic resolves no tenant (bare host), so it's unaffected.
+        allowed = request.path.startswith(_SUBSCRIPTION_GATE_ALLOW)
+        if (tenant and not allowed
+                and tenant.subscription_status != Tenant.SubscriptionStatus.APPROVED):
+            return JsonResponse(
+                {"success": False,
+                 "message": "This organization's subscription is awaiting approval."},
+                status=403,
+            )
         request.tenant = tenant
         set_current_tenant(tenant)
         try:

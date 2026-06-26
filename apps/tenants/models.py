@@ -49,6 +49,11 @@ class Tenant(models.Model):
         ACTIVE = "active"
         SUSPENDED = "suspended"
 
+    class SubscriptionStatus(models.TextChoices):
+        PENDING = "pending"      # self-signed up, awaiting admin approval
+        APPROVED = "approved"
+        REJECTED = "rejected"
+
     name = models.CharField(max_length=200)
     slug = models.SlugField(unique=True)
     address = models.TextField(blank=True)
@@ -62,6 +67,12 @@ class Tenant(models.Model):
         related_name="tenants",
     )
     subscription_plan = models.CharField(max_length=50, default="free")
+    # APPROVED by default so existing tenants keep working through the migration;
+    # self-signup (onboarding) overrides to PENDING for admin to approve.
+    subscription_status = models.CharField(
+        max_length=20, choices=SubscriptionStatus.choices,
+        default=SubscriptionStatus.APPROVED,
+    )
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.ACTIVE
     )
