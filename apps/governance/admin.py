@@ -1,6 +1,18 @@
 from django.contrib import admin
 
-from .models import AuditLog
+from .models import AuditLog, RuntimeConfig
+
+
+@admin.register(RuntimeConfig)
+class RuntimeConfigAdmin(admin.ModelAdmin):
+    list_display = ("mode", "updated_at")
+
+    def has_add_permission(self, request):
+        # Singleton: only one row, seeded by migration.
+        return not RuntimeConfig.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(AuditLog)

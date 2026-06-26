@@ -47,5 +47,12 @@ def envelope_exception_handler(exc, context):
         message, errors = str(detail[0]), {"detail": detail}
     else:
         message, errors = "Request failed.", detail
+    # Prod mode (toggled from the admin) hides server-error internals; dev keeps
+    # them for debugging. Imported lazily to avoid app-loading order issues.
+    if resp.status_code >= 500:
+        from apps.governance.models import is_prod
+
+        if is_prod():
+            message, errors = "Server error.", None
     resp.data = {"success": False, "message": message, "errors": errors}
     return resp

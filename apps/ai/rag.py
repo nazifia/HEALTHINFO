@@ -64,6 +64,12 @@ def rag_answer(query: str, k: int = 8):
 
 
 def _generate(query: str, contexts: list[str]) -> str | None:
+    from apps.governance.models import is_prod
+
+    # Synthesis runs in prod only; dev/test stays retrieval-only (no spend, no
+    # external call). Toggle from admin: Governance -> Runtime config.
+    if not is_prod():
+        return None
     key = os.environ.get("ANTHROPIC_API_KEY")
     if not key:
         return None  # retrieval-only mode
