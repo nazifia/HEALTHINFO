@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'api.dart';
 import 'config.dart';
 import 'l10n/app_localizations.dart';
+import 'l10n/fallback_localizations.dart';
 import 'core/locale_provider.dart';
 import 'core/theme/enhanced_theme.dart';
 import 'core/theme/theme_provider.dart';
@@ -49,7 +50,11 @@ class HealthInfoApp extends ConsumerWidget {
       navigatorKey: navigatorKey,
       locale: locale,
       supportedLocales: supportedLocales,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      localizationsDelegates: const [
+        ...AppLocalizations.localizationsDelegates,
+        FallbackMaterialDelegate(),
+        FallbackCupertinoDelegate(),
+      ],
       theme: EnhancedTheme.enhancedLightTheme,
       darkTheme: EnhancedTheme.enhancedDarkTheme,
       themeMode: themeMode,

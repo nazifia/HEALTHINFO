@@ -283,6 +283,7 @@ class _LanguageMenu extends StatelessWidget {
     return PopupMenuButton<String>(
       icon: const Icon(Icons.translate),
       tooltip: t.language,
+      color: Theme.of(context).colorScheme.surface,
       onSelected: (code) => ref.read(localeProvider.notifier).setLocale(
             code == 'system' ? null : Locale(code),
           ),
