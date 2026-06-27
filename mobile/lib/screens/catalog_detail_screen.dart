@@ -49,6 +49,7 @@ class _CatalogDetailScreenState extends State<CatalogDetailScreen> {
         builder: (context, snap) {
           if (!api.roleCanWrite(snap.data)) return const SizedBox.shrink();
           return FloatingActionButton.extended(
+            heroTag: 'fab_catalog_detail',
             onPressed: _edit,
             backgroundColor: EnhancedTheme.primaryTeal,
             foregroundColor: Colors.white,

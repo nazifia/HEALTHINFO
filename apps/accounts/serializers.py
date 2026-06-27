@@ -8,10 +8,37 @@ from .models import Role, User
 
 
 class UserSerializer(serializers.ModelSerializer):
+    # Write-only password: set on create, optional rotation on update. Tenant is
+    # writable but the view only honours it for super-admins (see UserViewSet).
+    password = serializers.CharField(
+        write_only=True, required=False, validators=[validate_password]
+    )
+    tenant_name = serializers.CharField(source="tenant.name", read_only=True)
+
     class Meta:
         model = User
-        fields = ("id", "phone", "email", "role", "tenant")
-        read_only_fields = ("tenant",)
+        fields = (
+            "id", "username", "phone", "email", "role", "tenant", "tenant_name",
+            "is_active", "password",
+        )
+
+    def create(self, validated_data):
+        password = validated_data.pop("password", None)
+        user = User(**validated_data)
+        if password:
+            user.set_password(password)
+        else:
+            user.set_unusable_password()
+        user.save()
+        return user
+
+    def update(self, instance, validated_data):
+        password = validated_data.pop("password", None)
+        user = super().update(instance, validated_data)
+        if password:
+            user.set_password(password)
+            user.save(update_fields=["password"])
+        return user
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -19,13 +46,15 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ("id", "phone", "email", "password", "role")
+        # role is NOT registrable: a public endpoint that let the caller pick
+        # their own role is privilege escalation to super_admin. Forced below.
+        fields = ("id", "phone", "email", "password")
 
     def create(self, validated_data):
         password = validated_data.pop("password")
-        # New users are bound to the request tenant; role defaults to public.
+        # New users are bound to the request tenant; role is always public.
         request = self.context["request"]
-        user = User(tenant=request.tenant, **validated_data)
+        user = User(tenant=request.tenant, role=Role.PUBLIC, **validated_data)
         user.set_password(password)
         user.save()
         return user

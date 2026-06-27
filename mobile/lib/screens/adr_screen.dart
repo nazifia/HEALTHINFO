@@ -65,6 +65,7 @@ class _AdrScreenState extends State<AdrScreen>
     return Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'fab_adr',
         onPressed: _openForm,
         backgroundColor: EnhancedTheme.primaryTeal,
         icon: const Icon(Icons.add, color: Colors.white),

@@ -75,6 +75,7 @@ class _ReportListScreenState extends State<ReportListScreen>
     return Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'fab_${widget.fabLabel}',
         onPressed: _openForm,
         backgroundColor: EnhancedTheme.primaryTeal,
         icon: const Icon(Icons.add, color: Colors.white),
