@@ -2,13 +2,14 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
 
 // Backend connection settings.
-// Web/desktop reach the host directly via localhost; Android emulator uses the
-// 10.0.2.2 host alias. Override at run time for a real device/prod:
-//   flutter run --dart-define=API_BASE=http://1.2.3.4:8000
+// Web defaults to the deployed prod backend so `flutter build web` is safe
+// without flags; Android emulator uses the 10.0.2.2 host alias. Override for
+// local dev or a real device:
+//   flutter run --dart-define=API_BASE=http://localhost:8000
 const String _apiBaseOverride = String.fromEnvironment('API_BASE');
 final String apiBase = _apiBaseOverride.isNotEmpty
     ? _apiBaseOverride
-    : (kIsWeb ? 'http://localhost:8000' : 'http://10.0.2.2:8000');
+    : (kIsWeb ? 'https://healthinfo.pythonanywhere.com' : 'http://10.0.2.2:8000');
 
 // Tenant slug sent as X-Tenant-ID header (see apps/tenants/middleware.py).
 // Runtime value: the user picks their organization at login / onboarding, so a
