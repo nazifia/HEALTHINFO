@@ -5,6 +5,7 @@ import '../main.dart';
 import '../resources.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
+import '../shared/widgets/responsive.dart';
 import 'catalog_edit_screen.dart';
 import 'graph_screen.dart';
 
@@ -59,7 +60,8 @@ class _CatalogDetailScreenState extends State<CatalogDetailScreen> {
       body: Stack(
         children: [
           Positioned.fill(child: DecoratedBox(decoration: context.bgGradient)),
-          CustomScrollView(
+          CappedWidth(
+            child: CustomScrollView(
             slivers: [
               SliverAppBar.large(
                 pinned: true,
@@ -173,6 +175,7 @@ class _CatalogDetailScreenState extends State<CatalogDetailScreen> {
                 ),
               ),
             ],
+          ),
           ),
         ],
       ),

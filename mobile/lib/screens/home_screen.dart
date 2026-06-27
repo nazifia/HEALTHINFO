@@ -81,15 +81,79 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
+  // Drawer/rail nav, reused for both the slide-out (narrow) and the always-on
+  // pane (wide). `embedded` drops the brand header gap so it sits under the bar.
+  Widget _nav(int catalogCount, {required bool embedded}) {
+    return NavigationDrawer(
+      backgroundColor: context.scaffoldBg,
+      selectedIndex: _index,
+      onDestinationSelected: (i) {
+        setState(() => _index = i);
+        if (!embedded) Navigator.of(context).pop(); // close slide-out drawer
+      },
+      children: [
+        Container(
+          margin: const EdgeInsets.fromLTRB(12, 16, 12, 8),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [EnhancedTheme.primaryTeal, EnhancedTheme.accentCyan],
+            ),
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: EnhancedTheme.primaryTeal.withValues(alpha: 0.3),
+                blurRadius: 18,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: const Row(
+            children: [
+              Icon(Icons.health_and_safety, color: Colors.white, size: 36),
+              SizedBox(width: 12),
+              Flexible(
+                child: Text('Health Info',
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                    )),
+              ),
+            ],
+          ),
+        ),
+        for (var i = 0; i < _sections.length; i++) ...[
+          if (i == catalogCount)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(28, 12, 28, 4),
+              child: Divider(),
+            ),
+          NavigationDrawerDestination(
+            icon: Icon(_sections[i].icon),
+            label: Text(_sections[i].label),
+          ),
+        ],
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final section = _sections[_index];
     final isDark = context.isDark;
     final catalogCount = catalogResources.length;
+    // ponytail: single breakpoint. Tablet/desktop get an always-on nav pane +
+    // width-capped content; phones keep the slide-out drawer. Tune 900 if needed.
+    final wide = MediaQuery.of(context).size.width >= 900;
     return Scaffold(
       backgroundColor: context.scaffoldBg,
       extendBodyBehindAppBar: true,
       appBar: AppBar(
+        automaticallyImplyLeading: !wide,
         title: Text(section.label),
         actions: [
           IconButton(
@@ -112,72 +176,39 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           const SizedBox(width: 4),
         ],
       ),
-      drawer: SizedBox(
-        width: 280,
-        child: NavigationDrawer(
-        backgroundColor: context.scaffoldBg,
-        selectedIndex: _index,
-        onDestinationSelected: (i) {
-          setState(() => _index = i);
-          Navigator.of(context).pop(); // close drawer
-        },
-        children: [
-          Container(
-            margin: const EdgeInsets.fromLTRB(12, 16, 12, 8),
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [EnhancedTheme.primaryTeal, EnhancedTheme.accentCyan],
-              ),
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: EnhancedTheme.primaryTeal.withValues(alpha: 0.3),
-                  blurRadius: 18,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
-            child: const Row(
-              children: [
-                Icon(Icons.health_and_safety, color: Colors.white, size: 36),
-                SizedBox(width: 12),
-                Text('Health Info',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                    )),
-              ],
-            ),
-          ),
-          for (var i = 0; i < _sections.length; i++) ...[
-            // Separate the catalog tabs from the feature screens.
-            if (i == catalogCount)
-              const Padding(
-                padding: EdgeInsets.fromLTRB(28, 12, 28, 4),
-                child: Divider(),
-              ),
-            NavigationDrawerDestination(
-              icon: Icon(_sections[i].icon),
-              label: Text(_sections[i].label),
-            ),
-          ],
-        ],
-      ),
-      ),
+      drawer: wide ? null : SizedBox(width: 280, child: _nav(catalogCount, embedded: false)),
       body: Stack(
         children: [
           Positioned.fill(child: DecoratedBox(decoration: context.bgGradient)),
           SafeArea(
-            child: IndexedStack(
-              index: _index,
-              children: [for (final s in _sections) s.page],
+            child: Row(
+              children: [
+                if (wide) ...[
+                  SizedBox(width: 300, child: _nav(catalogCount, embedded: true)),
+                  const VerticalDivider(width: 1),
+                ],
+                Expanded(
+                  child: _content(),
+                ),
+              ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // Width-capped page area so lists/forms don't stretch across a wide monitor.
+  Widget _content() {
+    final body = IndexedStack(
+      index: _index,
+      children: [for (final s in _sections) s.page],
+    );
+    return Center(
+      child: ConstrainedBox(
+        // Wide enough for the 3-col CardGrid (>=1400) to engage on big monitors.
+        constraints: const BoxConstraints(maxWidth: 1500),
+        child: body,
       ),
     );
   }

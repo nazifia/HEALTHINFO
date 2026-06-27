@@ -6,6 +6,7 @@ import '../resources.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/empty_state.dart';
+import '../shared/widgets/responsive.dart';
 import '../shared/widgets/screen_header.dart';
 import 'catalog_detail_screen.dart';
 
@@ -70,7 +71,8 @@ class _GraphScreenState extends State<GraphScreen> {
         children: [
           Positioned.fill(child: DecoratedBox(decoration: context.bgGradient)),
           SafeArea(
-            child: Column(
+            child: CappedWidth(
+              child: Column(
               children: [
                 ScreenHeader(
                     title: widget.title, subtitle: 'Related information'),
@@ -123,6 +125,7 @@ class _GraphScreenState extends State<GraphScreen> {
                   ),
                 ),
               ],
+            ),
             ),
           ),
         ],

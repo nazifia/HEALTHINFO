@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../main.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/empty_state.dart';
+import '../shared/widgets/responsive.dart';
 import '../shared/widgets/snack.dart';
 
 /// Shared list+FAB shell for a staff-filed report type (lab results, vaccines,
@@ -114,16 +115,11 @@ class _ReportListScreenState extends State<ReportListScreen>
                 ),
               ]);
             }
-            final hasHeader = widget.header != null;
-            return ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
-              itemCount: items.length + (hasHeader ? 1 : 0),
-              separatorBuilder: (_, _) => const SizedBox(height: 10),
-              itemBuilder: (context, i) {
-                if (hasHeader && i == 0) return widget.header!(items);
-                final row = items[i - (hasHeader ? 1 : 0)];
-                return widget.card(row, _reload, () => _openForm(row));
-              },
+            return CardGrid(
+              itemCount: items.length,
+              header: widget.header == null ? null : widget.header!(items),
+              itemBuilder: (context, i) =>
+                  widget.card(items[i], _reload, () => _openForm(items[i])),
             );
           },
         ),

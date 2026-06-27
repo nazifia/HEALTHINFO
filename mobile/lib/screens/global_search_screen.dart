@@ -6,6 +6,7 @@ import '../resources.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/empty_state.dart';
+import '../shared/widgets/responsive.dart';
 import 'catalog_detail_screen.dart';
 
 /// Cross-catalog search wired to GET /api/search/?q=. One box searches diseases,
@@ -71,7 +72,8 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
         children: [
           Positioned.fill(child: DecoratedBox(decoration: context.bgGradient)),
           SafeArea(
-            child: Column(
+            child: CappedWidth(
+              child: Column(
               children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -108,6 +110,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                 ),
                 Expanded(child: _body(context)),
               ],
+            ),
             ),
           ),
         ],
