@@ -103,11 +103,13 @@ class Api {
   }
 
   /// POST /api/auth/register/
-  Future<void> register(String phone, String email, String password) async {
+  Future<void> register(String phone, String email, String password,
+      {String username = ''}) async {
     final r = await http.post(
       _uri('/api/auth/register/'),
       headers: _headers(auth: false, json: true),
       body: jsonEncode({
+        if (username.isNotEmpty) 'username': username,
         'phone': phone,
         'email': email,
         'password': password,
