@@ -1,0 +1,22 @@
+{
+  "@@locale": "yo",
+  "appTitle": "Ìfitónilétí Ìlera",
+  "signIn": "Wọlé",
+  "register": "Forúkọsílẹ̀",
+  "signOut": "Jáde",
+  "phoneLabel": "Fóònù",
+  "passwordLabel": "Ọ̀rọ̀ aṣínà",
+  "usernameLabel": "Orúkọ olùmúlò",
+  "search": "Wá",
+  "retry": "Túndánwò",
+  "cancel": "Fagilé",
+  "save": "Fipamọ́",
+  "settings": "Ètò",
+  "somethingWentWrong": "Nǹkan kan ṣàṣìṣe",
+  "noMatches": "Kò sí àbájáde",
+  "language": "Èdè",
+  "langEnglish": "English",
+  "langHausa": "Hausa",
+  "langYoruba": "Yorùbá",
+  "langIgbo": "Igbo"
+}

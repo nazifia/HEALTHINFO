@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../main.dart';
 import '../resources.dart';
+import '../l10n/app_localizations.dart';
+import '../core/locale_provider.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../core/theme/theme_provider.dart';
 import 'catalog_list_screen.dart';
@@ -23,6 +25,9 @@ import 'platform_adr_screen.dart';
 import 'surveillance_screen.dart';
 import 'analytics_screen.dart';
 import 'interactions_screen.dart';
+import 'interaction_check_screen.dart';
+import 'differential_screen.dart';
+import 'semantic_search_screen.dart';
 import 'ask_screen.dart';
 import 'global_search_screen.dart';
 import 'dashboard_screen.dart';
@@ -48,6 +53,9 @@ final List<_Section> _baseSections = [
   for (final r in catalogResources)
     _Section(r.label, r.icon, CatalogListScreen(resource: r)),
   const _Section('Interactions', Icons.warning_amber_outlined, InteractionsScreen()),
+  const _Section('Interaction checker', Icons.rule, InteractionCheckScreen()),
+  const _Section('Differential', Icons.healing_outlined, DifferentialScreen()),
+  const _Section('Semantic search', Icons.travel_explore, SemanticSearchScreen()),
   const _Section('Case reports', Icons.assignment_outlined, CasesScreen()),
   const _Section('Adverse reactions', Icons.medication_liquid_outlined, AdrScreen()),
   const _Section('Lab results', Icons.science_outlined, LabResultsScreen()),
@@ -203,6 +211,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             tooltip: 'Search catalog',
           ),
+          _LanguageMenu(ref: ref),
           IconButton(
             icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
             onPressed: () => ref.read(themeModeProvider.notifier).toggle(),
@@ -238,6 +247,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
+  // ── kept below build() to stay near the appBar that uses it ──
   // Width-capped page area so lists/forms don't stretch across a wide monitor.
   Widget _content() {
     final body = IndexedStack(
@@ -250,6 +260,46 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         constraints: const BoxConstraints(maxWidth: 1500),
         child: body,
       ),
+    );
+  }
+}
+
+/// App-bar language switcher. Writes through [localeProvider], which persists
+/// the choice; "System default" clears it back to the device locale.
+class _LanguageMenu extends StatelessWidget {
+  final WidgetRef ref;
+  const _LanguageMenu({required this.ref});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context);
+    final current = ref.watch(localeProvider)?.languageCode;
+    final names = {
+      'en': t.langEnglish,
+      'ha': t.langHausa,
+      'yo': t.langYoruba,
+      'ig': t.langIgbo,
+    };
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.translate),
+      tooltip: t.language,
+      onSelected: (code) => ref.read(localeProvider.notifier).setLocale(
+            code == 'system' ? null : Locale(code),
+          ),
+      itemBuilder: (context) => [
+        CheckedPopupMenuItem(
+          value: 'system',
+          checked: current == null,
+          child: Text(t.systemDefault),
+        ),
+        const PopupMenuDivider(),
+        for (final l in supportedLocales)
+          CheckedPopupMenuItem(
+            value: l.languageCode,
+            checked: current == l.languageCode,
+            child: Text(names[l.languageCode] ?? l.languageCode),
+          ),
+      ],
     );
   }
 }

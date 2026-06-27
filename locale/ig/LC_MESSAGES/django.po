@@ -1,0 +1,9 @@
+# Igbo translations for HEALTH INFO API.
+# NOTE: machine-drafted — needs review by a native Igbo clinical translator.
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: ig\n"
+
+msgid "This information is educational only and not medical advice."
+msgstr "Ozi a bụ naanị maka mmụta, ọ bụghị ndụmọdụ ahụike."

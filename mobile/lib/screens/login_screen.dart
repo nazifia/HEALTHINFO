@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../main.dart';
 import '../config.dart';
+import '../l10n/app_localizations.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/snack.dart';
@@ -69,6 +70,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context);
     return Scaffold(
       backgroundColor: context.scaffoldBg,
       body: Stack(
@@ -141,11 +143,11 @@ class _LoginScreenState extends State<LoginScreen> {
                             children: [
                               // Sign in / Register toggle
                               SegmentedButton<bool>(
-                                segments: const [
+                                segments: [
                                   ButtonSegment(
-                                      value: false, label: Text('Sign in')),
+                                      value: false, label: Text(t.signIn)),
                                   ButtonSegment(
-                                      value: true, label: Text('Register')),
+                                      value: true, label: Text(t.register)),
                                 ],
                                 selected: {_registerMode},
                                 onSelectionChanged: _busy
@@ -196,7 +198,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               TextField(
                                 controller: _pass,
                                 decoration: InputDecoration(
-                                  labelText: 'Password',
+                                  labelText: t.passwordLabel,
                                   prefixIcon: const Icon(Icons.lock_outline),
                                   suffixIcon: IconButton(
                                     icon: Icon(_obscure
@@ -249,8 +251,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                             color: Colors.white),
                                       )
                                     : Text(_registerMode
-                                        ? 'Create account'
-                                        : 'Sign in'),
+                                        ? t.register
+                                        : t.signIn),
                               ),
                             ],
                           ),

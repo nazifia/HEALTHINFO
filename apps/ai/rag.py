@@ -4,11 +4,12 @@ import os
 import urllib.request
 
 from django.conf import settings
+from django.utils.translation import gettext_lazy as _
 
 from .embeddings import embed
 from .models import ContentEmbedding
 
-DISCLAIMER = "This information is educational only and not medical advice."
+DISCLAIMER = _("This information is educational only and not medical advice.")
 
 _SYSTEM = (
     "You are a health information assistant. Answer ONLY from the provided "
