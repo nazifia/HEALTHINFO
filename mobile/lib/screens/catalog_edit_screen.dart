@@ -4,6 +4,7 @@ import '../api.dart';
 import '../main.dart';
 import '../resources.dart';
 import '../core/theme/enhanced_theme.dart';
+import '../shared/widgets/responsive.dart';
 import '../shared/widgets/snack.dart';
 
 /// One editable text field derived from a [CatalogResource].
@@ -123,7 +124,9 @@ class _CatalogEditScreenState extends State<CatalogEditScreen> {
             ),
         ],
       ),
-      body: ListView(
+      body: CappedWidth(
+        maxWidth: 720,
+        child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
           for (final f in _fields)
@@ -145,6 +148,7 @@ class _CatalogEditScreenState extends State<CatalogEditScreen> {
               ),
             ),
         ],
+      ),
       ),
     );
   }

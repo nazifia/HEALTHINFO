@@ -6,6 +6,7 @@ import '../resources.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/empty_state.dart';
+import '../shared/widgets/responsive.dart';
 import 'catalog_detail_screen.dart';
 
 /// Searchable list for any [CatalogResource]. Used inside the home tabs.
@@ -135,11 +136,9 @@ class _CatalogListScreenState extends State<CatalogListScreen>
                     message: 'Try a different search.',
                   ));
                 }
-                return ListView.separated(
+                return CardGrid(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                   itemCount: items.length,
-                  separatorBuilder: (context, index) =>
-                      const SizedBox(height: 10),
                   itemBuilder: (context, i) {
                     final row = items[i] as Map<String, dynamic>;
                     final sub = _str(row, r.subtitleField);

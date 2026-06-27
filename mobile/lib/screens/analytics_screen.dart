@@ -81,15 +81,48 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             ]);
           }
           final b = snap.data!;
+          num? bn(Map<String, dynamic>? m, String k) => m?[k] as num?;
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             children: [
-              const StatsHeader(
-                icon: Icons.query_stats,
+              const DashTitleBar(
                 title: 'Analytics',
                 subtitle: 'Funnel, AI quality, benchmarks & signals',
-                color: EnhancedTheme.accentPurple,
+                accent: EnhancedTheme.accentPurple,
               ),
+              KpiStrip(tiles: [
+                KpiChip(
+                  icon: Icons.search,
+                  label: 'Searches',
+                  value: '${bn(b.funnel, 'searches') ?? 0}',
+                  color: EnhancedTheme.primaryTeal,
+                ),
+                KpiChip(
+                  icon: Icons.visibility_outlined,
+                  label: 'Views',
+                  value: '${bn(b.funnel, 'views') ?? 0}',
+                  color: EnhancedTheme.accentCyan,
+                ),
+                KpiChip(
+                  icon: Icons.assignment_outlined,
+                  label: 'Case Reports',
+                  value: '${bn(b.funnel, 'case_reports') ?? 0}',
+                  color: EnhancedTheme.accentPurple,
+                ),
+                KpiChip(
+                  icon: Icons.thumb_down_alt_outlined,
+                  label: 'Downvote Rate',
+                  value: pctOf(bn(b.aiQuality, 'downvote_rate')),
+                  color: EnhancedTheme.errorRed,
+                ),
+                KpiChip(
+                  icon: Icons.medication_liquid_outlined,
+                  label: 'Adverse Rxns',
+                  value: '${bn(b.adr, 'total') ?? 0}',
+                  color: EnhancedTheme.accentOrange,
+                ),
+              ]),
+              const SizedBox(height: 14),
               if (b.funnel != null) _FunnelCard(d: b.funnel!),
               if (b.aiQuality != null) _AiQualityCard(d: b.aiQuality!),
               if (b.benchmark != null) _BenchmarkCard(d: b.benchmark!),
@@ -124,10 +157,9 @@ class _FunnelCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StatSection(
-      icon: Icons.filter_alt_outlined,
-      heading: 'Conversion funnel',
-      color: EnhancedTheme.primaryTeal,
+    return PanelCard(
+      title: 'Conversion Funnel',
+      accent: EnhancedTheme.primaryTeal,
       child: Column(
         children: [
           MiniBarChart(rows: [
@@ -163,10 +195,9 @@ class _AiQualityCard extends StatelessWidget {
     final downvoted = (d['top_downvoted'] as List?) ?? [];
     final up = (fb['up'] as num?)?.toInt() ?? 0;
     final down = (fb['down'] as num?)?.toInt() ?? 0;
-    return StatSection(
-      icon: Icons.auto_awesome_outlined,
-      heading: 'AI answer quality',
-      color: EnhancedTheme.accentPurple,
+    return PanelCard(
+      title: 'AI Answer Quality',
+      accent: EnhancedTheme.accentPurple,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -226,10 +257,9 @@ class _BenchmarkCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     num n(String k) => (d[k] as num?) ?? 0;
-    return StatSection(
-      icon: Icons.leaderboard_outlined,
-      heading: 'Peer benchmark (case reports)',
-      color: EnhancedTheme.accentOrange,
+    return PanelCard(
+      title: 'Peer Benchmark (case reports)',
+      accent: EnhancedTheme.accentOrange,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -253,10 +283,9 @@ class _RetentionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final points = rows.cast<Map<String, dynamic>>();
-    return StatSection(
-      icon: Icons.show_chart,
-      heading: 'Weekly active users',
-      color: EnhancedTheme.accentCyan,
+    return PanelCard(
+      title: 'Weekly Active Users',
+      accent: EnhancedTheme.accentCyan,
       child: TrendLineChart(
         color: EnhancedTheme.accentCyan,
         rows: [
@@ -279,10 +308,9 @@ class _AdrStatsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final topMeds = (d['top_medications'] as List?) ?? [];
     final topReactions = (d['top_reactions'] as List?) ?? [];
-    return StatSection(
-      icon: Icons.medication_liquid_outlined,
-      heading: 'Adverse reactions (${d['total'] ?? 0} total)',
-      color: EnhancedTheme.errorRed,
+    return PanelCard(
+      title: 'Adverse Reactions (${d['total'] ?? 0} total)',
+      accent: EnhancedTheme.errorRed,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -81,58 +81,77 @@ class _DashboardScreenState extends State<DashboardScreen> {
           final d = snap.data!;
           final trend = ((d['search_trend'] as List?) ?? [])
               .cast<Map<String, dynamic>>();
-          final spark = [
-            for (final r in trend) (r['count'] as num?) ?? 0,
-          ];
           final fb = (d['ai_feedback'] as Map?)?.cast<String, dynamic>() ?? const {};
           final up = (fb['up'] as num?)?.toInt() ?? 0;
           final down = (fb['down'] as num?)?.toInt() ?? 0;
           final satTotal = up + down;
           final satPct = satTotal == 0 ? null : (up / satTotal * 100).round();
+          final searchTotal =
+              trend.fold<num>(0, (a, r) => a + ((r['count'] as num?) ?? 0));
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             children: [
-              StatsHeader(
-                icon: Icons.insights,
-                title: 'Dashboard',
+              DashTitleBar(
+                title: 'Health Analytics',
                 subtitle: _range == null
                     ? 'All time'
                     : '${_d(_range!.start)} → ${_d(_range!.end)}',
                 trailing: IconButton(
                   onPressed: _pickRange,
                   icon: const Icon(Icons.date_range),
-                  color: EnhancedTheme.primaryTeal,
+                  color: EnhancedTheme.accentCyan,
                   tooltip: 'Date range',
                 ),
               ),
-              KpiRow(tiles: [
-                KpiTile(
+              KpiStrip(tiles: [
+                KpiChip(
                   icon: Icons.search,
                   label: 'Searches',
                   value: '${d['total_searches'] ?? 0}',
                   color: EnhancedTheme.primaryTeal,
-                  spark: spark.isEmpty ? null : spark,
                 ),
-                KpiTile(
+                KpiChip(
                   icon: Icons.group_outlined,
-                  label: 'Active users (30d)',
+                  label: 'Active Users 30d',
                   value: '${d['active_users'] ?? 0}',
                   color: EnhancedTheme.accentPurple,
                 ),
+                KpiChip(
+                  icon: Icons.thumb_up_alt_outlined,
+                  label: 'AI Positive',
+                  value: satPct == null ? '—' : '$satPct%',
+                  color: EnhancedTheme.successGreen,
+                ),
+                KpiChip(
+                  icon: Icons.show_chart,
+                  label: 'Search Volume',
+                  value: '$searchTotal',
+                  color: EnhancedTheme.accentCyan,
+                ),
+                KpiChip(
+                  icon: Icons.thumb_up,
+                  label: 'Thumbs Up',
+                  value: '$up',
+                  color: EnhancedTheme.successGreen,
+                ),
+                KpiChip(
+                  icon: Icons.thumb_down,
+                  label: 'Thumbs Down',
+                  value: '$down',
+                  color: EnhancedTheme.errorRed,
+                ),
               ]),
-              const SizedBox(height: 12),
-              StatSection(
-                icon: Icons.show_chart,
-                heading: 'Search volume (30d)',
-                trailing: Text(
-                    '${trend.fold<num>(0, (a, r) => a + ((r['count'] as num?) ?? 0))} total',
+              const SizedBox(height: 14),
+              PanelCard(
+                title: 'Search Volume (30d)',
+                accent: EnhancedTheme.primaryTeal,
+                trailing: Text('$searchTotal total',
                     style: TextStyle(color: context.hintColor, fontSize: 12)),
                 child: _SearchTrend(points: trend),
               ),
-              StatSection(
-                icon: Icons.thumb_up_alt_outlined,
-                heading: 'AI answer satisfaction',
-                color: EnhancedTheme.successGreen,
+              PanelCard(
+                title: 'AI Answer Satisfaction',
+                accent: EnhancedTheme.successGreen,
                 child: Row(
                   children: [
                     DonutChart(
@@ -161,7 +180,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               _RankList(
                 heading: 'Top searches',
-                icon: Icons.trending_up,
                 color: EnhancedTheme.primaryTeal,
                 rows: (d['top_searches'] as List?) ?? [],
                 titleKey: 'query',
@@ -169,7 +187,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               _RankList(
                 heading: 'Popular diseases',
-                icon: Icons.coronavirus_outlined,
                 color: EnhancedTheme.accentPurple,
                 rows: (d['popular_diseases'] as List?) ?? [],
                 titleKey: 'name',
@@ -177,7 +194,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               _RankList(
                 heading: 'Popular medications',
-                icon: Icons.medication_outlined,
                 color: EnhancedTheme.accentOrange,
                 rows: (d['popular_medications'] as List?) ?? [],
                 titleKey: 'name',
@@ -185,7 +201,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               _RankList(
                 heading: 'Content gaps (no results)',
-                icon: Icons.search_off_outlined,
                 color: EnhancedTheme.errorRed,
                 rows: (d['content_gaps'] as List?) ?? [],
                 titleKey: 'query',
@@ -246,14 +261,12 @@ class _SearchTrend extends StatelessWidget {
 
 class _RankList extends StatelessWidget {
   final String heading;
-  final IconData icon;
   final Color color;
   final List<dynamic> rows;
   final String titleKey;
   final String countKey;
   const _RankList({
     required this.heading,
-    required this.icon,
     required this.color,
     required this.rows,
     required this.titleKey,
@@ -262,10 +275,9 @@ class _RankList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StatSection(
-      icon: icon,
-      heading: heading,
-      color: color,
+    return PanelCard(
+      title: heading,
+      accent: color,
       child: MiniBarChart(
         rows: [
           for (final row in rows.cast<Map<String, dynamic>>())

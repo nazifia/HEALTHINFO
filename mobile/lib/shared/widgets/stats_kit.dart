@@ -228,6 +228,199 @@ class StatSection extends StatelessWidget {
   }
 }
 
+/// Power-BI panel chrome: navy gradient fill, accent-tinted border + glow.
+/// Shared by [PanelCard] and [KpiChip] so the dashboard reads as one surface.
+BoxDecoration panelDecoration(BuildContext context, Color accent,
+    {double radius = 14}) {
+  final dark = context.isDark;
+  return BoxDecoration(
+    gradient: LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: dark
+          ? const [Color(0xFF18233B), Color(0xFF0E1726)]
+          : const [Colors.white, Color(0xFFEFF3F9)],
+    ),
+    borderRadius: BorderRadius.circular(radius),
+    border: Border.all(color: accent.withValues(alpha: dark ? 0.35 : 0.22)),
+    boxShadow: [
+      BoxShadow(
+        color: accent.withValues(alpha: dark ? 0.12 : 0.06),
+        blurRadius: 14,
+        offset: const Offset(0, 6),
+      ),
+    ],
+  );
+}
+
+/// Compact KPI for the [KpiStrip]: big number over a tiny caption, navy panel
+/// fill. The Power-BI metric-band tile.
+class KpiChip extends StatelessWidget {
+  final String value;
+  final String label;
+  final Color color;
+  final IconData? icon;
+  const KpiChip({
+    super.key,
+    required this.value,
+    required this.label,
+    this.color = EnhancedTheme.accentCyan,
+    this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: panelDecoration(context, color),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          if (icon != null) Icon(icon, color: color, size: 16),
+          Text(value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.outfit(
+                color: context.labelColor,
+                fontWeight: FontWeight.w800,
+                fontSize: 24,
+                height: 1.0,
+              )),
+          Text(label.toUpperCase(),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: context.hintColor,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.4,
+              )),
+        ],
+      ),
+    );
+  }
+}
+
+/// Horizontally scrollable band of [KpiChip]s — the dashboard's metric strip.
+/// Scrolls on a phone where a fixed 6-across row can't fit.
+class KpiStrip extends StatelessWidget {
+  final List<KpiChip> tiles;
+  const KpiStrip({super.key, required this.tiles});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 112,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.zero,
+        itemCount: tiles.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 10),
+        itemBuilder: (_, i) => SizedBox(width: 124, child: tiles[i]),
+      ),
+    );
+  }
+}
+
+/// Power-BI bordered panel: navy fill, accent border, centered title, child
+/// below. Drop-in replacement for [StatSection] on the dashboard screens.
+class PanelCard extends StatelessWidget {
+  final String title;
+  final Widget child;
+  final Color accent;
+  final Widget? trailing;
+  const PanelCard({
+    super.key,
+    required this.title,
+    required this.child,
+    this.accent = EnhancedTheme.accentCyan,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: panelDecoration(context, accent),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                Text(title,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.outfit(
+                      color: context.labelColor,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                      letterSpacing: 0.3,
+                    )),
+                if (trailing != null)
+                  Align(alignment: Alignment.centerRight, child: trailing),
+              ],
+            ),
+            const SizedBox(height: 14),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Dashboard title bar — bold accent title, optional subtitle + trailing action.
+/// The Power-BI header band.
+class DashTitleBar extends StatelessWidget {
+  final String title;
+  final String? subtitle;
+  final Color accent;
+  final Widget? trailing;
+  const DashTitleBar({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.accent = EnhancedTheme.accentCyan,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title.toUpperCase(),
+                    style: GoogleFonts.outfit(
+                      color: accent,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 22,
+                      letterSpacing: 0.5,
+                      height: 1.05,
+                    )),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 2),
+                  Text(subtitle!,
+                      style:
+                          TextStyle(color: context.hintColor, fontSize: 12)),
+                ],
+              ],
+            ),
+          ),
+          ?trailing,
+        ],
+      ),
+    );
+  }
+}
+
 /// One label/value stat used inside metric rows (smaller than a [KpiTile]).
 class StatMetric extends StatelessWidget {
   final String label;
