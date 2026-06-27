@@ -48,6 +48,9 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Serves STATIC_ROOT in prod (gunicorn has no static handler). Must sit
+    # right after SecurityMiddleware.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "config.cors.ModeAwareCorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     # Picks the active language from the Accept-Language header (or ?language=).
@@ -135,6 +138,11 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+# WhiteNoise: hashed filenames + gzip/brotli compression for cache-busting.
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+}
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REST_FRAMEWORK = {
