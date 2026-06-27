@@ -112,6 +112,7 @@ class EnhancedTheme {
   static ThemeData get enhancedLightTheme {
     return ThemeData(
       useMaterial3: true,
+      brightness: Brightness.light,
       colorScheme: ColorScheme.fromSeed(
         seedColor: primaryTeal,
         brightness: Brightness.light,
