@@ -4,14 +4,23 @@ from pathlib import Path
 
 from celery.schedules import crontab
 from corsheaders.defaults import default_headers as default_cors_headers
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
-SECRET_KEY = os.getenv("SECRET_KEY", "dev-insecure-change-me-0123456789-abcdef")
-DEBUG = os.getenv("DEBUG", "1") == "1"
+# Default OFF: a deploy that forgets DEBUG must fail closed (no stack traces,
+# no wildcard hosts), not run wide open. Dev sets DEBUG=1 explicitly.
+DEBUG = os.getenv("DEBUG", "0") == "1"
 BASE_DOMAIN = os.getenv("BASE_DOMAIN", "health.local")
+
+_DEV_SECRET = "dev-insecure-change-me-0123456789-abcdef"
+SECRET_KEY = os.getenv("SECRET_KEY", _DEV_SECRET)
+# Fail fast: the dev fallback is public (in the repo). Signing JWTs/sessions
+# with it in prod lets anyone forge a super-admin token.
+if not DEBUG and SECRET_KEY == _DEV_SECRET:
+    raise ImproperlyConfigured("SECRET_KEY must be set when DEBUG is off.")
 
 # Dev: wildcard. Prod (DEBUG=0): require explicit ALLOWED_HOSTS, no wildcard fallback.
 _hosts_default = "*" if DEBUG else ""

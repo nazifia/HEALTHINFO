@@ -1,5 +1,6 @@
 from rest_framework import viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.exceptions import TokenError
@@ -77,6 +78,22 @@ class UserViewSet(viewsets.ModelViewSet):
             return User.objects.all()
         # Tenant-scoped: only see users of your own tenant.
         return User.objects.filter(tenant=user.tenant)
+
+    def create(self, request, *args, **kwargs):
+        # Minting a user into an arbitrary tenant is a platform action; self-serve
+        # signup (register/onboarding) covers everyone else.
+        if not request.user.is_super_admin:
+            raise PermissionDenied("Only super-admins create users here.")
+        return super().create(request, *args, **kwargs)
+
+    def perform_update(self, serializer):
+        # Non-super-admins can edit users in their own tenant but never move one
+        # to a different tenant, and never change role (self-escalation to
+        # super_admin otherwise). Role assignment is a super-admin action.
+        if not self.request.user.is_super_admin:
+            serializer.validated_data.pop("tenant", None)
+            serializer.validated_data.pop("role", None)
+        serializer.save()
 
     @action(detail=False, methods=["get"])
     def me(self, request):

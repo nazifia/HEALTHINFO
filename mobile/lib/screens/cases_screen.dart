@@ -65,6 +65,7 @@ class _CasesScreenState extends State<CasesScreen>
     return Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'fab_cases',
         onPressed: _openForm,
         backgroundColor: EnhancedTheme.primaryTeal,
         icon: const Icon(Icons.add, color: Colors.white),

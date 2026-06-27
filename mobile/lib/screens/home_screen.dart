@@ -26,6 +26,9 @@ import 'interactions_screen.dart';
 import 'ask_screen.dart';
 import 'global_search_screen.dart';
 import 'dashboard_screen.dart';
+import 'super_admin_dashboard_screen.dart';
+import 'tenant_management_screen.dart';
+import 'user_management_screen.dart';
 import 'profile_screen.dart';
 import 'login_screen.dart';
 
@@ -38,7 +41,9 @@ class _Section {
 }
 
 /// Catalog tabs (data-driven) followed by the standalone feature screens.
-final List<_Section> _sections = [
+/// The super-admin platform dashboard is prepended at runtime for super_admins
+/// only (see [_HomeScreenState._sections]).
+final List<_Section> _baseSections = [
   const _Section('Dashboard', Icons.insights_outlined, DashboardScreen()),
   for (final r in catalogResources)
     _Section(r.label, r.icon, CatalogListScreen(resource: r)),
@@ -53,11 +58,6 @@ final List<_Section> _sections = [
   const _Section('Facility KPIs', Icons.local_hospital_outlined, FacilityMetricsScreen()),
   const _Section('Insurance claims', Icons.receipt_long_outlined, InsuranceClaimsScreen()),
   const _Section('Appointments', Icons.event_outlined, AppointmentsScreen()),
-  const _Section('Public health', Icons.public_outlined, PublicHealthScreen()),
-  const _Section('Collated reports', Icons.bar_chart_outlined, CollatedReportsScreen()),
-  const _Section('Report sources', Icons.inventory_2_outlined, ReportSourcesScreen()),
-  const _Section('ADR collation', Icons.vaccines_outlined, PlatformAdrScreen()),
-  const _Section('Surveillance', Icons.notifications_active_outlined, SurveillanceScreen()),
   const _Section('Analytics', Icons.query_stats_outlined, AnalyticsScreen()),
   const _Section('Ask AI', Icons.auto_awesome, AskScreen()),
   const _Section('Profile', Icons.person_outline, ProfileScreen()),
@@ -72,6 +72,43 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _index = 0;
+
+  // Super-admins get the cross-tenant platform dashboard prepended; everyone
+  // else sees just the base sections.
+  List<_Section> _sections = _baseSections;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRole();
+  }
+
+  Future<void> _loadRole() async {
+    final role = await api.myRole();
+    if (!mounted || role != 'super_admin') return;
+    setState(() {
+      _sections = [
+        const _Section('Platform', Icons.admin_panel_settings_outlined,
+            SuperAdminDashboardScreen()),
+        const _Section('Tenants', Icons.apartment_outlined,
+            TenantManagementScreen()),
+        const _Section('Users', Icons.manage_accounts_outlined,
+            UserManagementScreen()),
+        // Central-only cross-tenant collation views. Hidden from non-super-admins.
+        const _Section('Collated reports', Icons.bar_chart_outlined,
+            CollatedReportsScreen()),
+        const _Section('ADR collation', Icons.vaccines_outlined,
+            PlatformAdrScreen()),
+        const _Section('Public health', Icons.public_outlined,
+            PublicHealthScreen()),
+        const _Section('Report sources', Icons.inventory_2_outlined,
+            ReportSourcesScreen()),
+        const _Section('Surveillance', Icons.notifications_active_outlined,
+            SurveillanceScreen()),
+        ..._baseSections,
+      ];
+    });
+  }
 
   Future<void> _logout() async {
     await api.logout();
@@ -145,7 +182,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) {
     final section = _sections[_index];
     final isDark = context.isDark;
-    final catalogCount = catalogResources.length;
+    // Divider sits after the catalog block; shift it by however many super-admin
+    // sections got prepended ahead of the base list.
+    final catalogCount =
+        catalogResources.length + (_sections.length - _baseSections.length);
     // ponytail: single breakpoint. Tablet/desktop get an always-on nav pane +
     // width-capped content; phones keep the slide-out drawer. Tune 900 if needed.
     final wide = MediaQuery.of(context).size.width >= 900;
