@@ -20,6 +20,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _phone = TextEditingController();
   final _pass = TextEditingController();
   final _email = TextEditingController();
+  final _username = TextEditingController();
   final _tenant = TextEditingController(text: tenantSlug);
   bool _registerMode = false;
   bool _busy = false;
@@ -31,6 +32,7 @@ class _LoginScreenState extends State<LoginScreen> {
     _phone.dispose();
     _pass.dispose();
     _email.dispose();
+    _username.dispose();
     _tenant.dispose();
     super.dispose();
   }
@@ -48,7 +50,8 @@ class _LoginScreenState extends State<LoginScreen> {
       }
       await setTenant(slug);
       if (_registerMode) {
-        await api.register(_phone.text.trim(), _email.text.trim(), _pass.text);
+        await api.register(_phone.text.trim(), _email.text.trim(), _pass.text,
+            username: _username.text.trim());
       }
       await api.login(_phone.text.trim(), _pass.text);
       if (!mounted) return;
@@ -170,6 +173,15 @@ class _LoginScreenState extends State<LoginScreen> {
                                 autocorrect: false,
                               ),
                               if (_registerMode) ...[
+                                const SizedBox(height: 12),
+                                TextField(
+                                  controller: _username,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Display name',
+                                    prefixIcon: Icon(Icons.person_outline),
+                                  ),
+                                  textCapitalization: TextCapitalization.words,
+                                ),
                                 const SizedBox(height: 12),
                                 TextField(
                                   controller: _email,

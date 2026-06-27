@@ -22,6 +22,11 @@ class UserSerializer(serializers.ModelSerializer):
             "is_active", "password",
         )
 
+    def validate_username(self, value):
+        # Store blank as NULL (field is null=True) so empty display names are
+        # consistently absent, not "" — the client renders absent as "—".
+        return value.strip() or None
+
     def create(self, validated_data):
         password = validated_data.pop("password", None)
         user = User(**validated_data)
@@ -48,7 +53,10 @@ class RegisterSerializer(serializers.ModelSerializer):
         model = User
         # role is NOT registrable: a public endpoint that let the caller pick
         # their own role is privilege escalation to super_admin. Forced below.
-        fields = ("id", "phone", "email", "password")
+        fields = ("id", "username", "phone", "email", "password")
+
+    def validate_username(self, value):
+        return value.strip() or None
 
     def create(self, validated_data):
         password = validated_data.pop("password")

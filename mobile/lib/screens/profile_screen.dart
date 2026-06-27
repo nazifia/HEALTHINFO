@@ -8,6 +8,12 @@ import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/snack.dart';
 
+/// Trimmed string, or null when null/blank — so empty fields render as "—".
+String? _str(Object? v) {
+  final s = v?.toString().trim() ?? '';
+  return s.isEmpty ? null : s;
+}
+
 /// Current account — GET /api/users/me/.
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -31,6 +37,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _editProfile(Map<String, dynamic> u) async {
+    final username = TextEditingController(text: u['username']?.toString() ?? '');
     final phone = TextEditingController(text: u['phone']?.toString() ?? '');
     final email = TextEditingController(text: u['email']?.toString() ?? '');
     final saved = await showDialog<bool>(
@@ -40,6 +47,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            TextField(
+              controller: username,
+              decoration: const InputDecoration(labelText: 'Display name'),
+            ),
+            const SizedBox(height: 12),
             TextField(
               controller: phone,
               keyboardType: TextInputType.phone,
@@ -66,6 +78,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (saved != true || !mounted) return;
     try {
       await api.patch('/api/users/${u['id']}/', {
+        'username': username.text.trim(),
         'phone': phone.text.trim(),
         'email': email.text.trim(),
       });
@@ -95,7 +108,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           );
         }
         final u = snap.data!;
-        final username = '${u['username'] ?? '—'}';
+        // Phone is the identity; username/email are optional. Fall back to phone
+        // so accounts with neither still show a real name + avatar, not "—".
+        final username = _str(u['username']) ?? _str(u['phone']) ?? '—';
         return ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
           children: [
@@ -137,9 +152,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               padding: const EdgeInsets.all(8),
               child: Column(
                 children: [
-                  _Row(icon: Icons.mail_outline, label: 'Email', value: '${u['email'] ?? '—'}'),
-                  _Row(icon: Icons.badge_outlined, label: 'Role', value: '${u['role'] ?? '—'}'),
-                  _Row(icon: Icons.apartment_outlined, label: 'Tenant', value: '${u['tenant'] ?? '—'}'),
+                  _Row(icon: Icons.phone_outlined, label: 'Phone', value: _str(u['phone']) ?? '—'),
+                  _Row(icon: Icons.mail_outline, label: 'Email', value: _str(u['email']) ?? '—'),
+                  _Row(icon: Icons.badge_outlined, label: 'Role', value: _str(u['role']) ?? '—'),
+                  _Row(icon: Icons.apartment_outlined, label: 'Tenant', value: _str(u['tenant_name']) ?? _str(u['tenant']) ?? '—'),
                 ],
               ),
             ),

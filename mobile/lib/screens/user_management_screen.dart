@@ -191,6 +191,8 @@ class _UserForm extends StatefulWidget {
 
 class _UserFormState extends State<_UserForm> {
   final _form = GlobalKey<FormState>();
+  late final TextEditingController _username =
+      TextEditingController(text: '${widget.user?['username'] ?? ''}');
   late final TextEditingController _phone =
       TextEditingController(text: '${widget.user?['phone'] ?? ''}');
   final TextEditingController _password = TextEditingController();
@@ -207,11 +209,13 @@ class _UserFormState extends State<_UserForm> {
     try {
       if (_isEdit) {
         await api.patch('/api/users/${widget.user!['id']}/', {
+          'username': _username.text.trim(),
           'role': _role,
           'is_active': _active,
         });
       } else {
         await api.post('/api/users/', {
+          'username': _username.text.trim(),
           'phone': _phone.text.trim(),
           'password': _password.text,
           'role': _role,
@@ -232,6 +236,7 @@ class _UserFormState extends State<_UserForm> {
 
   @override
   void dispose() {
+    _username.dispose();
     _phone.dispose();
     _password.dispose();
     super.dispose();
@@ -248,6 +253,11 @@ class _UserFormState extends State<_UserForm> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              TextFormField(
+                controller: _username,
+                decoration: const InputDecoration(labelText: 'Display name'),
+                textCapitalization: TextCapitalization.words,
+              ),
               if (!_isEdit) ...[
                 TextFormField(
                   controller: _phone,
