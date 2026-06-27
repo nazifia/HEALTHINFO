@@ -1,0 +1,47 @@
+{
+  "@@locale": "en",
+
+  "appTitle": "Health Info",
+  "@appTitle": { "description": "App name shown in the nav header" },
+
+  "signIn": "Sign in",
+  "register": "Register",
+  "signOut": "Sign out",
+  "phoneLabel": "Phone",
+  "passwordLabel": "Password",
+  "usernameLabel": "Username",
+
+  "search": "Search",
+  "retry": "Retry",
+  "cancel": "Cancel",
+  "save": "Save",
+  "settings": "Settings",
+  "somethingWentWrong": "Something went wrong",
+  "noMatches": "No matches",
+
+  "language": "Language",
+  "systemDefault": "System default",
+  "langEnglish": "English",
+  "langHausa": "Hausa",
+  "langYoruba": "Yorùbá",
+  "langIgbo": "Igbo",
+
+  "askHint": "Ask a health question…",
+  "semanticSearchHint": "Search by meaning…",
+
+  "selectSymptoms": "Select symptoms",
+  "selectSymptomsHint": "Diseases are ranked by how many you pick.",
+  "findDiseases": "Find diseases ({count} selected)",
+  "@findDiseases": { "placeholders": { "count": { "type": "int" } } },
+  "possibleConditions": "Possible conditions",
+
+  "selectMedications": "Select medications",
+  "selectMedicationsHint": "Pick at least two to check for conflicts.",
+  "checkInteractions": "Check ({count} selected)",
+  "@checkInteractions": { "placeholders": { "count": { "type": "int" } } },
+  "interactionsFound": "Interactions found ({count})",
+  "@interactionsFound": { "placeholders": { "count": { "type": "int" } } },
+  "noKnownInteractions": "No known interactions",
+
+  "medicalDisclaimer": "For information only. Not a substitute for professional medical advice."
+}

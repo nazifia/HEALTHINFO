@@ -127,9 +127,36 @@ pytest                 # runs on the default sqlite DB, no server needed
 ```
 `tests/test_tenant_isolation.py` is the guard rail — keep it green.
 
+## i18n
+Backend serves translated strings via Django `gettext` + `LocaleMiddleware`;
+the active language comes from the client's `Accept-Language` header. Supported:
+English, Hausa (`ha`), Yoruba (`yo`), Igbo (`ig`) — see `LANGUAGES` in settings.
+
+The Flutter client uses `gen-l10n`: source strings live in `mobile/lib/l10n/
+app_en.arb` (template) with `app_{ha,yo,ig}.arb` overrides. Untranslated keys
+fall back to English. A language switcher (app-bar globe icon) persists the
+choice and sends it as `Accept-Language`.
+
+```bash
+# backend: edit locale/<lang>/LC_MESSAGES/django.po, then compile to .mo
+python scripts/compilemessages.py     # stand-in for GNU msgfmt (not installed)
+# (with gettext installed, use the standard: python manage.py compilemessages)
+
+# flutter: edit the .arb files, then
+cd mobile && flutter gen-l10n
+```
+
+**Translation status:** the i18n *machinery* is complete and proven end-to-end
+(the medical disclaimer renders in all four languages). The bundled `ha/yo/ig`
+strings cover the core UI shell only and are machine-drafted — **every medical
+string still needs a native clinical translator** before production. Remaining
+screen strings fall back to English until translated (mechanical drop-in).
+
 ## Next steps
 Done: content modules, draft/review workflow + audit log, knowledge-graph
-relations, semantic search + RAG, Celery (async embeddings, analytics).
-Remaining roadmap: Flutter client → i18n → CI/CD + Nginx/Gunicorn prod compose.
+relations, semantic search + RAG, Celery (async embeddings, analytics), Flutter
+client (incl. differential dx, interaction checker, semantic search screens),
+i18n pipeline (4 languages, UI shell translated).
+Remaining roadmap: native-reviewed translations for all screens → CI/CD →
+Nginx/Gunicorn prod compose.
 Add new content modules by copying the catalog app pattern.
-"# HEALTHINFO" 

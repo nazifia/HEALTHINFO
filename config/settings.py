@@ -50,6 +50,9 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "config.cors.ModeAwareCorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    # Picks the active language from the Accept-Language header (or ?language=).
+    # Must sit after SessionMiddleware and before CommonMiddleware.
+    "django.middleware.locale.LocaleMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -117,6 +120,15 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 LANGUAGE_CODE = "en-us"
+# Languages the API serves translated strings for. The mobile client sends its
+# choice via the Accept-Language header; LocaleMiddleware activates it.
+LANGUAGES = [
+    ("en", "English"),
+    ("ha", "Hausa"),
+    ("yo", "Yoruba"),
+    ("ig", "Igbo"),
+]
+LOCALE_PATHS = [BASE_DIR / "locale"]
 TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True

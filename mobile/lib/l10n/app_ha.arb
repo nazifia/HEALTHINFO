@@ -1,0 +1,22 @@
+{
+  "@@locale": "ha",
+  "appTitle": "Bayanin Lafiya",
+  "signIn": "Shiga",
+  "register": "Yi rajista",
+  "signOut": "Fita",
+  "phoneLabel": "Lambar waya",
+  "passwordLabel": "Kalmar sirri",
+  "usernameLabel": "Sunan mai amfani",
+  "search": "Bincika",
+  "retry": "Sake gwadawa",
+  "cancel": "Soke",
+  "save": "Ajiye",
+  "settings": "Saiti",
+  "somethingWentWrong": "Wani abu ya faskara",
+  "noMatches": "Babu sakamako",
+  "language": "Harshe",
+  "langEnglish": "English",
+  "langHausa": "Hausa",
+  "langYoruba": "Yorùbá",
+  "langIgbo": "Igbo"
+}

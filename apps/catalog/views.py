@@ -2,6 +2,7 @@ import operator
 from functools import reduce
 
 from django.db.models import Count, Q
+from django.utils.translation import gettext_lazy as _
 from rest_framework import viewsets
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -32,7 +33,7 @@ from .serializers import (
     SymptomSerializer,
 )
 
-DISCLAIMER = "This information is educational only and not medical advice."
+DISCLAIMER = _("This information is educational only and not medical advice.")
 
 
 class TenantQuerysetMixin:

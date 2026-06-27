@@ -1,0 +1,9 @@
+# Yoruba translations for HEALTH INFO API.
+# NOTE: machine-drafted — needs review by a native Yoruba clinical translator.
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: yo\n"
+
+msgid "This information is educational only and not medical advice."
+msgstr "Ìròyìn yìí jẹ́ fún ẹ̀kọ́ nìkan, kì í ṣe ìmọ̀ràn ìṣègùn."

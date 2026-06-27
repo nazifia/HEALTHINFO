@@ -1,0 +1,9 @@
+# Hausa translations for HEALTH INFO API.
+# NOTE: machine-drafted — needs review by a native Hausa clinical translator.
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: ha\n"
+
+msgid "This information is educational only and not medical advice."
+msgstr "Wannan bayanin na ilimi ne kawai, ba shawarar likita ba ce."

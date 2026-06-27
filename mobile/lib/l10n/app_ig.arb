@@ -1,0 +1,22 @@
+{
+  "@@locale": "ig",
+  "appTitle": "Ozi Ahụike",
+  "signIn": "Banye",
+  "register": "Debanye aha",
+  "signOut": "Pụọ",
+  "phoneLabel": "Ekwentị",
+  "passwordLabel": "Okwuntughe",
+  "usernameLabel": "Aha onye ọrụ",
+  "search": "Chọọ",
+  "retry": "Nwaa ọzọ",
+  "cancel": "Kagbuo",
+  "save": "Chekwaa",
+  "settings": "Ntọala",
+  "somethingWentWrong": "Ihe adịghị mma mere",
+  "noMatches": "Enweghị nsonaazụ",
+  "language": "Asụsụ",
+  "langEnglish": "English",
+  "langHausa": "Hausa",
+  "langYoruba": "Yorùbá",
+  "langIgbo": "Igbo"
+}

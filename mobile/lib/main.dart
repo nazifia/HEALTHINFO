@@ -4,6 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api.dart';
 import 'config.dart';
+import 'l10n/app_localizations.dart';
+import 'core/locale_provider.dart';
 import 'core/theme/enhanced_theme.dart';
 import 'core/theme/theme_provider.dart';
 import 'inactivity_watcher.dart';
@@ -22,10 +24,12 @@ void main() async {
   final prefs = await SharedPreferences.getInstance();
   final saved = prefs.getString('theme_mode');
   final mode = saved == 'dark' ? ThemeMode.dark : ThemeMode.light;
+  final locale = LocaleNotifier.fromPrefs(prefs);
   runApp(
     ProviderScope(
       overrides: [
         themeModeProvider.overrideWith((ref) => ThemeModeNotifier(mode)),
+        localeProvider.overrideWith((ref) => LocaleNotifier(locale)),
       ],
       child: const HealthInfoApp(),
     ),
@@ -38,10 +42,14 @@ class HealthInfoApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
+    final locale = ref.watch(localeProvider);
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Health Info',
       navigatorKey: navigatorKey,
+      locale: locale,
+      supportedLocales: supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
       theme: EnhancedTheme.enhancedLightTheme,
       darkTheme: EnhancedTheme.enhancedDarkTheme,
       themeMode: themeMode,
