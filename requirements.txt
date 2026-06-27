@@ -9,5 +9,6 @@ django-filter==24.3
 drf-spectacular==0.28.0
 python-dotenv==1.0.1
 gunicorn==23.0.0
+whitenoise==6.8.2
 pytest==8.3.4
 pytest-django==4.9.0
