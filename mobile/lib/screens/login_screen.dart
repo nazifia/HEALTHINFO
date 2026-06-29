@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../main.dart';
-import '../config.dart';
 import '../l10n/app_localizations.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
@@ -22,7 +21,6 @@ class _LoginScreenState extends State<LoginScreen> {
   final _pass = TextEditingController();
   final _email = TextEditingController();
   final _username = TextEditingController();
-  final _tenant = TextEditingController(text: tenantSlug);
   bool _registerMode = false;
   bool _busy = false;
   bool _obscure = true;
@@ -34,7 +32,6 @@ class _LoginScreenState extends State<LoginScreen> {
     _pass.dispose();
     _email.dispose();
     _username.dispose();
-    _tenant.dispose();
     super.dispose();
   }
 
@@ -44,12 +41,6 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
     });
     try {
-      final slug = _tenant.text.trim();
-      if (slug.isEmpty) {
-        setState(() => _error = 'Enter your organization slug');
-        return;
-      }
-      await setTenant(slug);
       if (_registerMode) {
         await api.register(_phone.text.trim(), _email.text.trim(), _pass.text,
             username: _username.text.trim());
@@ -156,15 +147,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                         setState(() => _registerMode = s.first),
                               ),
                               const SizedBox(height: 20),
-                              TextField(
-                                controller: _tenant,
-                                decoration: const InputDecoration(
-                                  labelText: 'Organization slug',
-                                  prefixIcon: Icon(Icons.tag_outlined),
-                                ),
-                                autocorrect: false,
-                              ),
-                              const SizedBox(height: 12),
                               TextField(
                                 controller: _phone,
                                 decoration: const InputDecoration(
