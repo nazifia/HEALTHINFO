@@ -24,13 +24,35 @@ class _NativeAppBannerState extends State<NativeAppBanner> {
   @override
   void initState() {
     super.initState();
-    if (kIsWeb) _load();
+    if (kIsWeb && isAndroidWeb) _load();
   }
 
   Future<void> _load() async {
     final p = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() => _show = !(p.getBool(_kDismissed) ?? false));
+  }
+
+  void _install() {
+    openUrl(appDownloadUrl);
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Installing the app'),
+        content: const Text(
+          'The app file (.apk) is downloading.\n\n'
+          '1. Open it from your notifications or Downloads.\n'
+          '2. If prompted, allow installs from this source.\n'
+          '3. Tap Install.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Got it'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _dismiss() async {
@@ -62,8 +84,8 @@ class _NativeAppBannerState extends State<NativeAppBanner> {
                     ),
                   ),
                   TextButton(
-                    onPressed: () => openUrl(appDownloadUrl),
-                    child: const Text('Download'),
+                    onPressed: _install,
+                    child: const Text('Install'),
                   ),
                   IconButton(
                     tooltip: 'Dismiss',
