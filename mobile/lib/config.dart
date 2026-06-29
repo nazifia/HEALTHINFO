@@ -39,9 +39,11 @@ Future<void> setTenant(String slug) async {
 const int _idleMinutes = int.fromEnvironment('IDLE_TIMEOUT_MINUTES', defaultValue: 5);
 const Duration idleTimeout = Duration(minutes: _idleMinutes);
 
-// Native app store link shown to web visitors. Override per platform:
-//   flutter build web --dart-define=APP_DOWNLOAD_URL=https://play.google.com/...
+// Direct APK download shown to web visitors. The file is served from the web
+// build root — drop the release APK at mobile/web/health-info.apk (it gets
+// copied into build/web). Override the path/URL if hosted elsewhere:
+//   flutter build web --dart-define=APP_DOWNLOAD_URL=https://cdn.example.com/app.apk
 const String appDownloadUrl = String.fromEnvironment(
   'APP_DOWNLOAD_URL',
-  defaultValue: 'https://play.google.com/store/apps/details?id=com.example.health_info_app',
+  defaultValue: 'health-info.apk',
 );
