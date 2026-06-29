@@ -38,3 +38,10 @@ Future<void> setTenant(String slug) async {
 // keep it short. Override: --dart-define=IDLE_TIMEOUT_MINUTES=10
 const int _idleMinutes = int.fromEnvironment('IDLE_TIMEOUT_MINUTES', defaultValue: 5);
 const Duration idleTimeout = Duration(minutes: _idleMinutes);
+
+// Native app store link shown to web visitors. Override per platform:
+//   flutter build web --dart-define=APP_DOWNLOAD_URL=https://play.google.com/...
+const String appDownloadUrl = String.fromEnvironment(
+  'APP_DOWNLOAD_URL',
+  defaultValue: 'https://play.google.com/store/apps/details?id=com.example.health_info_app',
+);

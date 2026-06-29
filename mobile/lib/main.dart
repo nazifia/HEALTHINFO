@@ -10,6 +10,7 @@ import 'core/locale_provider.dart';
 import 'core/theme/enhanced_theme.dart';
 import 'core/theme/theme_provider.dart';
 import 'inactivity_watcher.dart';
+import 'shared/native_app_banner.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 
@@ -58,9 +59,11 @@ class HealthInfoApp extends ConsumerWidget {
       theme: EnhancedTheme.enhancedLightTheme,
       darkTheme: EnhancedTheme.enhancedDarkTheme,
       themeMode: themeMode,
-      builder: (context, child) => InactivityWatcher(
-        onTimeout: _logoutOnIdle,
-        child: child ?? const SizedBox.shrink(),
+      builder: (context, child) => NativeAppBanner(
+        child: InactivityWatcher(
+          onTimeout: _logoutOnIdle,
+          child: child ?? const SizedBox.shrink(),
+        ),
       ),
       home: api.isLoggedIn ? const HomeScreen() : const LoginScreen(),
     );
