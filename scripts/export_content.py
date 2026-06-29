@@ -1,8 +1,8 @@
 """Export seed/content data so it can be loaded into production.
 
-Dumps the apps that hold authored content (tenants, clinical catalog, runtime
-config, embeddings) and skips per-user/runtime tables (analytics, accounts,
-sessions, auth perms — those are recreated by `migrate` or generated in prod).
+Dumps tenants, accounts, clinical catalog, runtime config, embeddings, and
+analytics. Skips sessions and auth permissions/contenttypes — those are
+recreated by `migrate` on the production database.
 
 Usage:
     python scripts/export_content.py            # -> content.json
@@ -19,7 +19,7 @@ from django.core.management import call_command
 
 # ponytail: explicit app list, not "dumpdata all minus excludes" — keeps user
 #   data out by construction instead of by remembering to exclude it.
-CONTENT = ["tenants", "catalog", "governance.runtimeconfig", "ai"]
+CONTENT = ["tenants", "accounts", "catalog", "governance.runtimeconfig", "ai", "analytics"]
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")

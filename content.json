@@ -7380,6 +7380,237 @@
   }
 },
 {
+  "model": "accounts.user",
+  "pk": 1,
+  "fields": {
+    "password": "pbkdf2_sha256$870000$MvGraIogOmKGxdoMupY6ON$YLzB3BG9cUumYWu5Fl1gqwrdya/Z3mAX1q2zweHz/SE=",
+    "last_login": "2026-06-26T16:15:44Z",
+    "is_superuser": true,
+    "first_name": "",
+    "last_name": "",
+    "email": "super@demo.localhost",
+    "is_staff": true,
+    "is_active": true,
+    "date_joined": "2026-06-25T08:56:29Z",
+    "username": "superuser",
+    "phone": "08032194090",
+    "tenant": null,
+    "role": "super_admin",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "accounts.user",
+  "pk": 2,
+  "fields": {
+    "password": "pbkdf2_sha256$870000$A1grgzMWzCQJHFOADGVOfU$FEE6ElEy1ZgYtA4S/x/jnh5R+5VCUJyuvdB6klWcxKA=",
+    "last_login": null,
+    "is_superuser": false,
+    "first_name": "",
+    "last_name": "",
+    "email": "tenant_admin@demo.localhost",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-06-25T08:56:29.938Z",
+    "username": "tenant_admin",
+    "phone": "+2348000000001",
+    "tenant": 1,
+    "role": "tenant_admin",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "accounts.user",
+  "pk": 3,
+  "fields": {
+    "password": "pbkdf2_sha256$870000$4mHBb05Sebzef9vIVLjcg1$p2YskqgwNo8IoC3MgTEvZaz4ub1Q9GGx36m978jNFDA=",
+    "last_login": null,
+    "is_superuser": false,
+    "first_name": "",
+    "last_name": "",
+    "email": "doctor@demo.localhost",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-06-25T08:56:30.573Z",
+    "username": "doctor",
+    "phone": "+2348000000002",
+    "tenant": 1,
+    "role": "doctor",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "accounts.user",
+  "pk": 4,
+  "fields": {
+    "password": "pbkdf2_sha256$870000$Q0a9oEayzBoplmsMbYws8S$X23avt3/7bcel8ufgYt5gRqY2Qeq7bSaEpoNYSik2hY=",
+    "last_login": null,
+    "is_superuser": false,
+    "first_name": "",
+    "last_name": "",
+    "email": "pharmacist@demo.localhost",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-06-25T08:56:31.155Z",
+    "username": "pharmacist",
+    "phone": "+2348000000003",
+    "tenant": 1,
+    "role": "pharmacist",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "accounts.user",
+  "pk": 5,
+  "fields": {
+    "password": "pbkdf2_sha256$870000$cL9sJQFcN3FASS9YGJv5TC$mMuED77VpNpVYn2fPjl0pqwskcALGsWc27fxEf5Pmt8=",
+    "last_login": null,
+    "is_superuser": false,
+    "first_name": "",
+    "last_name": "",
+    "email": "nurse@demo.localhost",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-06-25T08:56:31.791Z",
+    "username": "nurse",
+    "phone": "+2348000000004",
+    "tenant": 1,
+    "role": "nurse",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "accounts.user",
+  "pk": 6,
+  "fields": {
+    "password": "pbkdf2_sha256$870000$RaSdvJq0yUF3wLkz2Y8drr$4m4kS+Ljk7X6/Lxave/jkWuMfqzZY62k6g9rWRjdSd4=",
+    "last_login": null,
+    "is_superuser": false,
+    "first_name": "",
+    "last_name": "",
+    "email": "public@demo.localhost",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-06-25T08:56:32.370Z",
+    "username": "public",
+    "phone": "+2348000000005",
+    "tenant": 1,
+    "role": "public",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "accounts.user",
+  "pk": 7,
+  "fields": {
+    "password": "pbkdf2_sha256$870000$V2UmqIbYnBReVFE7AK10iR$uTORkJGgxWsrRcP0qhi/z9yGbPfqQnUGnFyQWkKuA7o=",
+    "last_login": null,
+    "is_superuser": false,
+    "first_name": "",
+    "last_name": "",
+    "email": "admin@admin.com",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-06-25T13:21:26.400Z",
+    "username": null,
+    "phone": "08000000000",
+    "tenant": 2,
+    "role": "tenant_admin",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "accounts.user",
+  "pk": 8,
+  "fields": {
+    "password": "pbkdf2_sha256$870000$Y3qxMDyQgc2gfPWjIamKi7$PFto5bUvxDpcbCodHudG2RdGg/DYu5ZX6W/aDZ6S0js=",
+    "last_login": null,
+    "is_superuser": false,
+    "first_name": "",
+    "last_name": "",
+    "email": "",
+    "is_staff": false,
+    "is_active": false,
+    "date_joined": "2026-06-26T08:59:47Z",
+    "username": null,
+    "phone": "08000000001",
+    "tenant": null,
+    "role": "super_admin",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "accounts.user",
+  "pk": 9,
+  "fields": {
+    "password": "",
+    "last_login": null,
+    "is_superuser": false,
+    "first_name": "",
+    "last_name": "",
+    "email": "",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-06-26T08:59:47.443Z",
+    "username": null,
+    "phone": "08000000002",
+    "tenant": 4,
+    "role": "doctor",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "accounts.user",
+  "pk": 10,
+  "fields": {
+    "password": "pbkdf2_sha256$870000$LYXzPFxrO9md0ijBcnjKSJ$oGwuE/iRew6Jk1jDOqYdkOOjLMRqit2eecVcXa+YYaY=",
+    "last_login": null,
+    "is_superuser": false,
+    "first_name": "",
+    "last_name": "",
+    "email": "cottageibi@cotibi.com",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-06-27T05:48:40.049Z",
+    "username": null,
+    "phone": "08080808080",
+    "tenant": 5,
+    "role": "tenant_admin",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "accounts.user",
+  "pk": 11,
+  "fields": {
+    "password": "pbkdf2_sha256$870000$qRsqv9LR0e4RU6WVrHpQ2Z$fPLnX1zrV0O/KVGIto5yH6FghqekGP5JUKcXL+hUOc0=",
+    "last_login": null,
+    "is_superuser": false,
+    "first_name": "",
+    "last_name": "",
+    "email": "",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-06-27T08:49:02.450Z",
+    "username": "Demo user",
+    "phone": "08070707070",
+    "tenant": 1,
+    "role": "public",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
   "model": "catalog.symptom",
   "pk": 31,
   "fields": {
