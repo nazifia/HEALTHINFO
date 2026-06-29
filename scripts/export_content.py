@@ -21,6 +21,13 @@ from django.core.management import call_command
 #   data out by construction instead of by remembering to exclude it.
 CONTENT = ["tenants", "accounts", "catalog", "governance.runtimeconfig", "ai", "analytics"]
 
+# ponytail: Jurisdiction is seeded by migration 0005 (deterministic order ->
+#   stable integer PKs), so prod already has it after `migrate`. Dumping it too
+#   collides on the (name, level, parent) unique constraint at loaddata time.
+#   Exclude it; Tenant's FK matches the seed's fixed PKs. Upgrade path: give
+#   Jurisdiction a natural_key() if the seed order ever stops being stable.
+EXCLUDE = ["tenants.Jurisdiction"]
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
@@ -29,6 +36,7 @@ out = sys.argv[1] if len(sys.argv) > 1 else "content.json"
 with open(out, "w", encoding="utf-8") as fh:
     call_command(
         "dumpdata", *CONTENT,
+        exclude=EXCLUDE,
         natural_foreign=True,   # FK by natural key where models define one
         indent=2,
         stdout=fh,
