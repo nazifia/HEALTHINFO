@@ -1,0 +1,10017 @@
+[
+{
+  "model": "tenants.jurisdiction",
+  "pk": 1,
+  "fields": {
+    "name": "Nigeria",
+    "level": "national",
+    "parent": null
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 2,
+  "fields": {
+    "name": "Lagos",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 3,
+  "fields": {
+    "name": "Ikeja",
+    "level": "local",
+    "parent": 2
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 4,
+  "fields": {
+    "name": "Abia",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 5,
+  "fields": {
+    "name": "Aba North",
+    "level": "local",
+    "parent": 4
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 6,
+  "fields": {
+    "name": "Aba South",
+    "level": "local",
+    "parent": 4
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 7,
+  "fields": {
+    "name": "Arochukwu",
+    "level": "local",
+    "parent": 4
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 8,
+  "fields": {
+    "name": "Bende",
+    "level": "local",
+    "parent": 4
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 9,
+  "fields": {
+    "name": "Ikwuano",
+    "level": "local",
+    "parent": 4
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 10,
+  "fields": {
+    "name": "Isiala Ngwa North",
+    "level": "local",
+    "parent": 4
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 11,
+  "fields": {
+    "name": "Isiala Ngwa South",
+    "level": "local",
+    "parent": 4
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 12,
+  "fields": {
+    "name": "Isuikwuato",
+    "level": "local",
+    "parent": 4
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 13,
+  "fields": {
+    "name": "Obi Ngwa",
+    "level": "local",
+    "parent": 4
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 14,
+  "fields": {
+    "name": "Ohafia",
+    "level": "local",
+    "parent": 4
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 15,
+  "fields": {
+    "name": "Osisioma",
+    "level": "local",
+    "parent": 4
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 16,
+  "fields": {
+    "name": "Ugwunagbo",
+    "level": "local",
+    "parent": 4
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 17,
+  "fields": {
+    "name": "Ukwa East",
+    "level": "local",
+    "parent": 4
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 18,
+  "fields": {
+    "name": "Ukwa West",
+    "level": "local",
+    "parent": 4
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 19,
+  "fields": {
+    "name": "Umuahia North",
+    "level": "local",
+    "parent": 4
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 20,
+  "fields": {
+    "name": "Umuahia South",
+    "level": "local",
+    "parent": 4
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 21,
+  "fields": {
+    "name": "Umu Nneochi",
+    "level": "local",
+    "parent": 4
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 22,
+  "fields": {
+    "name": "Adamawa",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 23,
+  "fields": {
+    "name": "Demsa",
+    "level": "local",
+    "parent": 22
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 24,
+  "fields": {
+    "name": "Fufore",
+    "level": "local",
+    "parent": 22
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 25,
+  "fields": {
+    "name": "Ganye",
+    "level": "local",
+    "parent": 22
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 26,
+  "fields": {
+    "name": "Girei",
+    "level": "local",
+    "parent": 22
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 27,
+  "fields": {
+    "name": "Gombi",
+    "level": "local",
+    "parent": 22
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 28,
+  "fields": {
+    "name": "Guyuk",
+    "level": "local",
+    "parent": 22
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 29,
+  "fields": {
+    "name": "Hong",
+    "level": "local",
+    "parent": 22
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 30,
+  "fields": {
+    "name": "Jada",
+    "level": "local",
+    "parent": 22
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 31,
+  "fields": {
+    "name": "Lamurde",
+    "level": "local",
+    "parent": 22
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 32,
+  "fields": {
+    "name": "Madagali",
+    "level": "local",
+    "parent": 22
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 33,
+  "fields": {
+    "name": "Maiha",
+    "level": "local",
+    "parent": 22
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 34,
+  "fields": {
+    "name": "Mayo-Belwa",
+    "level": "local",
+    "parent": 22
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 35,
+  "fields": {
+    "name": "Michika",
+    "level": "local",
+    "parent": 22
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 36,
+  "fields": {
+    "name": "Mubi North",
+    "level": "local",
+    "parent": 22
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 37,
+  "fields": {
+    "name": "Mubi South",
+    "level": "local",
+    "parent": 22
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 38,
+  "fields": {
+    "name": "Numan",
+    "level": "local",
+    "parent": 22
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 39,
+  "fields": {
+    "name": "Shelleng",
+    "level": "local",
+    "parent": 22
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 40,
+  "fields": {
+    "name": "Song",
+    "level": "local",
+    "parent": 22
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 41,
+  "fields": {
+    "name": "Toungo",
+    "level": "local",
+    "parent": 22
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 42,
+  "fields": {
+    "name": "Yola North",
+    "level": "local",
+    "parent": 22
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 43,
+  "fields": {
+    "name": "Yola South",
+    "level": "local",
+    "parent": 22
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 44,
+  "fields": {
+    "name": "Akwa Ibom",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 45,
+  "fields": {
+    "name": "Abak",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 46,
+  "fields": {
+    "name": "Eastern Obolo",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 47,
+  "fields": {
+    "name": "Eket",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 48,
+  "fields": {
+    "name": "Esit Eket",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 49,
+  "fields": {
+    "name": "Essien Udim",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 50,
+  "fields": {
+    "name": "Etim Ekpo",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 51,
+  "fields": {
+    "name": "Etinan",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 52,
+  "fields": {
+    "name": "Ibeno",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 53,
+  "fields": {
+    "name": "Ibesikpo Asutan",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 54,
+  "fields": {
+    "name": "Ibiono-Ibom",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 55,
+  "fields": {
+    "name": "Ika",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 56,
+  "fields": {
+    "name": "Ikono",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 57,
+  "fields": {
+    "name": "Ikot Abasi",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 58,
+  "fields": {
+    "name": "Ikot Ekpene",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 59,
+  "fields": {
+    "name": "Ini",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 60,
+  "fields": {
+    "name": "Itu",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 61,
+  "fields": {
+    "name": "Mbo",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 62,
+  "fields": {
+    "name": "Mkpat-Enin",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 63,
+  "fields": {
+    "name": "Nsit-Atai",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 64,
+  "fields": {
+    "name": "Nsit-Ibom",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 65,
+  "fields": {
+    "name": "Nsit-Ubium",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 66,
+  "fields": {
+    "name": "Obot Akara",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 67,
+  "fields": {
+    "name": "Okobo",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 68,
+  "fields": {
+    "name": "Onna",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 69,
+  "fields": {
+    "name": "Oron",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 70,
+  "fields": {
+    "name": "Oruk Anam",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 71,
+  "fields": {
+    "name": "Udung-Uko",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 72,
+  "fields": {
+    "name": "Ukanafun",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 73,
+  "fields": {
+    "name": "Uruan",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 74,
+  "fields": {
+    "name": "Urue-Offong/Oruko",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 75,
+  "fields": {
+    "name": "Uyo",
+    "level": "local",
+    "parent": 44
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 76,
+  "fields": {
+    "name": "Anambra",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 77,
+  "fields": {
+    "name": "Aguata",
+    "level": "local",
+    "parent": 76
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 78,
+  "fields": {
+    "name": "Anambra East",
+    "level": "local",
+    "parent": 76
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 79,
+  "fields": {
+    "name": "Anambra West",
+    "level": "local",
+    "parent": 76
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 80,
+  "fields": {
+    "name": "Anaocha",
+    "level": "local",
+    "parent": 76
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 81,
+  "fields": {
+    "name": "Awka North",
+    "level": "local",
+    "parent": 76
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 82,
+  "fields": {
+    "name": "Awka South",
+    "level": "local",
+    "parent": 76
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 83,
+  "fields": {
+    "name": "Ayamelum",
+    "level": "local",
+    "parent": 76
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 84,
+  "fields": {
+    "name": "Dunukofia",
+    "level": "local",
+    "parent": 76
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 85,
+  "fields": {
+    "name": "Ekwusigo",
+    "level": "local",
+    "parent": 76
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 86,
+  "fields": {
+    "name": "Idemili North",
+    "level": "local",
+    "parent": 76
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 87,
+  "fields": {
+    "name": "Idemili South",
+    "level": "local",
+    "parent": 76
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 88,
+  "fields": {
+    "name": "Ihiala",
+    "level": "local",
+    "parent": 76
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 89,
+  "fields": {
+    "name": "Njikoka",
+    "level": "local",
+    "parent": 76
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 90,
+  "fields": {
+    "name": "Nnewi North",
+    "level": "local",
+    "parent": 76
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 91,
+  "fields": {
+    "name": "Nnewi South",
+    "level": "local",
+    "parent": 76
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 92,
+  "fields": {
+    "name": "Ogbaru",
+    "level": "local",
+    "parent": 76
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 93,
+  "fields": {
+    "name": "Onitsha North",
+    "level": "local",
+    "parent": 76
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 94,
+  "fields": {
+    "name": "Onitsha South",
+    "level": "local",
+    "parent": 76
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 95,
+  "fields": {
+    "name": "Orumba North",
+    "level": "local",
+    "parent": 76
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 96,
+  "fields": {
+    "name": "Orumba South",
+    "level": "local",
+    "parent": 76
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 97,
+  "fields": {
+    "name": "Oyi",
+    "level": "local",
+    "parent": 76
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 98,
+  "fields": {
+    "name": "Bauchi",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 99,
+  "fields": {
+    "name": "Alkaleri",
+    "level": "local",
+    "parent": 98
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 100,
+  "fields": {
+    "name": "Bauchi",
+    "level": "local",
+    "parent": 98
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 101,
+  "fields": {
+    "name": "Bogoro",
+    "level": "local",
+    "parent": 98
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 102,
+  "fields": {
+    "name": "Damban",
+    "level": "local",
+    "parent": 98
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 103,
+  "fields": {
+    "name": "Darazo",
+    "level": "local",
+    "parent": 98
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 104,
+  "fields": {
+    "name": "Dass",
+    "level": "local",
+    "parent": 98
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 105,
+  "fields": {
+    "name": "Gamawa",
+    "level": "local",
+    "parent": 98
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 106,
+  "fields": {
+    "name": "Ganjuwa",
+    "level": "local",
+    "parent": 98
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 107,
+  "fields": {
+    "name": "Giade",
+    "level": "local",
+    "parent": 98
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 108,
+  "fields": {
+    "name": "Itas/Gadau",
+    "level": "local",
+    "parent": 98
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 109,
+  "fields": {
+    "name": "Jama'are",
+    "level": "local",
+    "parent": 98
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 110,
+  "fields": {
+    "name": "Katagum",
+    "level": "local",
+    "parent": 98
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 111,
+  "fields": {
+    "name": "Kirfi",
+    "level": "local",
+    "parent": 98
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 112,
+  "fields": {
+    "name": "Misau",
+    "level": "local",
+    "parent": 98
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 113,
+  "fields": {
+    "name": "Ningi",
+    "level": "local",
+    "parent": 98
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 114,
+  "fields": {
+    "name": "Shira",
+    "level": "local",
+    "parent": 98
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 115,
+  "fields": {
+    "name": "Tafawa Balewa",
+    "level": "local",
+    "parent": 98
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 116,
+  "fields": {
+    "name": "Toro",
+    "level": "local",
+    "parent": 98
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 117,
+  "fields": {
+    "name": "Warji",
+    "level": "local",
+    "parent": 98
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 118,
+  "fields": {
+    "name": "Zaki",
+    "level": "local",
+    "parent": 98
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 119,
+  "fields": {
+    "name": "Bayelsa",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 120,
+  "fields": {
+    "name": "Brass",
+    "level": "local",
+    "parent": 119
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 121,
+  "fields": {
+    "name": "Ekeremor",
+    "level": "local",
+    "parent": 119
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 122,
+  "fields": {
+    "name": "Kolokuma/Opokuma",
+    "level": "local",
+    "parent": 119
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 123,
+  "fields": {
+    "name": "Nembe",
+    "level": "local",
+    "parent": 119
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 124,
+  "fields": {
+    "name": "Ogbia",
+    "level": "local",
+    "parent": 119
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 125,
+  "fields": {
+    "name": "Sagbama",
+    "level": "local",
+    "parent": 119
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 126,
+  "fields": {
+    "name": "Southern Ijaw",
+    "level": "local",
+    "parent": 119
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 127,
+  "fields": {
+    "name": "Yenagoa",
+    "level": "local",
+    "parent": 119
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 128,
+  "fields": {
+    "name": "Benue",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 129,
+  "fields": {
+    "name": "Ado",
+    "level": "local",
+    "parent": 128
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 130,
+  "fields": {
+    "name": "Agatu",
+    "level": "local",
+    "parent": 128
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 131,
+  "fields": {
+    "name": "Apa",
+    "level": "local",
+    "parent": 128
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 132,
+  "fields": {
+    "name": "Buruku",
+    "level": "local",
+    "parent": 128
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 133,
+  "fields": {
+    "name": "Gboko",
+    "level": "local",
+    "parent": 128
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 134,
+  "fields": {
+    "name": "Guma",
+    "level": "local",
+    "parent": 128
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 135,
+  "fields": {
+    "name": "Gwer East",
+    "level": "local",
+    "parent": 128
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 136,
+  "fields": {
+    "name": "Gwer West",
+    "level": "local",
+    "parent": 128
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 137,
+  "fields": {
+    "name": "Katsina-Ala",
+    "level": "local",
+    "parent": 128
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 138,
+  "fields": {
+    "name": "Konshisha",
+    "level": "local",
+    "parent": 128
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 139,
+  "fields": {
+    "name": "Kwande",
+    "level": "local",
+    "parent": 128
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 140,
+  "fields": {
+    "name": "Logo",
+    "level": "local",
+    "parent": 128
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 141,
+  "fields": {
+    "name": "Makurdi",
+    "level": "local",
+    "parent": 128
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 142,
+  "fields": {
+    "name": "Obi",
+    "level": "local",
+    "parent": 128
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 143,
+  "fields": {
+    "name": "Ogbadibo",
+    "level": "local",
+    "parent": 128
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 144,
+  "fields": {
+    "name": "Ohimini",
+    "level": "local",
+    "parent": 128
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 145,
+  "fields": {
+    "name": "Oju",
+    "level": "local",
+    "parent": 128
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 146,
+  "fields": {
+    "name": "Okpokwu",
+    "level": "local",
+    "parent": 128
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 147,
+  "fields": {
+    "name": "Otukpo",
+    "level": "local",
+    "parent": 128
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 148,
+  "fields": {
+    "name": "Tarka",
+    "level": "local",
+    "parent": 128
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 149,
+  "fields": {
+    "name": "Ukum",
+    "level": "local",
+    "parent": 128
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 150,
+  "fields": {
+    "name": "Ushongo",
+    "level": "local",
+    "parent": 128
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 151,
+  "fields": {
+    "name": "Vandeikya",
+    "level": "local",
+    "parent": 128
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 152,
+  "fields": {
+    "name": "Borno",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 153,
+  "fields": {
+    "name": "Abadam",
+    "level": "local",
+    "parent": 152
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 154,
+  "fields": {
+    "name": "Askira/Uba",
+    "level": "local",
+    "parent": 152
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 155,
+  "fields": {
+    "name": "Bama",
+    "level": "local",
+    "parent": 152
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 156,
+  "fields": {
+    "name": "Bayo",
+    "level": "local",
+    "parent": 152
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 157,
+  "fields": {
+    "name": "Biu",
+    "level": "local",
+    "parent": 152
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 158,
+  "fields": {
+    "name": "Chibok",
+    "level": "local",
+    "parent": 152
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 159,
+  "fields": {
+    "name": "Damboa",
+    "level": "local",
+    "parent": 152
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 160,
+  "fields": {
+    "name": "Dikwa",
+    "level": "local",
+    "parent": 152
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 161,
+  "fields": {
+    "name": "Gubio",
+    "level": "local",
+    "parent": 152
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 162,
+  "fields": {
+    "name": "Guzamala",
+    "level": "local",
+    "parent": 152
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 163,
+  "fields": {
+    "name": "Gwoza",
+    "level": "local",
+    "parent": 152
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 164,
+  "fields": {
+    "name": "Hawul",
+    "level": "local",
+    "parent": 152
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 165,
+  "fields": {
+    "name": "Jere",
+    "level": "local",
+    "parent": 152
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 166,
+  "fields": {
+    "name": "Kaga",
+    "level": "local",
+    "parent": 152
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 167,
+  "fields": {
+    "name": "Kala/Balge",
+    "level": "local",
+    "parent": 152
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 168,
+  "fields": {
+    "name": "Konduga",
+    "level": "local",
+    "parent": 152
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 169,
+  "fields": {
+    "name": "Kukawa",
+    "level": "local",
+    "parent": 152
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 170,
+  "fields": {
+    "name": "Kwaya Kusar",
+    "level": "local",
+    "parent": 152
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 171,
+  "fields": {
+    "name": "Mafa",
+    "level": "local",
+    "parent": 152
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 172,
+  "fields": {
+    "name": "Magumeri",
+    "level": "local",
+    "parent": 152
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 173,
+  "fields": {
+    "name": "Maiduguri",
+    "level": "local",
+    "parent": 152
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 174,
+  "fields": {
+    "name": "Marte",
+    "level": "local",
+    "parent": 152
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 175,
+  "fields": {
+    "name": "Mobbar",
+    "level": "local",
+    "parent": 152
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 176,
+  "fields": {
+    "name": "Monguno",
+    "level": "local",
+    "parent": 152
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 177,
+  "fields": {
+    "name": "Ngala",
+    "level": "local",
+    "parent": 152
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 178,
+  "fields": {
+    "name": "Nganzai",
+    "level": "local",
+    "parent": 152
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 179,
+  "fields": {
+    "name": "Shani",
+    "level": "local",
+    "parent": 152
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 180,
+  "fields": {
+    "name": "Cross River",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 181,
+  "fields": {
+    "name": "Abi",
+    "level": "local",
+    "parent": 180
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 182,
+  "fields": {
+    "name": "Akamkpa",
+    "level": "local",
+    "parent": 180
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 183,
+  "fields": {
+    "name": "Akpabuyo",
+    "level": "local",
+    "parent": 180
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 184,
+  "fields": {
+    "name": "Bakassi",
+    "level": "local",
+    "parent": 180
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 185,
+  "fields": {
+    "name": "Bekwarra",
+    "level": "local",
+    "parent": 180
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 186,
+  "fields": {
+    "name": "Biase",
+    "level": "local",
+    "parent": 180
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 187,
+  "fields": {
+    "name": "Boki",
+    "level": "local",
+    "parent": 180
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 188,
+  "fields": {
+    "name": "Calabar Municipal",
+    "level": "local",
+    "parent": 180
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 189,
+  "fields": {
+    "name": "Calabar South",
+    "level": "local",
+    "parent": 180
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 190,
+  "fields": {
+    "name": "Etung",
+    "level": "local",
+    "parent": 180
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 191,
+  "fields": {
+    "name": "Ikom",
+    "level": "local",
+    "parent": 180
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 192,
+  "fields": {
+    "name": "Obanliku",
+    "level": "local",
+    "parent": 180
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 193,
+  "fields": {
+    "name": "Obubra",
+    "level": "local",
+    "parent": 180
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 194,
+  "fields": {
+    "name": "Obudu",
+    "level": "local",
+    "parent": 180
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 195,
+  "fields": {
+    "name": "Odukpani",
+    "level": "local",
+    "parent": 180
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 196,
+  "fields": {
+    "name": "Ogoja",
+    "level": "local",
+    "parent": 180
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 197,
+  "fields": {
+    "name": "Yakurr",
+    "level": "local",
+    "parent": 180
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 198,
+  "fields": {
+    "name": "Yala",
+    "level": "local",
+    "parent": 180
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 199,
+  "fields": {
+    "name": "Delta",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 200,
+  "fields": {
+    "name": "Aniocha North",
+    "level": "local",
+    "parent": 199
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 201,
+  "fields": {
+    "name": "Aniocha South",
+    "level": "local",
+    "parent": 199
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 202,
+  "fields": {
+    "name": "Bomadi",
+    "level": "local",
+    "parent": 199
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 203,
+  "fields": {
+    "name": "Burutu",
+    "level": "local",
+    "parent": 199
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 204,
+  "fields": {
+    "name": "Ethiope East",
+    "level": "local",
+    "parent": 199
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 205,
+  "fields": {
+    "name": "Ethiope West",
+    "level": "local",
+    "parent": 199
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 206,
+  "fields": {
+    "name": "Ika North East",
+    "level": "local",
+    "parent": 199
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 207,
+  "fields": {
+    "name": "Ika South",
+    "level": "local",
+    "parent": 199
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 208,
+  "fields": {
+    "name": "Isoko North",
+    "level": "local",
+    "parent": 199
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 209,
+  "fields": {
+    "name": "Isoko South",
+    "level": "local",
+    "parent": 199
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 210,
+  "fields": {
+    "name": "Ndokwa East",
+    "level": "local",
+    "parent": 199
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 211,
+  "fields": {
+    "name": "Ndokwa West",
+    "level": "local",
+    "parent": 199
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 212,
+  "fields": {
+    "name": "Okpe",
+    "level": "local",
+    "parent": 199
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 213,
+  "fields": {
+    "name": "Oshimili North",
+    "level": "local",
+    "parent": 199
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 214,
+  "fields": {
+    "name": "Oshimili South",
+    "level": "local",
+    "parent": 199
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 215,
+  "fields": {
+    "name": "Patani",
+    "level": "local",
+    "parent": 199
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 216,
+  "fields": {
+    "name": "Sapele",
+    "level": "local",
+    "parent": 199
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 217,
+  "fields": {
+    "name": "Udu",
+    "level": "local",
+    "parent": 199
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 218,
+  "fields": {
+    "name": "Ughelli North",
+    "level": "local",
+    "parent": 199
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 219,
+  "fields": {
+    "name": "Ughelli South",
+    "level": "local",
+    "parent": 199
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 220,
+  "fields": {
+    "name": "Ukwuani",
+    "level": "local",
+    "parent": 199
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 221,
+  "fields": {
+    "name": "Uvwie",
+    "level": "local",
+    "parent": 199
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 222,
+  "fields": {
+    "name": "Warri North",
+    "level": "local",
+    "parent": 199
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 223,
+  "fields": {
+    "name": "Warri South",
+    "level": "local",
+    "parent": 199
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 224,
+  "fields": {
+    "name": "Warri South West",
+    "level": "local",
+    "parent": 199
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 225,
+  "fields": {
+    "name": "Ebonyi",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 226,
+  "fields": {
+    "name": "Abakaliki",
+    "level": "local",
+    "parent": 225
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 227,
+  "fields": {
+    "name": "Afikpo North",
+    "level": "local",
+    "parent": 225
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 228,
+  "fields": {
+    "name": "Afikpo South",
+    "level": "local",
+    "parent": 225
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 229,
+  "fields": {
+    "name": "Ebonyi",
+    "level": "local",
+    "parent": 225
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 230,
+  "fields": {
+    "name": "Ezza North",
+    "level": "local",
+    "parent": 225
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 231,
+  "fields": {
+    "name": "Ezza South",
+    "level": "local",
+    "parent": 225
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 232,
+  "fields": {
+    "name": "Ikwo",
+    "level": "local",
+    "parent": 225
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 233,
+  "fields": {
+    "name": "Ishielu",
+    "level": "local",
+    "parent": 225
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 234,
+  "fields": {
+    "name": "Ivo",
+    "level": "local",
+    "parent": 225
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 235,
+  "fields": {
+    "name": "Izzi",
+    "level": "local",
+    "parent": 225
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 236,
+  "fields": {
+    "name": "Ohaozara",
+    "level": "local",
+    "parent": 225
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 237,
+  "fields": {
+    "name": "Ohaukwu",
+    "level": "local",
+    "parent": 225
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 238,
+  "fields": {
+    "name": "Onicha",
+    "level": "local",
+    "parent": 225
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 239,
+  "fields": {
+    "name": "Edo",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 240,
+  "fields": {
+    "name": "Akoko-Edo",
+    "level": "local",
+    "parent": 239
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 241,
+  "fields": {
+    "name": "Egor",
+    "level": "local",
+    "parent": 239
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 242,
+  "fields": {
+    "name": "Esan Central",
+    "level": "local",
+    "parent": 239
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 243,
+  "fields": {
+    "name": "Esan North-East",
+    "level": "local",
+    "parent": 239
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 244,
+  "fields": {
+    "name": "Esan South-East",
+    "level": "local",
+    "parent": 239
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 245,
+  "fields": {
+    "name": "Esan West",
+    "level": "local",
+    "parent": 239
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 246,
+  "fields": {
+    "name": "Etsako Central",
+    "level": "local",
+    "parent": 239
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 247,
+  "fields": {
+    "name": "Etsako East",
+    "level": "local",
+    "parent": 239
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 248,
+  "fields": {
+    "name": "Etsako West",
+    "level": "local",
+    "parent": 239
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 249,
+  "fields": {
+    "name": "Igueben",
+    "level": "local",
+    "parent": 239
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 250,
+  "fields": {
+    "name": "Ikpoba-Okha",
+    "level": "local",
+    "parent": 239
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 251,
+  "fields": {
+    "name": "Oredo",
+    "level": "local",
+    "parent": 239
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 252,
+  "fields": {
+    "name": "Orhionmwon",
+    "level": "local",
+    "parent": 239
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 253,
+  "fields": {
+    "name": "Ovia North-East",
+    "level": "local",
+    "parent": 239
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 254,
+  "fields": {
+    "name": "Ovia South-West",
+    "level": "local",
+    "parent": 239
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 255,
+  "fields": {
+    "name": "Owan East",
+    "level": "local",
+    "parent": 239
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 256,
+  "fields": {
+    "name": "Owan West",
+    "level": "local",
+    "parent": 239
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 257,
+  "fields": {
+    "name": "Uhunmwonde",
+    "level": "local",
+    "parent": 239
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 258,
+  "fields": {
+    "name": "Ekiti",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 259,
+  "fields": {
+    "name": "Ado-Ekiti",
+    "level": "local",
+    "parent": 258
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 260,
+  "fields": {
+    "name": "Efon",
+    "level": "local",
+    "parent": 258
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 261,
+  "fields": {
+    "name": "Ekiti East",
+    "level": "local",
+    "parent": 258
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 262,
+  "fields": {
+    "name": "Ekiti South-West",
+    "level": "local",
+    "parent": 258
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 263,
+  "fields": {
+    "name": "Ekiti West",
+    "level": "local",
+    "parent": 258
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 264,
+  "fields": {
+    "name": "Emure",
+    "level": "local",
+    "parent": 258
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 265,
+  "fields": {
+    "name": "Gbonyin",
+    "level": "local",
+    "parent": 258
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 266,
+  "fields": {
+    "name": "Ido-Osi",
+    "level": "local",
+    "parent": 258
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 267,
+  "fields": {
+    "name": "Ijero",
+    "level": "local",
+    "parent": 258
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 268,
+  "fields": {
+    "name": "Ikere",
+    "level": "local",
+    "parent": 258
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 269,
+  "fields": {
+    "name": "Ikole",
+    "level": "local",
+    "parent": 258
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 270,
+  "fields": {
+    "name": "Ilejemeje",
+    "level": "local",
+    "parent": 258
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 271,
+  "fields": {
+    "name": "Irepodun/Ifelodun",
+    "level": "local",
+    "parent": 258
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 272,
+  "fields": {
+    "name": "Ise/Orun",
+    "level": "local",
+    "parent": 258
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 273,
+  "fields": {
+    "name": "Moba",
+    "level": "local",
+    "parent": 258
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 274,
+  "fields": {
+    "name": "Oye",
+    "level": "local",
+    "parent": 258
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 275,
+  "fields": {
+    "name": "Enugu",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 276,
+  "fields": {
+    "name": "Aninri",
+    "level": "local",
+    "parent": 275
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 277,
+  "fields": {
+    "name": "Awgu",
+    "level": "local",
+    "parent": 275
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 278,
+  "fields": {
+    "name": "Enugu East",
+    "level": "local",
+    "parent": 275
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 279,
+  "fields": {
+    "name": "Enugu North",
+    "level": "local",
+    "parent": 275
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 280,
+  "fields": {
+    "name": "Enugu South",
+    "level": "local",
+    "parent": 275
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 281,
+  "fields": {
+    "name": "Ezeagu",
+    "level": "local",
+    "parent": 275
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 282,
+  "fields": {
+    "name": "Igbo Etiti",
+    "level": "local",
+    "parent": 275
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 283,
+  "fields": {
+    "name": "Igbo Eze North",
+    "level": "local",
+    "parent": 275
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 284,
+  "fields": {
+    "name": "Igbo Eze South",
+    "level": "local",
+    "parent": 275
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 285,
+  "fields": {
+    "name": "Isi Uzo",
+    "level": "local",
+    "parent": 275
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 286,
+  "fields": {
+    "name": "Nkanu East",
+    "level": "local",
+    "parent": 275
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 287,
+  "fields": {
+    "name": "Nkanu West",
+    "level": "local",
+    "parent": 275
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 288,
+  "fields": {
+    "name": "Nsukka",
+    "level": "local",
+    "parent": 275
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 289,
+  "fields": {
+    "name": "Oji River",
+    "level": "local",
+    "parent": 275
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 290,
+  "fields": {
+    "name": "Udenu",
+    "level": "local",
+    "parent": 275
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 291,
+  "fields": {
+    "name": "Udi",
+    "level": "local",
+    "parent": 275
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 292,
+  "fields": {
+    "name": "Uzo-Uwani",
+    "level": "local",
+    "parent": 275
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 293,
+  "fields": {
+    "name": "Gombe",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 294,
+  "fields": {
+    "name": "Akko",
+    "level": "local",
+    "parent": 293
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 295,
+  "fields": {
+    "name": "Balanga",
+    "level": "local",
+    "parent": 293
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 296,
+  "fields": {
+    "name": "Billiri",
+    "level": "local",
+    "parent": 293
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 297,
+  "fields": {
+    "name": "Dukku",
+    "level": "local",
+    "parent": 293
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 298,
+  "fields": {
+    "name": "Funakaye",
+    "level": "local",
+    "parent": 293
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 299,
+  "fields": {
+    "name": "Gombe",
+    "level": "local",
+    "parent": 293
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 300,
+  "fields": {
+    "name": "Kaltungo",
+    "level": "local",
+    "parent": 293
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 301,
+  "fields": {
+    "name": "Kwami",
+    "level": "local",
+    "parent": 293
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 302,
+  "fields": {
+    "name": "Nafada",
+    "level": "local",
+    "parent": 293
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 303,
+  "fields": {
+    "name": "Shongom",
+    "level": "local",
+    "parent": 293
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 304,
+  "fields": {
+    "name": "Yamaltu/Deba",
+    "level": "local",
+    "parent": 293
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 305,
+  "fields": {
+    "name": "Imo",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 306,
+  "fields": {
+    "name": "Aboh Mbaise",
+    "level": "local",
+    "parent": 305
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 307,
+  "fields": {
+    "name": "Ahiazu Mbaise",
+    "level": "local",
+    "parent": 305
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 308,
+  "fields": {
+    "name": "Ehime Mbano",
+    "level": "local",
+    "parent": 305
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 309,
+  "fields": {
+    "name": "Ezinihitte",
+    "level": "local",
+    "parent": 305
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 310,
+  "fields": {
+    "name": "Ideato North",
+    "level": "local",
+    "parent": 305
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 311,
+  "fields": {
+    "name": "Ideato South",
+    "level": "local",
+    "parent": 305
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 312,
+  "fields": {
+    "name": "Ihitte/Uboma",
+    "level": "local",
+    "parent": 305
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 313,
+  "fields": {
+    "name": "Ikeduru",
+    "level": "local",
+    "parent": 305
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 314,
+  "fields": {
+    "name": "Isiala Mbano",
+    "level": "local",
+    "parent": 305
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 315,
+  "fields": {
+    "name": "Isu",
+    "level": "local",
+    "parent": 305
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 316,
+  "fields": {
+    "name": "Mbaitoli",
+    "level": "local",
+    "parent": 305
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 317,
+  "fields": {
+    "name": "Ngor Okpala",
+    "level": "local",
+    "parent": 305
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 318,
+  "fields": {
+    "name": "Njaba",
+    "level": "local",
+    "parent": 305
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 319,
+  "fields": {
+    "name": "Nkwerre",
+    "level": "local",
+    "parent": 305
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 320,
+  "fields": {
+    "name": "Nwangele",
+    "level": "local",
+    "parent": 305
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 321,
+  "fields": {
+    "name": "Obowo",
+    "level": "local",
+    "parent": 305
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 322,
+  "fields": {
+    "name": "Oguta",
+    "level": "local",
+    "parent": 305
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 323,
+  "fields": {
+    "name": "Ohaji/Egbema",
+    "level": "local",
+    "parent": 305
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 324,
+  "fields": {
+    "name": "Okigwe",
+    "level": "local",
+    "parent": 305
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 325,
+  "fields": {
+    "name": "Orlu",
+    "level": "local",
+    "parent": 305
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 326,
+  "fields": {
+    "name": "Orsu",
+    "level": "local",
+    "parent": 305
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 327,
+  "fields": {
+    "name": "Oru East",
+    "level": "local",
+    "parent": 305
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 328,
+  "fields": {
+    "name": "Oru West",
+    "level": "local",
+    "parent": 305
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 329,
+  "fields": {
+    "name": "Owerri Municipal",
+    "level": "local",
+    "parent": 305
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 330,
+  "fields": {
+    "name": "Owerri North",
+    "level": "local",
+    "parent": 305
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 331,
+  "fields": {
+    "name": "Owerri West",
+    "level": "local",
+    "parent": 305
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 332,
+  "fields": {
+    "name": "Unuimo",
+    "level": "local",
+    "parent": 305
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 333,
+  "fields": {
+    "name": "Jigawa",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 334,
+  "fields": {
+    "name": "Auyo",
+    "level": "local",
+    "parent": 333
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 335,
+  "fields": {
+    "name": "Babura",
+    "level": "local",
+    "parent": 333
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 336,
+  "fields": {
+    "name": "Biriniwa",
+    "level": "local",
+    "parent": 333
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 337,
+  "fields": {
+    "name": "Birnin Kudu",
+    "level": "local",
+    "parent": 333
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 338,
+  "fields": {
+    "name": "Buji",
+    "level": "local",
+    "parent": 333
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 339,
+  "fields": {
+    "name": "Dutse",
+    "level": "local",
+    "parent": 333
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 340,
+  "fields": {
+    "name": "Gagarawa",
+    "level": "local",
+    "parent": 333
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 341,
+  "fields": {
+    "name": "Garki",
+    "level": "local",
+    "parent": 333
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 342,
+  "fields": {
+    "name": "Gumel",
+    "level": "local",
+    "parent": 333
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 343,
+  "fields": {
+    "name": "Guri",
+    "level": "local",
+    "parent": 333
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 344,
+  "fields": {
+    "name": "Gwaram",
+    "level": "local",
+    "parent": 333
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 345,
+  "fields": {
+    "name": "Gwiwa",
+    "level": "local",
+    "parent": 333
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 346,
+  "fields": {
+    "name": "Hadejia",
+    "level": "local",
+    "parent": 333
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 347,
+  "fields": {
+    "name": "Jahun",
+    "level": "local",
+    "parent": 333
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 348,
+  "fields": {
+    "name": "Kafin Hausa",
+    "level": "local",
+    "parent": 333
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 349,
+  "fields": {
+    "name": "Kaugama",
+    "level": "local",
+    "parent": 333
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 350,
+  "fields": {
+    "name": "Kazaure",
+    "level": "local",
+    "parent": 333
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 351,
+  "fields": {
+    "name": "Kiri Kasama",
+    "level": "local",
+    "parent": 333
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 352,
+  "fields": {
+    "name": "Kiyawa",
+    "level": "local",
+    "parent": 333
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 353,
+  "fields": {
+    "name": "Maigatari",
+    "level": "local",
+    "parent": 333
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 354,
+  "fields": {
+    "name": "Malam Madori",
+    "level": "local",
+    "parent": 333
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 355,
+  "fields": {
+    "name": "Miga",
+    "level": "local",
+    "parent": 333
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 356,
+  "fields": {
+    "name": "Ringim",
+    "level": "local",
+    "parent": 333
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 357,
+  "fields": {
+    "name": "Roni",
+    "level": "local",
+    "parent": 333
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 358,
+  "fields": {
+    "name": "Sule Tankarkar",
+    "level": "local",
+    "parent": 333
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 359,
+  "fields": {
+    "name": "Taura",
+    "level": "local",
+    "parent": 333
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 360,
+  "fields": {
+    "name": "Yankwashi",
+    "level": "local",
+    "parent": 333
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 361,
+  "fields": {
+    "name": "Kaduna",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 362,
+  "fields": {
+    "name": "Birnin Gwari",
+    "level": "local",
+    "parent": 361
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 363,
+  "fields": {
+    "name": "Chikun",
+    "level": "local",
+    "parent": 361
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 364,
+  "fields": {
+    "name": "Giwa",
+    "level": "local",
+    "parent": 361
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 365,
+  "fields": {
+    "name": "Igabi",
+    "level": "local",
+    "parent": 361
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 366,
+  "fields": {
+    "name": "Ikara",
+    "level": "local",
+    "parent": 361
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 367,
+  "fields": {
+    "name": "Jaba",
+    "level": "local",
+    "parent": 361
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 368,
+  "fields": {
+    "name": "Jema'a",
+    "level": "local",
+    "parent": 361
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 369,
+  "fields": {
+    "name": "Kachia",
+    "level": "local",
+    "parent": 361
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 370,
+  "fields": {
+    "name": "Kaduna North",
+    "level": "local",
+    "parent": 361
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 371,
+  "fields": {
+    "name": "Kaduna South",
+    "level": "local",
+    "parent": 361
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 372,
+  "fields": {
+    "name": "Kagarko",
+    "level": "local",
+    "parent": 361
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 373,
+  "fields": {
+    "name": "Kajuru",
+    "level": "local",
+    "parent": 361
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 374,
+  "fields": {
+    "name": "Kaura",
+    "level": "local",
+    "parent": 361
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 375,
+  "fields": {
+    "name": "Kauru",
+    "level": "local",
+    "parent": 361
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 376,
+  "fields": {
+    "name": "Kubau",
+    "level": "local",
+    "parent": 361
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 377,
+  "fields": {
+    "name": "Kudan",
+    "level": "local",
+    "parent": 361
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 378,
+  "fields": {
+    "name": "Lere",
+    "level": "local",
+    "parent": 361
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 379,
+  "fields": {
+    "name": "Makarfi",
+    "level": "local",
+    "parent": 361
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 380,
+  "fields": {
+    "name": "Sabon Gari",
+    "level": "local",
+    "parent": 361
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 381,
+  "fields": {
+    "name": "Sanga",
+    "level": "local",
+    "parent": 361
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 382,
+  "fields": {
+    "name": "Soba",
+    "level": "local",
+    "parent": 361
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 383,
+  "fields": {
+    "name": "Zangon Kataf",
+    "level": "local",
+    "parent": 361
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 384,
+  "fields": {
+    "name": "Zaria",
+    "level": "local",
+    "parent": 361
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 385,
+  "fields": {
+    "name": "Kano",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 386,
+  "fields": {
+    "name": "Ajingi",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 387,
+  "fields": {
+    "name": "Albasu",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 388,
+  "fields": {
+    "name": "Bagwai",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 389,
+  "fields": {
+    "name": "Bebeji",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 390,
+  "fields": {
+    "name": "Bichi",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 391,
+  "fields": {
+    "name": "Bunkure",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 392,
+  "fields": {
+    "name": "Dala",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 393,
+  "fields": {
+    "name": "Dambatta",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 394,
+  "fields": {
+    "name": "Dawakin Kudu",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 395,
+  "fields": {
+    "name": "Dawakin Tofa",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 396,
+  "fields": {
+    "name": "Doguwa",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 397,
+  "fields": {
+    "name": "Fagge",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 398,
+  "fields": {
+    "name": "Gabasawa",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 399,
+  "fields": {
+    "name": "Garko",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 400,
+  "fields": {
+    "name": "Garun Mallam",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 401,
+  "fields": {
+    "name": "Gaya",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 402,
+  "fields": {
+    "name": "Gezawa",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 403,
+  "fields": {
+    "name": "Gwale",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 404,
+  "fields": {
+    "name": "Gwarzo",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 405,
+  "fields": {
+    "name": "Kabo",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 406,
+  "fields": {
+    "name": "Kano Municipal",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 407,
+  "fields": {
+    "name": "Karaye",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 408,
+  "fields": {
+    "name": "Kibiya",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 409,
+  "fields": {
+    "name": "Kiru",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 410,
+  "fields": {
+    "name": "Kumbotso",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 411,
+  "fields": {
+    "name": "Kunchi",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 412,
+  "fields": {
+    "name": "Kura",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 413,
+  "fields": {
+    "name": "Madobi",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 414,
+  "fields": {
+    "name": "Makoda",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 415,
+  "fields": {
+    "name": "Minjibir",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 416,
+  "fields": {
+    "name": "Nasarawa",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 417,
+  "fields": {
+    "name": "Rano",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 418,
+  "fields": {
+    "name": "Rimin Gado",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 419,
+  "fields": {
+    "name": "Rogo",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 420,
+  "fields": {
+    "name": "Shanono",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 421,
+  "fields": {
+    "name": "Sumaila",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 422,
+  "fields": {
+    "name": "Takai",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 423,
+  "fields": {
+    "name": "Tarauni",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 424,
+  "fields": {
+    "name": "Tofa",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 425,
+  "fields": {
+    "name": "Tsanyawa",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 426,
+  "fields": {
+    "name": "Tudun Wada",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 427,
+  "fields": {
+    "name": "Ungogo",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 428,
+  "fields": {
+    "name": "Warawa",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 429,
+  "fields": {
+    "name": "Wudil",
+    "level": "local",
+    "parent": 385
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 430,
+  "fields": {
+    "name": "Katsina",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 431,
+  "fields": {
+    "name": "Bakori",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 432,
+  "fields": {
+    "name": "Batagarawa",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 433,
+  "fields": {
+    "name": "Batsari",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 434,
+  "fields": {
+    "name": "Baure",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 435,
+  "fields": {
+    "name": "Bindawa",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 436,
+  "fields": {
+    "name": "Charanchi",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 437,
+  "fields": {
+    "name": "Dandume",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 438,
+  "fields": {
+    "name": "Danja",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 439,
+  "fields": {
+    "name": "Dan Musa",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 440,
+  "fields": {
+    "name": "Daura",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 441,
+  "fields": {
+    "name": "Dutsi",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 442,
+  "fields": {
+    "name": "Dutsin-Ma",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 443,
+  "fields": {
+    "name": "Faskari",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 444,
+  "fields": {
+    "name": "Funtua",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 445,
+  "fields": {
+    "name": "Ingawa",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 446,
+  "fields": {
+    "name": "Jibia",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 447,
+  "fields": {
+    "name": "Kafur",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 448,
+  "fields": {
+    "name": "Kaita",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 449,
+  "fields": {
+    "name": "Kankara",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 450,
+  "fields": {
+    "name": "Kankia",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 451,
+  "fields": {
+    "name": "Katsina",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 452,
+  "fields": {
+    "name": "Kurfi",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 453,
+  "fields": {
+    "name": "Kusada",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 454,
+  "fields": {
+    "name": "Mai'Adua",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 455,
+  "fields": {
+    "name": "Malumfashi",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 456,
+  "fields": {
+    "name": "Mani",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 457,
+  "fields": {
+    "name": "Mashi",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 458,
+  "fields": {
+    "name": "Matazu",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 459,
+  "fields": {
+    "name": "Musawa",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 460,
+  "fields": {
+    "name": "Rimi",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 461,
+  "fields": {
+    "name": "Sabuwa",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 462,
+  "fields": {
+    "name": "Safana",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 463,
+  "fields": {
+    "name": "Sandamu",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 464,
+  "fields": {
+    "name": "Zango",
+    "level": "local",
+    "parent": 430
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 465,
+  "fields": {
+    "name": "Kebbi",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 466,
+  "fields": {
+    "name": "Aleiro",
+    "level": "local",
+    "parent": 465
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 467,
+  "fields": {
+    "name": "Arewa Dandi",
+    "level": "local",
+    "parent": 465
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 468,
+  "fields": {
+    "name": "Argungu",
+    "level": "local",
+    "parent": 465
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 469,
+  "fields": {
+    "name": "Augie",
+    "level": "local",
+    "parent": 465
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 470,
+  "fields": {
+    "name": "Bagudo",
+    "level": "local",
+    "parent": 465
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 471,
+  "fields": {
+    "name": "Birnin Kebbi",
+    "level": "local",
+    "parent": 465
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 472,
+  "fields": {
+    "name": "Bunza",
+    "level": "local",
+    "parent": 465
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 473,
+  "fields": {
+    "name": "Dandi",
+    "level": "local",
+    "parent": 465
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 474,
+  "fields": {
+    "name": "Fakai",
+    "level": "local",
+    "parent": 465
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 475,
+  "fields": {
+    "name": "Gwandu",
+    "level": "local",
+    "parent": 465
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 476,
+  "fields": {
+    "name": "Jega",
+    "level": "local",
+    "parent": 465
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 477,
+  "fields": {
+    "name": "Kalgo",
+    "level": "local",
+    "parent": 465
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 478,
+  "fields": {
+    "name": "Koko/Besse",
+    "level": "local",
+    "parent": 465
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 479,
+  "fields": {
+    "name": "Maiyama",
+    "level": "local",
+    "parent": 465
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 480,
+  "fields": {
+    "name": "Ngaski",
+    "level": "local",
+    "parent": 465
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 481,
+  "fields": {
+    "name": "Sakaba",
+    "level": "local",
+    "parent": 465
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 482,
+  "fields": {
+    "name": "Shanga",
+    "level": "local",
+    "parent": 465
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 483,
+  "fields": {
+    "name": "Suru",
+    "level": "local",
+    "parent": 465
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 484,
+  "fields": {
+    "name": "Wasagu/Danko",
+    "level": "local",
+    "parent": 465
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 485,
+  "fields": {
+    "name": "Yauri",
+    "level": "local",
+    "parent": 465
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 486,
+  "fields": {
+    "name": "Zuru",
+    "level": "local",
+    "parent": 465
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 487,
+  "fields": {
+    "name": "Kogi",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 488,
+  "fields": {
+    "name": "Adavi",
+    "level": "local",
+    "parent": 487
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 489,
+  "fields": {
+    "name": "Ajaokuta",
+    "level": "local",
+    "parent": 487
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 490,
+  "fields": {
+    "name": "Ankpa",
+    "level": "local",
+    "parent": 487
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 491,
+  "fields": {
+    "name": "Bassa",
+    "level": "local",
+    "parent": 487
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 492,
+  "fields": {
+    "name": "Dekina",
+    "level": "local",
+    "parent": 487
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 493,
+  "fields": {
+    "name": "Ibaji",
+    "level": "local",
+    "parent": 487
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 494,
+  "fields": {
+    "name": "Idah",
+    "level": "local",
+    "parent": 487
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 495,
+  "fields": {
+    "name": "Igalamela-Odolu",
+    "level": "local",
+    "parent": 487
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 496,
+  "fields": {
+    "name": "Ijumu",
+    "level": "local",
+    "parent": 487
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 497,
+  "fields": {
+    "name": "Kabba/Bunu",
+    "level": "local",
+    "parent": 487
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 498,
+  "fields": {
+    "name": "Kogi",
+    "level": "local",
+    "parent": 487
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 499,
+  "fields": {
+    "name": "Lokoja",
+    "level": "local",
+    "parent": 487
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 500,
+  "fields": {
+    "name": "Mopa-Muro",
+    "level": "local",
+    "parent": 487
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 501,
+  "fields": {
+    "name": "Ofu",
+    "level": "local",
+    "parent": 487
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 502,
+  "fields": {
+    "name": "Ogori/Magongo",
+    "level": "local",
+    "parent": 487
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 503,
+  "fields": {
+    "name": "Okehi",
+    "level": "local",
+    "parent": 487
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 504,
+  "fields": {
+    "name": "Okene",
+    "level": "local",
+    "parent": 487
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 505,
+  "fields": {
+    "name": "Olamaboro",
+    "level": "local",
+    "parent": 487
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 506,
+  "fields": {
+    "name": "Omala",
+    "level": "local",
+    "parent": 487
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 507,
+  "fields": {
+    "name": "Yagba East",
+    "level": "local",
+    "parent": 487
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 508,
+  "fields": {
+    "name": "Yagba West",
+    "level": "local",
+    "parent": 487
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 509,
+  "fields": {
+    "name": "Kwara",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 510,
+  "fields": {
+    "name": "Asa",
+    "level": "local",
+    "parent": 509
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 511,
+  "fields": {
+    "name": "Baruten",
+    "level": "local",
+    "parent": 509
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 512,
+  "fields": {
+    "name": "Edu",
+    "level": "local",
+    "parent": 509
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 513,
+  "fields": {
+    "name": "Ekiti",
+    "level": "local",
+    "parent": 509
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 514,
+  "fields": {
+    "name": "Ifelodun",
+    "level": "local",
+    "parent": 509
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 515,
+  "fields": {
+    "name": "Ilorin East",
+    "level": "local",
+    "parent": 509
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 516,
+  "fields": {
+    "name": "Ilorin South",
+    "level": "local",
+    "parent": 509
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 517,
+  "fields": {
+    "name": "Ilorin West",
+    "level": "local",
+    "parent": 509
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 518,
+  "fields": {
+    "name": "Irepodun",
+    "level": "local",
+    "parent": 509
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 519,
+  "fields": {
+    "name": "Isin",
+    "level": "local",
+    "parent": 509
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 520,
+  "fields": {
+    "name": "Kaiama",
+    "level": "local",
+    "parent": 509
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 521,
+  "fields": {
+    "name": "Moro",
+    "level": "local",
+    "parent": 509
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 522,
+  "fields": {
+    "name": "Offa",
+    "level": "local",
+    "parent": 509
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 523,
+  "fields": {
+    "name": "Oke Ero",
+    "level": "local",
+    "parent": 509
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 524,
+  "fields": {
+    "name": "Oyun",
+    "level": "local",
+    "parent": 509
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 525,
+  "fields": {
+    "name": "Pategi",
+    "level": "local",
+    "parent": 509
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 526,
+  "fields": {
+    "name": "Agege",
+    "level": "local",
+    "parent": 2
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 527,
+  "fields": {
+    "name": "Ajeromi-Ifelodun",
+    "level": "local",
+    "parent": 2
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 528,
+  "fields": {
+    "name": "Alimosho",
+    "level": "local",
+    "parent": 2
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 529,
+  "fields": {
+    "name": "Amuwo-Odofin",
+    "level": "local",
+    "parent": 2
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 530,
+  "fields": {
+    "name": "Apapa",
+    "level": "local",
+    "parent": 2
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 531,
+  "fields": {
+    "name": "Badagry",
+    "level": "local",
+    "parent": 2
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 532,
+  "fields": {
+    "name": "Epe",
+    "level": "local",
+    "parent": 2
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 533,
+  "fields": {
+    "name": "Eti-Osa",
+    "level": "local",
+    "parent": 2
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 534,
+  "fields": {
+    "name": "Ibeju-Lekki",
+    "level": "local",
+    "parent": 2
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 535,
+  "fields": {
+    "name": "Ifako-Ijaiye",
+    "level": "local",
+    "parent": 2
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 536,
+  "fields": {
+    "name": "Ikorodu",
+    "level": "local",
+    "parent": 2
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 537,
+  "fields": {
+    "name": "Kosofe",
+    "level": "local",
+    "parent": 2
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 538,
+  "fields": {
+    "name": "Lagos Island",
+    "level": "local",
+    "parent": 2
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 539,
+  "fields": {
+    "name": "Lagos Mainland",
+    "level": "local",
+    "parent": 2
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 540,
+  "fields": {
+    "name": "Mushin",
+    "level": "local",
+    "parent": 2
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 541,
+  "fields": {
+    "name": "Ojo",
+    "level": "local",
+    "parent": 2
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 542,
+  "fields": {
+    "name": "Oshodi-Isolo",
+    "level": "local",
+    "parent": 2
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 543,
+  "fields": {
+    "name": "Shomolu",
+    "level": "local",
+    "parent": 2
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 544,
+  "fields": {
+    "name": "Surulere",
+    "level": "local",
+    "parent": 2
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 545,
+  "fields": {
+    "name": "Nasarawa",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 546,
+  "fields": {
+    "name": "Akwanga",
+    "level": "local",
+    "parent": 545
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 547,
+  "fields": {
+    "name": "Awe",
+    "level": "local",
+    "parent": 545
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 548,
+  "fields": {
+    "name": "Doma",
+    "level": "local",
+    "parent": 545
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 549,
+  "fields": {
+    "name": "Karu",
+    "level": "local",
+    "parent": 545
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 550,
+  "fields": {
+    "name": "Keana",
+    "level": "local",
+    "parent": 545
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 551,
+  "fields": {
+    "name": "Keffi",
+    "level": "local",
+    "parent": 545
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 552,
+  "fields": {
+    "name": "Kokona",
+    "level": "local",
+    "parent": 545
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 553,
+  "fields": {
+    "name": "Lafia",
+    "level": "local",
+    "parent": 545
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 554,
+  "fields": {
+    "name": "Nasarawa",
+    "level": "local",
+    "parent": 545
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 555,
+  "fields": {
+    "name": "Nasarawa Egon",
+    "level": "local",
+    "parent": 545
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 556,
+  "fields": {
+    "name": "Obi",
+    "level": "local",
+    "parent": 545
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 557,
+  "fields": {
+    "name": "Toto",
+    "level": "local",
+    "parent": 545
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 558,
+  "fields": {
+    "name": "Wamba",
+    "level": "local",
+    "parent": 545
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 559,
+  "fields": {
+    "name": "Niger",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 560,
+  "fields": {
+    "name": "Agaie",
+    "level": "local",
+    "parent": 559
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 561,
+  "fields": {
+    "name": "Agwara",
+    "level": "local",
+    "parent": 559
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 562,
+  "fields": {
+    "name": "Bida",
+    "level": "local",
+    "parent": 559
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 563,
+  "fields": {
+    "name": "Borgu",
+    "level": "local",
+    "parent": 559
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 564,
+  "fields": {
+    "name": "Bosso",
+    "level": "local",
+    "parent": 559
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 565,
+  "fields": {
+    "name": "Chanchaga",
+    "level": "local",
+    "parent": 559
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 566,
+  "fields": {
+    "name": "Edati",
+    "level": "local",
+    "parent": 559
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 567,
+  "fields": {
+    "name": "Gbako",
+    "level": "local",
+    "parent": 559
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 568,
+  "fields": {
+    "name": "Gurara",
+    "level": "local",
+    "parent": 559
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 569,
+  "fields": {
+    "name": "Katcha",
+    "level": "local",
+    "parent": 559
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 570,
+  "fields": {
+    "name": "Kontagora",
+    "level": "local",
+    "parent": 559
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 571,
+  "fields": {
+    "name": "Lapai",
+    "level": "local",
+    "parent": 559
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 572,
+  "fields": {
+    "name": "Lavun",
+    "level": "local",
+    "parent": 559
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 573,
+  "fields": {
+    "name": "Magama",
+    "level": "local",
+    "parent": 559
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 574,
+  "fields": {
+    "name": "Mariga",
+    "level": "local",
+    "parent": 559
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 575,
+  "fields": {
+    "name": "Mashegu",
+    "level": "local",
+    "parent": 559
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 576,
+  "fields": {
+    "name": "Mokwa",
+    "level": "local",
+    "parent": 559
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 577,
+  "fields": {
+    "name": "Munya",
+    "level": "local",
+    "parent": 559
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 578,
+  "fields": {
+    "name": "Paikoro",
+    "level": "local",
+    "parent": 559
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 579,
+  "fields": {
+    "name": "Rafi",
+    "level": "local",
+    "parent": 559
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 580,
+  "fields": {
+    "name": "Rijau",
+    "level": "local",
+    "parent": 559
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 581,
+  "fields": {
+    "name": "Shiroro",
+    "level": "local",
+    "parent": 559
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 582,
+  "fields": {
+    "name": "Suleja",
+    "level": "local",
+    "parent": 559
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 583,
+  "fields": {
+    "name": "Tafa",
+    "level": "local",
+    "parent": 559
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 584,
+  "fields": {
+    "name": "Wushishi",
+    "level": "local",
+    "parent": 559
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 585,
+  "fields": {
+    "name": "Ogun",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 586,
+  "fields": {
+    "name": "Abeokuta North",
+    "level": "local",
+    "parent": 585
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 587,
+  "fields": {
+    "name": "Abeokuta South",
+    "level": "local",
+    "parent": 585
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 588,
+  "fields": {
+    "name": "Ado-Odo/Ota",
+    "level": "local",
+    "parent": 585
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 589,
+  "fields": {
+    "name": "Yewa North",
+    "level": "local",
+    "parent": 585
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 590,
+  "fields": {
+    "name": "Yewa South",
+    "level": "local",
+    "parent": 585
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 591,
+  "fields": {
+    "name": "Ewekoro",
+    "level": "local",
+    "parent": 585
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 592,
+  "fields": {
+    "name": "Ifo",
+    "level": "local",
+    "parent": 585
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 593,
+  "fields": {
+    "name": "Ijebu East",
+    "level": "local",
+    "parent": 585
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 594,
+  "fields": {
+    "name": "Ijebu North",
+    "level": "local",
+    "parent": 585
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 595,
+  "fields": {
+    "name": "Ijebu North East",
+    "level": "local",
+    "parent": 585
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 596,
+  "fields": {
+    "name": "Ijebu Ode",
+    "level": "local",
+    "parent": 585
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 597,
+  "fields": {
+    "name": "Ikenne",
+    "level": "local",
+    "parent": 585
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 598,
+  "fields": {
+    "name": "Imeko Afon",
+    "level": "local",
+    "parent": 585
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 599,
+  "fields": {
+    "name": "Ipokia",
+    "level": "local",
+    "parent": 585
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 600,
+  "fields": {
+    "name": "Obafemi Owode",
+    "level": "local",
+    "parent": 585
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 601,
+  "fields": {
+    "name": "Odeda",
+    "level": "local",
+    "parent": 585
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 602,
+  "fields": {
+    "name": "Odogbolu",
+    "level": "local",
+    "parent": 585
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 603,
+  "fields": {
+    "name": "Ogun Waterside",
+    "level": "local",
+    "parent": 585
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 604,
+  "fields": {
+    "name": "Remo North",
+    "level": "local",
+    "parent": 585
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 605,
+  "fields": {
+    "name": "Sagamu",
+    "level": "local",
+    "parent": 585
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 606,
+  "fields": {
+    "name": "Ondo",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 607,
+  "fields": {
+    "name": "Akoko North-East",
+    "level": "local",
+    "parent": 606
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 608,
+  "fields": {
+    "name": "Akoko North-West",
+    "level": "local",
+    "parent": 606
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 609,
+  "fields": {
+    "name": "Akoko South-East",
+    "level": "local",
+    "parent": 606
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 610,
+  "fields": {
+    "name": "Akoko South-West",
+    "level": "local",
+    "parent": 606
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 611,
+  "fields": {
+    "name": "Akure North",
+    "level": "local",
+    "parent": 606
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 612,
+  "fields": {
+    "name": "Akure South",
+    "level": "local",
+    "parent": 606
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 613,
+  "fields": {
+    "name": "Ese Odo",
+    "level": "local",
+    "parent": 606
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 614,
+  "fields": {
+    "name": "Idanre",
+    "level": "local",
+    "parent": 606
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 615,
+  "fields": {
+    "name": "Ifedore",
+    "level": "local",
+    "parent": 606
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 616,
+  "fields": {
+    "name": "Ilaje",
+    "level": "local",
+    "parent": 606
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 617,
+  "fields": {
+    "name": "Ile Oluji/Okeigbo",
+    "level": "local",
+    "parent": 606
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 618,
+  "fields": {
+    "name": "Irele",
+    "level": "local",
+    "parent": 606
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 619,
+  "fields": {
+    "name": "Odigbo",
+    "level": "local",
+    "parent": 606
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 620,
+  "fields": {
+    "name": "Okitipupa",
+    "level": "local",
+    "parent": 606
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 621,
+  "fields": {
+    "name": "Ondo East",
+    "level": "local",
+    "parent": 606
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 622,
+  "fields": {
+    "name": "Ondo West",
+    "level": "local",
+    "parent": 606
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 623,
+  "fields": {
+    "name": "Ose",
+    "level": "local",
+    "parent": 606
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 624,
+  "fields": {
+    "name": "Owo",
+    "level": "local",
+    "parent": 606
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 625,
+  "fields": {
+    "name": "Osun",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 626,
+  "fields": {
+    "name": "Aiyedaade",
+    "level": "local",
+    "parent": 625
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 627,
+  "fields": {
+    "name": "Aiyedire",
+    "level": "local",
+    "parent": 625
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 628,
+  "fields": {
+    "name": "Atakumosa East",
+    "level": "local",
+    "parent": 625
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 629,
+  "fields": {
+    "name": "Atakumosa West",
+    "level": "local",
+    "parent": 625
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 630,
+  "fields": {
+    "name": "Boluwaduro",
+    "level": "local",
+    "parent": 625
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 631,
+  "fields": {
+    "name": "Boripe",
+    "level": "local",
+    "parent": 625
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 632,
+  "fields": {
+    "name": "Ede North",
+    "level": "local",
+    "parent": 625
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 633,
+  "fields": {
+    "name": "Ede South",
+    "level": "local",
+    "parent": 625
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 634,
+  "fields": {
+    "name": "Egbedore",
+    "level": "local",
+    "parent": 625
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 635,
+  "fields": {
+    "name": "Ejigbo",
+    "level": "local",
+    "parent": 625
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 636,
+  "fields": {
+    "name": "Ife Central",
+    "level": "local",
+    "parent": 625
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 637,
+  "fields": {
+    "name": "Ife East",
+    "level": "local",
+    "parent": 625
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 638,
+  "fields": {
+    "name": "Ife North",
+    "level": "local",
+    "parent": 625
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 639,
+  "fields": {
+    "name": "Ife South",
+    "level": "local",
+    "parent": 625
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 640,
+  "fields": {
+    "name": "Ifedayo",
+    "level": "local",
+    "parent": 625
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 641,
+  "fields": {
+    "name": "Ifelodun",
+    "level": "local",
+    "parent": 625
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 642,
+  "fields": {
+    "name": "Ila",
+    "level": "local",
+    "parent": 625
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 643,
+  "fields": {
+    "name": "Ilesa East",
+    "level": "local",
+    "parent": 625
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 644,
+  "fields": {
+    "name": "Ilesa West",
+    "level": "local",
+    "parent": 625
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 645,
+  "fields": {
+    "name": "Irepodun",
+    "level": "local",
+    "parent": 625
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 646,
+  "fields": {
+    "name": "Irewole",
+    "level": "local",
+    "parent": 625
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 647,
+  "fields": {
+    "name": "Isokan",
+    "level": "local",
+    "parent": 625
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 648,
+  "fields": {
+    "name": "Iwo",
+    "level": "local",
+    "parent": 625
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 649,
+  "fields": {
+    "name": "Obokun",
+    "level": "local",
+    "parent": 625
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 650,
+  "fields": {
+    "name": "Odo Otin",
+    "level": "local",
+    "parent": 625
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 651,
+  "fields": {
+    "name": "Ola Oluwa",
+    "level": "local",
+    "parent": 625
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 652,
+  "fields": {
+    "name": "Olorunda",
+    "level": "local",
+    "parent": 625
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 653,
+  "fields": {
+    "name": "Oriade",
+    "level": "local",
+    "parent": 625
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 654,
+  "fields": {
+    "name": "Orolu",
+    "level": "local",
+    "parent": 625
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 655,
+  "fields": {
+    "name": "Osogbo",
+    "level": "local",
+    "parent": 625
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 656,
+  "fields": {
+    "name": "Oyo",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 657,
+  "fields": {
+    "name": "Afijio",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 658,
+  "fields": {
+    "name": "Akinyele",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 659,
+  "fields": {
+    "name": "Atiba",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 660,
+  "fields": {
+    "name": "Atisbo",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 661,
+  "fields": {
+    "name": "Egbeda",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 662,
+  "fields": {
+    "name": "Ibadan North",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 663,
+  "fields": {
+    "name": "Ibadan North-East",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 664,
+  "fields": {
+    "name": "Ibadan North-West",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 665,
+  "fields": {
+    "name": "Ibadan South-East",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 666,
+  "fields": {
+    "name": "Ibadan South-West",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 667,
+  "fields": {
+    "name": "Ibarapa Central",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 668,
+  "fields": {
+    "name": "Ibarapa East",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 669,
+  "fields": {
+    "name": "Ibarapa North",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 670,
+  "fields": {
+    "name": "Ido",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 671,
+  "fields": {
+    "name": "Irepo",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 672,
+  "fields": {
+    "name": "Iseyin",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 673,
+  "fields": {
+    "name": "Itesiwaju",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 674,
+  "fields": {
+    "name": "Iwajowa",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 675,
+  "fields": {
+    "name": "Kajola",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 676,
+  "fields": {
+    "name": "Lagelu",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 677,
+  "fields": {
+    "name": "Ogbomosho North",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 678,
+  "fields": {
+    "name": "Ogbomosho South",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 679,
+  "fields": {
+    "name": "Ogo Oluwa",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 680,
+  "fields": {
+    "name": "Olorunsogo",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 681,
+  "fields": {
+    "name": "Oluyole",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 682,
+  "fields": {
+    "name": "Ona Ara",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 683,
+  "fields": {
+    "name": "Orelope",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 684,
+  "fields": {
+    "name": "Ori Ire",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 685,
+  "fields": {
+    "name": "Oyo East",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 686,
+  "fields": {
+    "name": "Oyo West",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 687,
+  "fields": {
+    "name": "Saki East",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 688,
+  "fields": {
+    "name": "Saki West",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 689,
+  "fields": {
+    "name": "Surulere",
+    "level": "local",
+    "parent": 656
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 690,
+  "fields": {
+    "name": "Plateau",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 691,
+  "fields": {
+    "name": "Barkin Ladi",
+    "level": "local",
+    "parent": 690
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 692,
+  "fields": {
+    "name": "Bassa",
+    "level": "local",
+    "parent": 690
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 693,
+  "fields": {
+    "name": "Bokkos",
+    "level": "local",
+    "parent": 690
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 694,
+  "fields": {
+    "name": "Jos East",
+    "level": "local",
+    "parent": 690
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 695,
+  "fields": {
+    "name": "Jos North",
+    "level": "local",
+    "parent": 690
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 696,
+  "fields": {
+    "name": "Jos South",
+    "level": "local",
+    "parent": 690
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 697,
+  "fields": {
+    "name": "Kanam",
+    "level": "local",
+    "parent": 690
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 698,
+  "fields": {
+    "name": "Kanke",
+    "level": "local",
+    "parent": 690
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 699,
+  "fields": {
+    "name": "Langtang North",
+    "level": "local",
+    "parent": 690
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 700,
+  "fields": {
+    "name": "Langtang South",
+    "level": "local",
+    "parent": 690
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 701,
+  "fields": {
+    "name": "Mangu",
+    "level": "local",
+    "parent": 690
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 702,
+  "fields": {
+    "name": "Mikang",
+    "level": "local",
+    "parent": 690
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 703,
+  "fields": {
+    "name": "Pankshin",
+    "level": "local",
+    "parent": 690
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 704,
+  "fields": {
+    "name": "Qua'an Pan",
+    "level": "local",
+    "parent": 690
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 705,
+  "fields": {
+    "name": "Riyom",
+    "level": "local",
+    "parent": 690
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 706,
+  "fields": {
+    "name": "Shendam",
+    "level": "local",
+    "parent": 690
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 707,
+  "fields": {
+    "name": "Wase",
+    "level": "local",
+    "parent": 690
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 708,
+  "fields": {
+    "name": "Rivers",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 709,
+  "fields": {
+    "name": "Abua/Odual",
+    "level": "local",
+    "parent": 708
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 710,
+  "fields": {
+    "name": "Ahoada East",
+    "level": "local",
+    "parent": 708
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 711,
+  "fields": {
+    "name": "Ahoada West",
+    "level": "local",
+    "parent": 708
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 712,
+  "fields": {
+    "name": "Akuku-Toru",
+    "level": "local",
+    "parent": 708
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 713,
+  "fields": {
+    "name": "Andoni",
+    "level": "local",
+    "parent": 708
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 714,
+  "fields": {
+    "name": "Asari-Toru",
+    "level": "local",
+    "parent": 708
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 715,
+  "fields": {
+    "name": "Bonny",
+    "level": "local",
+    "parent": 708
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 716,
+  "fields": {
+    "name": "Degema",
+    "level": "local",
+    "parent": 708
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 717,
+  "fields": {
+    "name": "Eleme",
+    "level": "local",
+    "parent": 708
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 718,
+  "fields": {
+    "name": "Emohua",
+    "level": "local",
+    "parent": 708
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 719,
+  "fields": {
+    "name": "Etche",
+    "level": "local",
+    "parent": 708
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 720,
+  "fields": {
+    "name": "Gokana",
+    "level": "local",
+    "parent": 708
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 721,
+  "fields": {
+    "name": "Ikwerre",
+    "level": "local",
+    "parent": 708
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 722,
+  "fields": {
+    "name": "Khana",
+    "level": "local",
+    "parent": 708
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 723,
+  "fields": {
+    "name": "Obio/Akpor",
+    "level": "local",
+    "parent": 708
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 724,
+  "fields": {
+    "name": "Ogba/Egbema/Ndoni",
+    "level": "local",
+    "parent": 708
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 725,
+  "fields": {
+    "name": "Ogu/Bolo",
+    "level": "local",
+    "parent": 708
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 726,
+  "fields": {
+    "name": "Okrika",
+    "level": "local",
+    "parent": 708
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 727,
+  "fields": {
+    "name": "Omuma",
+    "level": "local",
+    "parent": 708
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 728,
+  "fields": {
+    "name": "Opobo/Nkoro",
+    "level": "local",
+    "parent": 708
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 729,
+  "fields": {
+    "name": "Oyigbo",
+    "level": "local",
+    "parent": 708
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 730,
+  "fields": {
+    "name": "Port Harcourt",
+    "level": "local",
+    "parent": 708
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 731,
+  "fields": {
+    "name": "Tai",
+    "level": "local",
+    "parent": 708
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 732,
+  "fields": {
+    "name": "Sokoto",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 733,
+  "fields": {
+    "name": "Binji",
+    "level": "local",
+    "parent": 732
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 734,
+  "fields": {
+    "name": "Bodinga",
+    "level": "local",
+    "parent": 732
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 735,
+  "fields": {
+    "name": "Dange Shuni",
+    "level": "local",
+    "parent": 732
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 736,
+  "fields": {
+    "name": "Gada",
+    "level": "local",
+    "parent": 732
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 737,
+  "fields": {
+    "name": "Goronyo",
+    "level": "local",
+    "parent": 732
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 738,
+  "fields": {
+    "name": "Gudu",
+    "level": "local",
+    "parent": 732
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 739,
+  "fields": {
+    "name": "Gwadabawa",
+    "level": "local",
+    "parent": 732
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 740,
+  "fields": {
+    "name": "Illela",
+    "level": "local",
+    "parent": 732
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 741,
+  "fields": {
+    "name": "Isa",
+    "level": "local",
+    "parent": 732
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 742,
+  "fields": {
+    "name": "Kebbe",
+    "level": "local",
+    "parent": 732
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 743,
+  "fields": {
+    "name": "Kware",
+    "level": "local",
+    "parent": 732
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 744,
+  "fields": {
+    "name": "Rabah",
+    "level": "local",
+    "parent": 732
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 745,
+  "fields": {
+    "name": "Sabon Birni",
+    "level": "local",
+    "parent": 732
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 746,
+  "fields": {
+    "name": "Shagari",
+    "level": "local",
+    "parent": 732
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 747,
+  "fields": {
+    "name": "Silame",
+    "level": "local",
+    "parent": 732
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 748,
+  "fields": {
+    "name": "Sokoto North",
+    "level": "local",
+    "parent": 732
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 749,
+  "fields": {
+    "name": "Sokoto South",
+    "level": "local",
+    "parent": 732
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 750,
+  "fields": {
+    "name": "Tambuwal",
+    "level": "local",
+    "parent": 732
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 751,
+  "fields": {
+    "name": "Tangaza",
+    "level": "local",
+    "parent": 732
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 752,
+  "fields": {
+    "name": "Tureta",
+    "level": "local",
+    "parent": 732
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 753,
+  "fields": {
+    "name": "Wamako",
+    "level": "local",
+    "parent": 732
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 754,
+  "fields": {
+    "name": "Wurno",
+    "level": "local",
+    "parent": 732
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 755,
+  "fields": {
+    "name": "Yabo",
+    "level": "local",
+    "parent": 732
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 756,
+  "fields": {
+    "name": "Taraba",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 757,
+  "fields": {
+    "name": "Ardo-Kola",
+    "level": "local",
+    "parent": 756
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 758,
+  "fields": {
+    "name": "Bali",
+    "level": "local",
+    "parent": 756
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 759,
+  "fields": {
+    "name": "Donga",
+    "level": "local",
+    "parent": 756
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 760,
+  "fields": {
+    "name": "Gashaka",
+    "level": "local",
+    "parent": 756
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 761,
+  "fields": {
+    "name": "Gassol",
+    "level": "local",
+    "parent": 756
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 762,
+  "fields": {
+    "name": "Ibi",
+    "level": "local",
+    "parent": 756
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 763,
+  "fields": {
+    "name": "Jalingo",
+    "level": "local",
+    "parent": 756
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 764,
+  "fields": {
+    "name": "Karim Lamido",
+    "level": "local",
+    "parent": 756
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 765,
+  "fields": {
+    "name": "Kumi",
+    "level": "local",
+    "parent": 756
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 766,
+  "fields": {
+    "name": "Lau",
+    "level": "local",
+    "parent": 756
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 767,
+  "fields": {
+    "name": "Sardauna",
+    "level": "local",
+    "parent": 756
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 768,
+  "fields": {
+    "name": "Takum",
+    "level": "local",
+    "parent": 756
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 769,
+  "fields": {
+    "name": "Ussa",
+    "level": "local",
+    "parent": 756
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 770,
+  "fields": {
+    "name": "Wukari",
+    "level": "local",
+    "parent": 756
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 771,
+  "fields": {
+    "name": "Yorro",
+    "level": "local",
+    "parent": 756
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 772,
+  "fields": {
+    "name": "Zing",
+    "level": "local",
+    "parent": 756
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 773,
+  "fields": {
+    "name": "Yobe",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 774,
+  "fields": {
+    "name": "Bade",
+    "level": "local",
+    "parent": 773
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 775,
+  "fields": {
+    "name": "Bursari",
+    "level": "local",
+    "parent": 773
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 776,
+  "fields": {
+    "name": "Damaturu",
+    "level": "local",
+    "parent": 773
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 777,
+  "fields": {
+    "name": "Fika",
+    "level": "local",
+    "parent": 773
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 778,
+  "fields": {
+    "name": "Fune",
+    "level": "local",
+    "parent": 773
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 779,
+  "fields": {
+    "name": "Geidam",
+    "level": "local",
+    "parent": 773
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 780,
+  "fields": {
+    "name": "Gujba",
+    "level": "local",
+    "parent": 773
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 781,
+  "fields": {
+    "name": "Gulani",
+    "level": "local",
+    "parent": 773
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 782,
+  "fields": {
+    "name": "Jakusko",
+    "level": "local",
+    "parent": 773
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 783,
+  "fields": {
+    "name": "Karasuwa",
+    "level": "local",
+    "parent": 773
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 784,
+  "fields": {
+    "name": "Machina",
+    "level": "local",
+    "parent": 773
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 785,
+  "fields": {
+    "name": "Nangere",
+    "level": "local",
+    "parent": 773
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 786,
+  "fields": {
+    "name": "Nguru",
+    "level": "local",
+    "parent": 773
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 787,
+  "fields": {
+    "name": "Potiskum",
+    "level": "local",
+    "parent": 773
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 788,
+  "fields": {
+    "name": "Tarmuwa",
+    "level": "local",
+    "parent": 773
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 789,
+  "fields": {
+    "name": "Yunusari",
+    "level": "local",
+    "parent": 773
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 790,
+  "fields": {
+    "name": "Yusufari",
+    "level": "local",
+    "parent": 773
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 791,
+  "fields": {
+    "name": "Zamfara",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 792,
+  "fields": {
+    "name": "Anka",
+    "level": "local",
+    "parent": 791
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 793,
+  "fields": {
+    "name": "Bakura",
+    "level": "local",
+    "parent": 791
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 794,
+  "fields": {
+    "name": "Birnin Magaji/Kiyaw",
+    "level": "local",
+    "parent": 791
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 795,
+  "fields": {
+    "name": "Bukkuyum",
+    "level": "local",
+    "parent": 791
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 796,
+  "fields": {
+    "name": "Bungudu",
+    "level": "local",
+    "parent": 791
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 797,
+  "fields": {
+    "name": "Gummi",
+    "level": "local",
+    "parent": 791
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 798,
+  "fields": {
+    "name": "Gusau",
+    "level": "local",
+    "parent": 791
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 799,
+  "fields": {
+    "name": "Kaura Namoda",
+    "level": "local",
+    "parent": 791
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 800,
+  "fields": {
+    "name": "Maradun",
+    "level": "local",
+    "parent": 791
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 801,
+  "fields": {
+    "name": "Maru",
+    "level": "local",
+    "parent": 791
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 802,
+  "fields": {
+    "name": "Shinkafi",
+    "level": "local",
+    "parent": 791
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 803,
+  "fields": {
+    "name": "Talata Mafara",
+    "level": "local",
+    "parent": 791
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 804,
+  "fields": {
+    "name": "Tsafe",
+    "level": "local",
+    "parent": 791
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 805,
+  "fields": {
+    "name": "Zurmi",
+    "level": "local",
+    "parent": 791
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 806,
+  "fields": {
+    "name": "Federal Capital Territory",
+    "level": "state",
+    "parent": 1
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 807,
+  "fields": {
+    "name": "Abaji",
+    "level": "local",
+    "parent": 806
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 808,
+  "fields": {
+    "name": "Bwari",
+    "level": "local",
+    "parent": 806
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 809,
+  "fields": {
+    "name": "Gwagwalada",
+    "level": "local",
+    "parent": 806
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 810,
+  "fields": {
+    "name": "Kuje",
+    "level": "local",
+    "parent": 806
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 811,
+  "fields": {
+    "name": "Kwali",
+    "level": "local",
+    "parent": 806
+  }
+},
+{
+  "model": "tenants.jurisdiction",
+  "pk": 812,
+  "fields": {
+    "name": "Municipal Area Council",
+    "level": "local",
+    "parent": 806
+  }
+},
+{
+  "model": "tenants.tenant",
+  "pk": 1,
+  "fields": {
+    "name": "Demo Clinic",
+    "slug": "demo",
+    "address": "",
+    "contact": "",
+    "logo": "",
+    "domain": "demo.localhost",
+    "jurisdiction": null,
+    "subscription_plan": "free",
+    "subscription_status": "approved",
+    "status": "active",
+    "created_at": "2026-06-25T08:56:29.422Z",
+    "updated_at": "2026-06-25T08:56:29.422Z"
+  }
+},
+{
+  "model": "tenants.tenant",
+  "pk": 2,
+  "fields": {
+    "name": "Test",
+    "slug": "testing",
+    "address": "Test zone1",
+    "contact": "08011111111",
+    "logo": "",
+    "domain": "",
+    "jurisdiction": null,
+    "subscription_plan": "free",
+    "subscription_status": "approved",
+    "status": "active",
+    "created_at": "2026-06-25T13:21:26.400Z",
+    "updated_at": "2026-06-25T13:21:26.400Z"
+  }
+},
+{
+  "model": "tenants.tenant",
+  "pk": 4,
+  "fields": {
+    "name": "Demo Clinic",
+    "slug": "demo-clinic",
+    "address": "",
+    "contact": "",
+    "logo": "",
+    "domain": "",
+    "jurisdiction": 3,
+    "subscription_plan": "free",
+    "subscription_status": "approved",
+    "status": "active",
+    "created_at": "2026-06-26T08:59:47.424Z",
+    "updated_at": "2026-06-26T09:05:50.333Z"
+  }
+},
+{
+  "model": "tenants.tenant",
+  "pk": 5,
+  "fields": {
+    "name": "cottage Ibi",
+    "slug": "cottage-ibi",
+    "address": "IBI",
+    "contact": "08080808080",
+    "logo": "",
+    "domain": "",
+    "jurisdiction": 762,
+    "subscription_plan": "free",
+    "subscription_status": "approved",
+    "status": "active",
+    "created_at": "2026-06-27T05:48:40.006Z",
+    "updated_at": "2026-06-27T07:36:57.844Z"
+  }
+},
+{
+  "model": "catalog.symptom",
+  "pk": 31,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.120Z",
+    "updated_at": "2026-06-25T14:14:29.120Z",
+    "name": "Fever",
+    "description": "",
+    "severity_level": 3
+  }
+},
+{
+  "model": "catalog.symptom",
+  "pk": 32,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.124Z",
+    "updated_at": "2026-06-25T14:14:29.124Z",
+    "name": "Cough",
+    "description": "",
+    "severity_level": 2
+  }
+},
+{
+  "model": "catalog.symptom",
+  "pk": 33,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.127Z",
+    "updated_at": "2026-06-25T14:14:29.127Z",
+    "name": "Headache",
+    "description": "",
+    "severity_level": 2
+  }
+},
+{
+  "model": "catalog.symptom",
+  "pk": 34,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.129Z",
+    "updated_at": "2026-06-25T14:14:29.129Z",
+    "name": "Sore throat",
+    "description": "",
+    "severity_level": 2
+  }
+},
+{
+  "model": "catalog.symptom",
+  "pk": 35,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.130Z",
+    "updated_at": "2026-06-25T14:14:29.130Z",
+    "name": "Fatigue",
+    "description": "",
+    "severity_level": 1
+  }
+},
+{
+  "model": "catalog.symptom",
+  "pk": 36,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.131Z",
+    "updated_at": "2026-06-25T14:14:29.131Z",
+    "name": "Shortness of breath",
+    "description": "",
+    "severity_level": 4
+  }
+},
+{
+  "model": "catalog.symptom",
+  "pk": 37,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.133Z",
+    "updated_at": "2026-06-25T14:14:29.133Z",
+    "name": "Chest pain",
+    "description": "",
+    "severity_level": 4
+  }
+},
+{
+  "model": "catalog.symptom",
+  "pk": 38,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.134Z",
+    "updated_at": "2026-06-25T14:14:29.134Z",
+    "name": "Nausea",
+    "description": "",
+    "severity_level": 2
+  }
+},
+{
+  "model": "catalog.symptom",
+  "pk": 39,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.135Z",
+    "updated_at": "2026-06-25T14:14:29.135Z",
+    "name": "Vomiting",
+    "description": "",
+    "severity_level": 3
+  }
+},
+{
+  "model": "catalog.symptom",
+  "pk": 40,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.136Z",
+    "updated_at": "2026-06-25T14:14:29.136Z",
+    "name": "Diarrhea",
+    "description": "",
+    "severity_level": 2
+  }
+},
+{
+  "model": "catalog.symptom",
+  "pk": 41,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.136Z",
+    "updated_at": "2026-06-25T14:14:29.136Z",
+    "name": "Rash",
+    "description": "",
+    "severity_level": 2
+  }
+},
+{
+  "model": "catalog.symptom",
+  "pk": 42,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.137Z",
+    "updated_at": "2026-06-25T14:14:29.138Z",
+    "name": "Dizziness",
+    "description": "",
+    "severity_level": 2
+  }
+},
+{
+  "model": "catalog.symptom",
+  "pk": 43,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.138Z",
+    "updated_at": "2026-06-25T14:14:29.138Z",
+    "name": "Muscle aches",
+    "description": "",
+    "severity_level": 2
+  }
+},
+{
+  "model": "catalog.symptom",
+  "pk": 44,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.139Z",
+    "updated_at": "2026-06-25T14:14:29.139Z",
+    "name": "Runny nose",
+    "description": "",
+    "severity_level": 1
+  }
+},
+{
+  "model": "catalog.symptom",
+  "pk": 45,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.140Z",
+    "updated_at": "2026-06-25T14:14:29.140Z",
+    "name": "Abdominal pain",
+    "description": "",
+    "severity_level": 3
+  }
+},
+{
+  "model": "catalog.symptom",
+  "pk": 46,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.141Z",
+    "updated_at": "2026-06-25T14:14:29.141Z",
+    "name": "Weight loss",
+    "description": "",
+    "severity_level": 2
+  }
+},
+{
+  "model": "catalog.symptom",
+  "pk": 47,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.142Z",
+    "updated_at": "2026-06-25T14:14:29.142Z",
+    "name": "Night sweats",
+    "description": "",
+    "severity_level": 2
+  }
+},
+{
+  "model": "catalog.symptom",
+  "pk": 48,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.143Z",
+    "updated_at": "2026-06-25T14:14:29.143Z",
+    "name": "Joint pain",
+    "description": "",
+    "severity_level": 2
+  }
+},
+{
+  "model": "catalog.symptom",
+  "pk": 49,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.143Z",
+    "updated_at": "2026-06-25T14:14:29.143Z",
+    "name": "Blurred vision",
+    "description": "",
+    "severity_level": 3
+  }
+},
+{
+  "model": "catalog.symptom",
+  "pk": 50,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.144Z",
+    "updated_at": "2026-06-25T14:14:29.144Z",
+    "name": "Frequent urination",
+    "description": "",
+    "severity_level": 2
+  }
+},
+{
+  "model": "catalog.symptom",
+  "pk": 51,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.145Z",
+    "updated_at": "2026-06-25T14:14:29.145Z",
+    "name": "Excessive thirst",
+    "description": "",
+    "severity_level": 2
+  }
+},
+{
+  "model": "catalog.symptom",
+  "pk": 52,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.145Z",
+    "updated_at": "2026-06-25T14:14:29.145Z",
+    "name": "Palpitations",
+    "description": "",
+    "severity_level": 3
+  }
+},
+{
+  "model": "catalog.symptom",
+  "pk": 53,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.146Z",
+    "updated_at": "2026-06-25T14:14:29.146Z",
+    "name": "Swelling (edema)",
+    "description": "",
+    "severity_level": 3
+  }
+},
+{
+  "model": "catalog.symptom",
+  "pk": 54,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.147Z",
+    "updated_at": "2026-06-25T14:14:29.147Z",
+    "name": "Confusion",
+    "description": "",
+    "severity_level": 4
+  }
+},
+{
+  "model": "catalog.symptom",
+  "pk": 55,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.148Z",
+    "updated_at": "2026-06-25T14:14:29.148Z",
+    "name": "Seizure",
+    "description": "",
+    "severity_level": 5
+  }
+},
+{
+  "model": "catalog.symptom",
+  "pk": 56,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.149Z",
+    "updated_at": "2026-06-25T14:14:29.149Z",
+    "name": "Jaundice",
+    "description": "",
+    "severity_level": 4
+  }
+},
+{
+  "model": "catalog.symptom",
+  "pk": 57,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.149Z",
+    "updated_at": "2026-06-25T14:14:29.149Z",
+    "name": "Wheezing",
+    "description": "",
+    "severity_level": 3
+  }
+},
+{
+  "model": "catalog.symptom",
+  "pk": 58,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.150Z",
+    "updated_at": "2026-06-25T14:14:29.150Z",
+    "name": "Loss of appetite",
+    "description": "",
+    "severity_level": 1
+  }
+},
+{
+  "model": "catalog.symptom",
+  "pk": 59,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.151Z",
+    "updated_at": "2026-06-25T14:14:29.151Z",
+    "name": "Chills",
+    "description": "",
+    "severity_level": 2
+  }
+},
+{
+  "model": "catalog.symptom",
+  "pk": 60,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.152Z",
+    "updated_at": "2026-06-25T14:14:29.152Z",
+    "name": "Neck stiffness",
+    "description": "",
+    "severity_level": 4
+  }
+},
+{
+  "model": "catalog.disease",
+  "pk": 31,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.182Z",
+    "updated_at": "2026-06-25T14:14:29.182Z",
+    "name": "Influenza",
+    "slug": "influenza",
+    "icd10_code": "J10",
+    "notifiable": false,
+    "description": "Acute viral respiratory infection caused by influenza viruses.",
+    "causes": "",
+    "risk_factors": "",
+    "diagnosis": "",
+    "treatment": "Rest, fluids, antipyretics; antivirals in high-risk groups.",
+    "prevention": "",
+    "complications": "",
+    "references": "",
+    "status": "published",
+    "symptoms": [
+      31,
+      32,
+      33,
+      43,
+      44
+    ],
+    "medications": [
+      36,
+      37
+    ]
+  }
+},
+{
+  "model": "catalog.disease",
+  "pk": 32,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.187Z",
+    "updated_at": "2026-06-25T14:14:29.187Z",
+    "name": "Tuberculosis",
+    "slug": "tuberculosis",
+    "icd10_code": "A15",
+    "notifiable": true,
+    "description": "Chronic bacterial infection by Mycobacterium tuberculosis, usually pulmonary.",
+    "causes": "",
+    "risk_factors": "",
+    "diagnosis": "",
+    "treatment": "Multi-drug regimen (rifampicin, isoniazid and others) for 6 months.",
+    "prevention": "",
+    "complications": "",
+    "references": "",
+    "status": "published",
+    "symptoms": [
+      31,
+      32,
+      35,
+      46,
+      47
+    ],
+    "medications": [
+      55,
+      56
+    ]
+  }
+},
+{
+  "model": "catalog.disease",
+  "pk": 33,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.195Z",
+    "updated_at": "2026-06-25T14:14:29.195Z",
+    "name": "Malaria",
+    "slug": "malaria",
+    "icd10_code": "B54",
+    "notifiable": true,
+    "description": "Mosquito-borne Plasmodium infection; falciparum can be fatal.",
+    "causes": "",
+    "risk_factors": "",
+    "diagnosis": "",
+    "treatment": "Artemisinin-based combination therapy; supportive care.",
+    "prevention": "",
+    "complications": "",
+    "references": "",
+    "status": "published",
+    "symptoms": [
+      31,
+      33,
+      38,
+      43,
+      59
+    ],
+    "medications": [
+      36,
+      54
+    ]
+  }
+},
+{
+  "model": "catalog.disease",
+  "pk": 34,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.199Z",
+    "updated_at": "2026-06-25T14:14:29.199Z",
+    "name": "Type 2 Diabetes",
+    "slug": "type-2-diabetes",
+    "icd10_code": "E11",
+    "notifiable": false,
+    "description": "Insulin resistance causing chronic hyperglycaemia.",
+    "causes": "",
+    "risk_factors": "",
+    "diagnosis": "",
+    "treatment": "Lifestyle change, metformin, escalating therapy; glucose monitoring.",
+    "prevention": "",
+    "complications": "",
+    "references": "",
+    "status": "published",
+    "symptoms": [
+      35,
+      49,
+      50,
+      51
+    ],
+    "medications": [
+      40,
+      41,
+      42
+    ]
+  }
+},
+{
+  "model": "catalog.disease",
+  "pk": 35,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.204Z",
+    "updated_at": "2026-06-25T14:14:29.204Z",
+    "name": "Hypertension",
+    "slug": "hypertension",
+    "icd10_code": "I10",
+    "notifiable": false,
+    "description": "Persistently elevated arterial blood pressure.",
+    "causes": "",
+    "risk_factors": "",
+    "diagnosis": "",
+    "treatment": "Lifestyle change plus ACE inhibitors, ARBs, CCBs or diuretics.",
+    "prevention": "",
+    "complications": "",
+    "references": "",
+    "status": "published",
+    "symptoms": [
+      33,
+      37,
+      42
+    ],
+    "medications": [
+      43,
+      44,
+      45,
+      46
+    ]
+  }
+},
+{
+  "model": "catalog.disease",
+  "pk": 36,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.208Z",
+    "updated_at": "2026-06-25T14:14:29.208Z",
+    "name": "Asthma",
+    "slug": "asthma",
+    "icd10_code": "J45",
+    "notifiable": false,
+    "description": "Chronic airway inflammation with reversible obstruction.",
+    "causes": "",
+    "risk_factors": "",
+    "diagnosis": "",
+    "treatment": "Inhaled bronchodilators and corticosteroids; avoid triggers.",
+    "prevention": "",
+    "complications": "",
+    "references": "",
+    "status": "published",
+    "symptoms": [
+      32,
+      36,
+      37,
+      57
+    ],
+    "medications": [
+      50,
+      51
+    ]
+  }
+},
+{
+  "model": "catalog.disease",
+  "pk": 37,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.210Z",
+    "updated_at": "2026-06-25T14:14:29.210Z",
+    "name": "Chronic Obstructive Pulmonary Disease",
+    "slug": "copd",
+    "icd10_code": "J44",
+    "notifiable": false,
+    "description": "Progressive airflow limitation, usually from smoking.",
+    "causes": "",
+    "risk_factors": "",
+    "diagnosis": "",
+    "treatment": "Bronchodilators, inhaled steroids, smoking cessation, oxygen.",
+    "prevention": "",
+    "complications": "",
+    "references": "",
+    "status": "published",
+    "symptoms": [
+      32,
+      35,
+      36,
+      57
+    ],
+    "medications": [
+      50,
+      51,
+      52
+    ]
+  }
+},
+{
+  "model": "catalog.disease",
+  "pk": 38,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.213Z",
+    "updated_at": "2026-06-25T14:14:29.213Z",
+    "name": "Pneumonia",
+    "slug": "pneumonia",
+    "icd10_code": "J18",
+    "notifiable": false,
+    "description": "Acute infection of the lung parenchyma.",
+    "causes": "",
+    "risk_factors": "",
+    "diagnosis": "",
+    "treatment": "Antibiotics guided by severity; oxygen and fluids as needed.",
+    "prevention": "",
+    "complications": "",
+    "references": "",
+    "status": "published",
+    "symptoms": [
+      31,
+      32,
+      36,
+      37,
+      59
+    ],
+    "medications": [
+      31,
+      32,
+      34
+    ]
+  }
+},
+{
+  "model": "catalog.disease",
+  "pk": 39,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.216Z",
+    "updated_at": "2026-06-25T14:14:29.216Z",
+    "name": "Ischaemic Heart Disease",
+    "slug": "ischaemic-heart-disease",
+    "icd10_code": "I25",
+    "notifiable": false,
+    "description": "Reduced coronary blood flow causing angina or infarction.",
+    "causes": "",
+    "risk_factors": "",
+    "diagnosis": "",
+    "treatment": "Antiplatelets, statins, beta-blockers; revascularisation if indicated.",
+    "prevention": "",
+    "complications": "",
+    "references": "",
+    "status": "published",
+    "symptoms": [
+      36,
+      37,
+      52
+    ],
+    "medications": [
+      38,
+      48
+    ]
+  }
+},
+{
+  "model": "catalog.disease",
+  "pk": 40,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.221Z",
+    "updated_at": "2026-06-25T14:14:29.221Z",
+    "name": "Ischaemic Stroke",
+    "slug": "ischaemic-stroke",
+    "icd10_code": "I63",
+    "notifiable": false,
+    "description": "Sudden neurological deficit from cerebral arterial occlusion.",
+    "causes": "",
+    "risk_factors": "",
+    "diagnosis": "",
+    "treatment": "Acute reperfusion where eligible; antiplatelets, risk-factor control.",
+    "prevention": "",
+    "complications": "",
+    "references": "",
+    "status": "published",
+    "symptoms": [
+      33,
+      42,
+      49,
+      54
+    ],
+    "medications": [
+      38,
+      48
+    ]
+  }
+},
+{
+  "model": "catalog.disease",
+  "pk": 41,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.227Z",
+    "updated_at": "2026-06-25T14:14:29.227Z",
+    "name": "HIV Infection",
+    "slug": "hiv-infection",
+    "icd10_code": "B20",
+    "notifiable": true,
+    "description": "Human immunodeficiency virus causing progressive immune failure.",
+    "causes": "",
+    "risk_factors": "",
+    "diagnosis": "",
+    "treatment": "Lifelong combination antiretroviral therapy; opportunistic-infection care.",
+    "prevention": "",
+    "complications": "",
+    "references": "",
+    "status": "published",
+    "symptoms": [
+      31,
+      35,
+      46,
+      47
+    ],
+    "medications": []
+  }
+},
+{
+  "model": "catalog.disease",
+  "pk": 42,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.230Z",
+    "updated_at": "2026-06-25T14:14:29.230Z",
+    "name": "Hepatitis B",
+    "slug": "hepatitis-b",
+    "icd10_code": "B16",
+    "notifiable": true,
+    "description": "Viral infection of the liver by hepatitis B virus.",
+    "causes": "",
+    "risk_factors": "",
+    "diagnosis": "",
+    "treatment": "Antivirals in chronic disease; vaccination prevents infection.",
+    "prevention": "",
+    "complications": "",
+    "references": "",
+    "status": "published",
+    "symptoms": [
+      35,
+      38,
+      45,
+      56
+    ],
+    "medications": []
+  }
+},
+{
+  "model": "catalog.disease",
+  "pk": 43,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.234Z",
+    "updated_at": "2026-06-25T14:14:29.234Z",
+    "name": "Cholera",
+    "slug": "cholera",
+    "icd10_code": "A00",
+    "notifiable": true,
+    "description": "Acute watery diarrhoea from Vibrio cholerae; epidemic-prone.",
+    "causes": "",
+    "risk_factors": "",
+    "diagnosis": "",
+    "treatment": "Aggressive oral/IV rehydration; antibiotics in severe cases.",
+    "prevention": "",
+    "complications": "",
+    "references": "",
+    "status": "published",
+    "symptoms": [
+      39,
+      40,
+      42
+    ],
+    "medications": [
+      33
+    ]
+  }
+},
+{
+  "model": "catalog.disease",
+  "pk": 44,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.238Z",
+    "updated_at": "2026-06-25T14:14:29.238Z",
+    "name": "Typhoid Fever",
+    "slug": "typhoid-fever",
+    "icd10_code": "A01.0",
+    "notifiable": true,
+    "description": "Systemic infection by Salmonella Typhi.",
+    "causes": "",
+    "risk_factors": "",
+    "diagnosis": "",
+    "treatment": "Appropriate antibiotics; fluids and supportive care.",
+    "prevention": "",
+    "complications": "",
+    "references": "",
+    "status": "published",
+    "symptoms": [
+      31,
+      33,
+      45,
+      58
+    ],
+    "medications": [
+      33,
+      34
+    ]
+  }
+},
+{
+  "model": "catalog.disease",
+  "pk": 45,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.240Z",
+    "updated_at": "2026-06-25T14:14:29.241Z",
+    "name": "Measles",
+    "slug": "measles",
+    "icd10_code": "B05",
+    "notifiable": true,
+    "description": "Highly contagious viral illness with rash; vaccine-preventable.",
+    "causes": "",
+    "risk_factors": "",
+    "diagnosis": "",
+    "treatment": "Supportive care, vitamin A; manage complications.",
+    "prevention": "",
+    "complications": "",
+    "references": "",
+    "status": "published",
+    "symptoms": [
+      31,
+      32,
+      41,
+      44
+    ],
+    "medications": [
+      36
+    ]
+  }
+},
+{
+  "model": "catalog.disease",
+  "pk": 46,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.243Z",
+    "updated_at": "2026-06-25T14:14:29.243Z",
+    "name": "COVID-19",
+    "slug": "covid-19",
+    "icd10_code": "U07.1",
+    "notifiable": true,
+    "description": "Respiratory illness caused by SARS-CoV-2.",
+    "causes": "",
+    "risk_factors": "",
+    "diagnosis": "",
+    "treatment": "Supportive care; oxygen and specific therapies in severe disease.",
+    "prevention": "",
+    "complications": "",
+    "references": "",
+    "status": "published",
+    "symptoms": [
+      31,
+      32,
+      35,
+      36,
+      58
+    ],
+    "medications": [
+      36
+    ]
+  }
+},
+{
+  "model": "catalog.disease",
+  "pk": 47,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.247Z",
+    "updated_at": "2026-06-25T14:14:29.247Z",
+    "name": "Gastroenteritis",
+    "slug": "gastroenteritis",
+    "icd10_code": "A09",
+    "notifiable": false,
+    "description": "Inflammation of the GI tract, usually infectious.",
+    "causes": "",
+    "risk_factors": "",
+    "diagnosis": "",
+    "treatment": "Oral rehydration and supportive care; antibiotics rarely needed.",
+    "prevention": "",
+    "complications": "",
+    "references": "",
+    "status": "published",
+    "symptoms": [
+      31,
+      38,
+      39,
+      40,
+      45
+    ],
+    "medications": [
+      35,
+      36
+    ]
+  }
+},
+{
+  "model": "catalog.disease",
+  "pk": 48,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.251Z",
+    "updated_at": "2026-06-25T14:14:29.251Z",
+    "name": "Urinary Tract Infection",
+    "slug": "urinary-tract-infection",
+    "icd10_code": "N39.0",
+    "notifiable": false,
+    "description": "Bacterial infection of the urinary tract.",
+    "causes": "",
+    "risk_factors": "",
+    "diagnosis": "",
+    "treatment": "Short-course antibiotics; increase fluids.",
+    "prevention": "",
+    "complications": "",
+    "references": "",
+    "status": "published",
+    "symptoms": [
+      31,
+      45,
+      50
+    ],
+    "medications": [
+      31,
+      33
+    ]
+  }
+},
+{
+  "model": "catalog.disease",
+  "pk": 49,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.255Z",
+    "updated_at": "2026-06-25T14:14:29.255Z",
+    "name": "Iron-Deficiency Anaemia",
+    "slug": "iron-deficiency-anaemia",
+    "icd10_code": "D50",
+    "notifiable": false,
+    "description": "Reduced haemoglobin from inadequate iron stores.",
+    "causes": "",
+    "risk_factors": "",
+    "diagnosis": "",
+    "treatment": "Oral iron and treat the underlying cause.",
+    "prevention": "",
+    "complications": "",
+    "references": "",
+    "status": "published",
+    "symptoms": [
+      35,
+      36,
+      42
+    ],
+    "medications": [
+      60
+    ]
+  }
+},
+{
+  "model": "catalog.disease",
+  "pk": 50,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.258Z",
+    "updated_at": "2026-06-25T14:14:29.258Z",
+    "name": "Major Depressive Disorder",
+    "slug": "major-depressive-disorder",
+    "icd10_code": "F32",
+    "notifiable": false,
+    "description": "Persistent low mood and loss of interest impairing function.",
+    "causes": "",
+    "risk_factors": "",
+    "diagnosis": "",
+    "treatment": "Psychotherapy and/or antidepressants.",
+    "prevention": "",
+    "complications": "",
+    "references": "",
+    "status": "published",
+    "symptoms": [
+      35,
+      58
+    ],
+    "medications": [
+      58,
+      59
+    ]
+  }
+},
+{
+  "model": "catalog.disease",
+  "pk": 51,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.261Z",
+    "updated_at": "2026-06-25T14:14:29.261Z",
+    "name": "Migraine",
+    "slug": "migraine",
+    "icd10_code": "G43",
+    "notifiable": false,
+    "description": "Recurrent moderate-to-severe headache, often with aura.",
+    "causes": "",
+    "risk_factors": "",
+    "diagnosis": "",
+    "treatment": "Acute analgesia/triptans; prophylaxis if frequent.",
+    "prevention": "",
+    "complications": "",
+    "references": "",
+    "status": "published",
+    "symptoms": [
+      33,
+      38,
+      49
+    ],
+    "medications": [
+      36,
+      37
+    ]
+  }
+},
+{
+  "model": "catalog.disease",
+  "pk": 52,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.264Z",
+    "updated_at": "2026-06-25T14:14:29.264Z",
+    "name": "Osteoarthritis",
+    "slug": "osteoarthritis",
+    "icd10_code": "M19",
+    "notifiable": false,
+    "description": "Degenerative joint disease with cartilage loss.",
+    "causes": "",
+    "risk_factors": "",
+    "diagnosis": "",
+    "treatment": "Exercise, weight loss, analgesia; joint replacement if severe.",
+    "prevention": "",
+    "complications": "",
+    "references": "",
+    "status": "published",
+    "symptoms": [
+      48,
+      53
+    ],
+    "medications": [
+      36,
+      37
+    ]
+  }
+},
+{
+  "model": "catalog.disease",
+  "pk": 53,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.267Z",
+    "updated_at": "2026-06-25T14:14:29.267Z",
+    "name": "Chronic Kidney Disease",
+    "slug": "chronic-kidney-disease",
+    "icd10_code": "N18",
+    "notifiable": false,
+    "description": "Progressive, irreversible loss of kidney function.",
+    "causes": "",
+    "risk_factors": "",
+    "diagnosis": "",
+    "treatment": "Control BP and diabetes; manage complications; dialysis if end-stage.",
+    "prevention": "",
+    "complications": "",
+    "references": "",
+    "status": "published",
+    "symptoms": [
+      35,
+      38,
+      53
+    ],
+    "medications": [
+      44,
+      47
+    ]
+  }
+},
+{
+  "model": "catalog.disease",
+  "pk": 54,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.271Z",
+    "updated_at": "2026-06-25T14:14:29.271Z",
+    "name": "Hypothyroidism",
+    "slug": "hypothyroidism",
+    "icd10_code": "E03",
+    "notifiable": false,
+    "description": "Underactive thyroid causing metabolic slowing.",
+    "causes": "",
+    "risk_factors": "",
+    "diagnosis": "",
+    "treatment": "Levothyroxine replacement, dose-titrated.",
+    "prevention": "",
+    "complications": "",
+    "references": "",
+    "status": "published",
+    "symptoms": [
+      35,
+      46,
+      58
+    ],
+    "medications": [
+      57
+    ]
+  }
+},
+{
+  "model": "catalog.disease",
+  "pk": 55,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.274Z",
+    "updated_at": "2026-06-25T14:14:29.274Z",
+    "name": "Epilepsy",
+    "slug": "epilepsy",
+    "icd10_code": "G40",
+    "notifiable": false,
+    "description": "Recurrent unprovoked seizures from abnormal brain activity.",
+    "causes": "",
+    "risk_factors": "",
+    "diagnosis": "",
+    "treatment": "Antiepileptic drugs; treat the underlying cause where present.",
+    "prevention": "",
+    "complications": "",
+    "references": "",
+    "status": "published",
+    "symptoms": [
+      42,
+      54,
+      55
+    ],
+    "medications": []
+  }
+},
+{
+  "model": "catalog.disease",
+  "pk": 56,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.277Z",
+    "updated_at": "2026-06-25T14:14:29.277Z",
+    "name": "Dengue Fever",
+    "slug": "dengue-fever",
+    "icd10_code": "A90",
+    "notifiable": true,
+    "description": "Mosquito-borne viral febrile illness; can progress to severe disease.",
+    "causes": "",
+    "risk_factors": "",
+    "diagnosis": "",
+    "treatment": "Supportive care and careful fluid management; avoid NSAIDs.",
+    "prevention": "",
+    "complications": "",
+    "references": "",
+    "status": "published",
+    "symptoms": [
+      31,
+      33,
+      38,
+      41,
+      43
+    ],
+    "medications": [
+      36
+    ]
+  }
+},
+{
+  "model": "catalog.disease",
+  "pk": 57,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.281Z",
+    "updated_at": "2026-06-25T14:14:29.281Z",
+    "name": "Bacterial Meningitis",
+    "slug": "bacterial-meningitis",
+    "icd10_code": "G00",
+    "notifiable": true,
+    "description": "Acute infection of the meninges; a medical emergency.",
+    "causes": "",
+    "risk_factors": "",
+    "diagnosis": "",
+    "treatment": "Urgent empirical IV antibiotics; supportive care.",
+    "prevention": "",
+    "complications": "",
+    "references": "",
+    "status": "published",
+    "symptoms": [
+      31,
+      33,
+      54,
+      60
+    ],
+    "medications": [
+      34
+    ]
+  }
+},
+{
+  "model": "catalog.disease",
+  "pk": 58,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.286Z",
+    "updated_at": "2026-06-25T14:14:29.286Z",
+    "name": "Peptic Ulcer Disease",
+    "slug": "peptic-ulcer-disease",
+    "icd10_code": "K27",
+    "notifiable": false,
+    "description": "Mucosal ulceration of stomach or duodenum.",
+    "causes": "",
+    "risk_factors": "",
+    "diagnosis": "",
+    "treatment": "PPIs, H. pylori eradication; stop NSAIDs.",
+    "prevention": "",
+    "complications": "",
+    "references": "",
+    "status": "published",
+    "symptoms": [
+      38,
+      45,
+      58
+    ],
+    "medications": [
+      31,
+      35,
+      53
+    ]
+  }
+},
+{
+  "model": "catalog.disease",
+  "pk": 59,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.289Z",
+    "updated_at": "2026-06-25T14:14:29.289Z",
+    "name": "Allergic Rhinitis",
+    "slug": "allergic-rhinitis",
+    "icd10_code": "J30",
+    "notifiable": false,
+    "description": "IgE-mediated nasal inflammation from allergen exposure.",
+    "causes": "",
+    "risk_factors": "",
+    "diagnosis": "",
+    "treatment": "Allergen avoidance, antihistamines, intranasal steroids.",
+    "prevention": "",
+    "complications": "",
+    "references": "",
+    "status": "published",
+    "symptoms": [
+      32,
+      44
+    ],
+    "medications": [
+      51
+    ]
+  }
+},
+{
+  "model": "catalog.medication",
+  "pk": 31,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.153Z",
+    "updated_at": "2026-06-25T14:14:29.153Z",
+    "generic_name": "Amoxicillin",
+    "brand_name": "Amoxil",
+    "drug_class": "Penicillin antibiotic",
+    "description": "",
+    "indications": "Bacterial infections (respiratory, ENT, UTI).",
+    "dosage": "500 mg PO TID",
+    "side_effects": "",
+    "warnings": "",
+    "contraindications": "",
+    "storage_information": "",
+    "status": "published"
+  }
+},
+{
+  "model": "catalog.medication",
+  "pk": 32,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.154Z",
+    "updated_at": "2026-06-25T14:14:29.154Z",
+    "generic_name": "Azithromycin",
+    "brand_name": "Zithromax",
+    "drug_class": "Macrolide antibiotic",
+    "description": "",
+    "indications": "Respiratory and atypical infections.",
+    "dosage": "500 mg day 1, then 250 mg daily x4",
+    "side_effects": "",
+    "warnings": "",
+    "contraindications": "",
+    "storage_information": "",
+    "status": "published"
+  }
+},
+{
+  "model": "catalog.medication",
+  "pk": 33,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.156Z",
+    "updated_at": "2026-06-25T14:14:29.156Z",
+    "generic_name": "Ciprofloxacin",
+    "brand_name": "Cipro",
+    "drug_class": "Fluoroquinolone antibiotic",
+    "description": "",
+    "indications": "UTI, GI and systemic gram-negative infections.",
+    "dosage": "500 mg PO BID",
+    "side_effects": "",
+    "warnings": "",
+    "contraindications": "",
+    "storage_information": "",
+    "status": "published"
+  }
+},
+{
+  "model": "catalog.medication",
+  "pk": 34,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.157Z",
+    "updated_at": "2026-06-25T14:14:29.157Z",
+    "generic_name": "Ceftriaxone",
+    "brand_name": "Rocephin",
+    "drug_class": "Third-generation cephalosporin",
+    "description": "",
+    "indications": "Severe bacterial infections, meningitis, typhoid.",
+    "dosage": "1-2 g IV/IM daily",
+    "side_effects": "",
+    "warnings": "",
+    "contraindications": "",
+    "storage_information": "",
+    "status": "published"
+  }
+},
+{
+  "model": "catalog.medication",
+  "pk": 35,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.158Z",
+    "updated_at": "2026-06-25T14:14:29.158Z",
+    "generic_name": "Metronidazole",
+    "brand_name": "Flagyl",
+    "drug_class": "Nitroimidazole antimicrobial",
+    "description": "",
+    "indications": "Anaerobic and protozoal infections.",
+    "dosage": "400 mg PO TID",
+    "side_effects": "",
+    "warnings": "",
+    "contraindications": "",
+    "storage_information": "",
+    "status": "published"
+  }
+},
+{
+  "model": "catalog.medication",
+  "pk": 36,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.158Z",
+    "updated_at": "2026-06-25T14:14:29.158Z",
+    "generic_name": "Paracetamol",
+    "brand_name": "Panadol",
+    "drug_class": "Analgesic / antipyretic",
+    "description": "",
+    "indications": "Pain and fever.",
+    "dosage": "500-1000 mg PO q6h (max 4 g/day)",
+    "side_effects": "",
+    "warnings": "",
+    "contraindications": "",
+    "storage_information": "",
+    "status": "published"
+  }
+},
+{
+  "model": "catalog.medication",
+  "pk": 37,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.159Z",
+    "updated_at": "2026-06-25T14:14:29.159Z",
+    "generic_name": "Ibuprofen",
+    "brand_name": "Advil",
+    "drug_class": "NSAID",
+    "description": "",
+    "indications": "Pain, fever, inflammation.",
+    "dosage": "400 mg PO q6-8h",
+    "side_effects": "",
+    "warnings": "",
+    "contraindications": "",
+    "storage_information": "",
+    "status": "published"
+  }
+},
+{
+  "model": "catalog.medication",
+  "pk": 38,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.160Z",
+    "updated_at": "2026-06-25T14:14:29.160Z",
+    "generic_name": "Aspirin",
+    "brand_name": "Aspirin",
+    "drug_class": "NSAID / antiplatelet",
+    "description": "",
+    "indications": "Antiplatelet in cardiovascular disease; analgesia.",
+    "dosage": "75-100 mg daily (antiplatelet)",
+    "side_effects": "",
+    "warnings": "",
+    "contraindications": "",
+    "storage_information": "",
+    "status": "published"
+  }
+},
+{
+  "model": "catalog.medication",
+  "pk": 39,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.162Z",
+    "updated_at": "2026-06-25T14:14:29.162Z",
+    "generic_name": "Morphine",
+    "brand_name": "MST",
+    "drug_class": "Opioid analgesic",
+    "description": "",
+    "indications": "Moderate to severe pain.",
+    "dosage": "5-10 mg IV/IM q4h titrated",
+    "side_effects": "",
+    "warnings": "",
+    "contraindications": "",
+    "storage_information": "",
+    "status": "published"
+  }
+},
+{
+  "model": "catalog.medication",
+  "pk": 40,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.163Z",
+    "updated_at": "2026-06-25T14:14:29.163Z",
+    "generic_name": "Metformin",
+    "brand_name": "Glucophage",
+    "drug_class": "Biguanide antidiabetic",
+    "description": "",
+    "indications": "First-line type 2 diabetes.",
+    "dosage": "500-1000 mg PO BID",
+    "side_effects": "",
+    "warnings": "",
+    "contraindications": "",
+    "storage_information": "",
+    "status": "published"
+  }
+},
+{
+  "model": "catalog.medication",
+  "pk": 41,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.164Z",
+    "updated_at": "2026-06-25T14:14:29.164Z",
+    "generic_name": "Insulin (regular)",
+    "brand_name": "Actrapid",
+    "drug_class": "Short-acting insulin",
+    "description": "",
+    "indications": "Diabetes mellitus, hyperglycaemic emergencies.",
+    "dosage": "Subcut, individualised",
+    "side_effects": "",
+    "warnings": "",
+    "contraindications": "",
+    "storage_information": "",
+    "status": "published"
+  }
+},
+{
+  "model": "catalog.medication",
+  "pk": 42,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.165Z",
+    "updated_at": "2026-06-25T14:14:29.165Z",
+    "generic_name": "Glibenclamide",
+    "brand_name": "Daonil",
+    "drug_class": "Sulfonylurea",
+    "description": "",
+    "indications": "Type 2 diabetes.",
+    "dosage": "5 mg PO daily with breakfast",
+    "side_effects": "",
+    "warnings": "",
+    "contraindications": "",
+    "storage_information": "",
+    "status": "published"
+  }
+},
+{
+  "model": "catalog.medication",
+  "pk": 43,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.166Z",
+    "updated_at": "2026-06-25T14:14:29.166Z",
+    "generic_name": "Amlodipine",
+    "brand_name": "Norvasc",
+    "drug_class": "Calcium channel blocker",
+    "description": "",
+    "indications": "Hypertension, angina.",
+    "dosage": "5-10 mg PO daily",
+    "side_effects": "",
+    "warnings": "",
+    "contraindications": "",
+    "storage_information": "",
+    "status": "published"
+  }
+},
+{
+  "model": "catalog.medication",
+  "pk": 44,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.167Z",
+    "updated_at": "2026-06-25T14:14:29.167Z",
+    "generic_name": "Lisinopril",
+    "brand_name": "Zestril",
+    "drug_class": "ACE inhibitor",
+    "description": "",
+    "indications": "Hypertension, heart failure.",
+    "dosage": "10-40 mg PO daily",
+    "side_effects": "",
+    "warnings": "",
+    "contraindications": "",
+    "storage_information": "",
+    "status": "published"
+  }
+},
+{
+  "model": "catalog.medication",
+  "pk": 45,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.168Z",
+    "updated_at": "2026-06-25T14:14:29.168Z",
+    "generic_name": "Losartan",
+    "brand_name": "Cozaar",
+    "drug_class": "Angiotensin receptor blocker",
+    "description": "",
+    "indications": "Hypertension, diabetic nephropathy.",
+    "dosage": "50-100 mg PO daily",
+    "side_effects": "",
+    "warnings": "",
+    "contraindications": "",
+    "storage_information": "",
+    "status": "published"
+  }
+},
+{
+  "model": "catalog.medication",
+  "pk": 46,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.169Z",
+    "updated_at": "2026-06-25T14:14:29.169Z",
+    "generic_name": "Hydrochlorothiazide",
+    "brand_name": "Hydrosaluric",
+    "drug_class": "Thiazide diuretic",
+    "description": "",
+    "indications": "Hypertension, oedema.",
+    "dosage": "12.5-25 mg PO daily",
+    "side_effects": "",
+    "warnings": "",
+    "contraindications": "",
+    "storage_information": "",
+    "status": "published"
+  }
+},
+{
+  "model": "catalog.medication",
+  "pk": 47,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.169Z",
+    "updated_at": "2026-06-25T14:14:29.169Z",
+    "generic_name": "Furosemide",
+    "brand_name": "Lasix",
+    "drug_class": "Loop diuretic",
+    "description": "",
+    "indications": "Oedema, heart failure.",
+    "dosage": "20-80 mg PO/IV daily",
+    "side_effects": "",
+    "warnings": "",
+    "contraindications": "",
+    "storage_information": "",
+    "status": "published"
+  }
+},
+{
+  "model": "catalog.medication",
+  "pk": 48,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.171Z",
+    "updated_at": "2026-06-25T14:14:29.171Z",
+    "generic_name": "Atorvastatin",
+    "brand_name": "Lipitor",
+    "drug_class": "HMG-CoA reductase inhibitor (statin)",
+    "description": "",
+    "indications": "Hyperlipidaemia, CVD prevention.",
+    "dosage": "10-80 mg PO nocte",
+    "side_effects": "",
+    "warnings": "",
+    "contraindications": "",
+    "storage_information": "",
+    "status": "published"
+  }
+},
+{
+  "model": "catalog.medication",
+  "pk": 49,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.172Z",
+    "updated_at": "2026-06-25T14:14:29.172Z",
+    "generic_name": "Warfarin",
+    "brand_name": "Coumadin",
+    "drug_class": "Vitamin-K antagonist anticoagulant",
+    "description": "",
+    "indications": "Anticoagulation (AF, VTE, valves).",
+    "dosage": "Dose to target INR",
+    "side_effects": "",
+    "warnings": "",
+    "contraindications": "",
+    "storage_information": "",
+    "status": "published"
+  }
+},
+{
+  "model": "catalog.medication",
+  "pk": 50,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.173Z",
+    "updated_at": "2026-06-25T14:14:29.173Z",
+    "generic_name": "Salbutamol",
+    "brand_name": "Ventolin",
+    "drug_class": "Short-acting beta-2 agonist",
+    "description": "",
+    "indications": "Asthma, COPD bronchospasm.",
+    "dosage": "100-200 mcg inhaled PRN",
+    "side_effects": "",
+    "warnings": "",
+    "contraindications": "",
+    "storage_information": "",
+    "status": "published"
+  }
+},
+{
+  "model": "catalog.medication",
+  "pk": 51,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.174Z",
+    "updated_at": "2026-06-25T14:14:29.174Z",
+    "generic_name": "Beclomethasone",
+    "brand_name": "Becotide",
+    "drug_class": "Inhaled corticosteroid",
+    "description": "",
+    "indications": "Asthma maintenance.",
+    "dosage": "100-400 mcg inhaled BID",
+    "side_effects": "",
+    "warnings": "",
+    "contraindications": "",
+    "storage_information": "",
+    "status": "published"
+  }
+},
+{
+  "model": "catalog.medication",
+  "pk": 52,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.175Z",
+    "updated_at": "2026-06-25T14:14:29.175Z",
+    "generic_name": "Prednisolone",
+    "brand_name": "Deltacortril",
+    "drug_class": "Corticosteroid",
+    "description": "",
+    "indications": "Inflammatory and allergic conditions.",
+    "dosage": "5-60 mg PO daily, tapered",
+    "side_effects": "",
+    "warnings": "",
+    "contraindications": "",
+    "storage_information": "",
+    "status": "published"
+  }
+},
+{
+  "model": "catalog.medication",
+  "pk": 53,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.176Z",
+    "updated_at": "2026-06-25T14:14:29.176Z",
+    "generic_name": "Omeprazole",
+    "brand_name": "Losec",
+    "drug_class": "Proton pump inhibitor",
+    "description": "",
+    "indications": "Peptic ulcer, GORD.",
+    "dosage": "20-40 mg PO daily",
+    "side_effects": "",
+    "warnings": "",
+    "contraindications": "",
+    "storage_information": "",
+    "status": "published"
+  }
+},
+{
+  "model": "catalog.medication",
+  "pk": 54,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.176Z",
+    "updated_at": "2026-06-25T14:14:29.176Z",
+    "generic_name": "Artemether-Lumefantrine",
+    "brand_name": "Coartem",
+    "drug_class": "Antimalarial (ACT)",
+    "description": "",
+    "indications": "Uncomplicated falciparum malaria.",
+    "dosage": "Weight-based, 3-day course",
+    "side_effects": "",
+    "warnings": "",
+    "contraindications": "",
+    "storage_information": "",
+    "status": "published"
+  }
+},
+{
+  "model": "catalog.medication",
+  "pk": 55,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.177Z",
+    "updated_at": "2026-06-25T14:14:29.177Z",
+    "generic_name": "Rifampicin",
+    "brand_name": "Rifadin",
+    "drug_class": "Rifamycin antitubercular",
+    "description": "",
+    "indications": "Tuberculosis (combination).",
+    "dosage": "10 mg/kg PO daily",
+    "side_effects": "",
+    "warnings": "",
+    "contraindications": "",
+    "storage_information": "",
+    "status": "published"
+  }
+},
+{
+  "model": "catalog.medication",
+  "pk": 56,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.178Z",
+    "updated_at": "2026-06-25T14:14:29.178Z",
+    "generic_name": "Isoniazid",
+    "brand_name": "Isovit",
+    "drug_class": "Antitubercular",
+    "description": "",
+    "indications": "Tuberculosis (combination).",
+    "dosage": "5 mg/kg PO daily",
+    "side_effects": "",
+    "warnings": "",
+    "contraindications": "",
+    "storage_information": "",
+    "status": "published"
+  }
+},
+{
+  "model": "catalog.medication",
+  "pk": 57,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.179Z",
+    "updated_at": "2026-06-25T14:14:29.179Z",
+    "generic_name": "Levothyroxine",
+    "brand_name": "Eltroxin",
+    "drug_class": "Thyroid hormone",
+    "description": "",
+    "indications": "Hypothyroidism.",
+    "dosage": "50-150 mcg PO daily",
+    "side_effects": "",
+    "warnings": "",
+    "contraindications": "",
+    "storage_information": "",
+    "status": "published"
+  }
+},
+{
+  "model": "catalog.medication",
+  "pk": 58,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.179Z",
+    "updated_at": "2026-06-25T14:14:29.179Z",
+    "generic_name": "Amitriptyline",
+    "brand_name": "Elavil",
+    "drug_class": "Tricyclic antidepressant",
+    "description": "",
+    "indications": "Depression, neuropathic pain.",
+    "dosage": "25-75 mg PO nocte",
+    "side_effects": "",
+    "warnings": "",
+    "contraindications": "",
+    "storage_information": "",
+    "status": "published"
+  }
+},
+{
+  "model": "catalog.medication",
+  "pk": 59,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.180Z",
+    "updated_at": "2026-06-25T14:14:29.180Z",
+    "generic_name": "Fluoxetine",
+    "brand_name": "Prozac",
+    "drug_class": "SSRI antidepressant",
+    "description": "",
+    "indications": "Depression, anxiety disorders.",
+    "dosage": "20 mg PO daily",
+    "side_effects": "",
+    "warnings": "",
+    "contraindications": "",
+    "storage_information": "",
+    "status": "published"
+  }
+},
+{
+  "model": "catalog.medication",
+  "pk": 60,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.181Z",
+    "updated_at": "2026-06-25T14:14:29.181Z",
+    "generic_name": "Ferrous sulfate",
+    "brand_name": "Feospan",
+    "drug_class": "Oral iron",
+    "description": "",
+    "indications": "Iron-deficiency anaemia.",
+    "dosage": "200 mg PO BID-TID",
+    "side_effects": "",
+    "warnings": "",
+    "contraindications": "",
+    "storage_information": "",
+    "status": "published"
+  }
+},
+{
+  "model": "catalog.druginteraction",
+  "pk": 17,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.294Z",
+    "updated_at": "2026-06-25T14:14:29.294Z",
+    "medication_a": 49,
+    "medication_b": 38,
+    "severity": "major",
+    "description": "Additive bleeding risk.",
+    "recommendation": "Avoid unless specifically indicated; monitor closely."
+  }
+},
+{
+  "model": "catalog.druginteraction",
+  "pk": 18,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.296Z",
+    "updated_at": "2026-06-25T14:14:29.296Z",
+    "medication_a": 49,
+    "medication_b": 37,
+    "severity": "major",
+    "description": "NSAIDs raise bleeding risk with anticoagulants.",
+    "recommendation": "Avoid; prefer paracetamol."
+  }
+},
+{
+  "model": "catalog.druginteraction",
+  "pk": 19,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.298Z",
+    "updated_at": "2026-06-25T14:14:29.298Z",
+    "medication_a": 49,
+    "medication_b": 33,
+    "severity": "major",
+    "description": "Ciprofloxacin potentiates warfarin, raising INR.",
+    "recommendation": "Monitor INR closely; adjust dose."
+  }
+},
+{
+  "model": "catalog.druginteraction",
+  "pk": 20,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.301Z",
+    "updated_at": "2026-06-25T14:14:29.301Z",
+    "medication_a": 49,
+    "medication_b": 35,
+    "severity": "major",
+    "description": "Metronidazole inhibits warfarin metabolism.",
+    "recommendation": "Monitor INR; reduce warfarin dose."
+  }
+},
+{
+  "model": "catalog.druginteraction",
+  "pk": 21,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.303Z",
+    "updated_at": "2026-06-25T14:14:29.303Z",
+    "medication_a": 49,
+    "medication_b": 55,
+    "severity": "major",
+    "description": "Rifampicin induces metabolism, reducing warfarin effect.",
+    "recommendation": "Expect higher dose need; monitor INR."
+  }
+},
+{
+  "model": "catalog.druginteraction",
+  "pk": 22,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.304Z",
+    "updated_at": "2026-06-25T14:14:29.304Z",
+    "medication_a": 38,
+    "medication_b": 37,
+    "severity": "moderate",
+    "description": "Ibuprofen can block aspirin's antiplatelet effect.",
+    "recommendation": "Separate dosing; review need for both."
+  }
+},
+{
+  "model": "catalog.druginteraction",
+  "pk": 23,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.306Z",
+    "updated_at": "2026-06-25T14:14:29.306Z",
+    "medication_a": 37,
+    "medication_b": 52,
+    "severity": "moderate",
+    "description": "Additive GI ulceration and bleeding risk.",
+    "recommendation": "Add gastroprotection; limit duration."
+  }
+},
+{
+  "model": "catalog.druginteraction",
+  "pk": 24,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.307Z",
+    "updated_at": "2026-06-25T14:14:29.307Z",
+    "medication_a": 37,
+    "medication_b": 44,
+    "severity": "moderate",
+    "description": "NSAIDs blunt ACE-inhibitor effect and risk renal impairment.",
+    "recommendation": "Monitor BP and renal function."
+  }
+},
+{
+  "model": "catalog.druginteraction",
+  "pk": 25,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.308Z",
+    "updated_at": "2026-06-25T14:14:29.308Z",
+    "medication_a": 37,
+    "medication_b": 47,
+    "severity": "moderate",
+    "description": "NSAIDs reduce diuretic efficacy and risk renal injury.",
+    "recommendation": "Monitor fluid status and renal function."
+  }
+},
+{
+  "model": "catalog.druginteraction",
+  "pk": 26,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.309Z",
+    "updated_at": "2026-06-25T14:14:29.310Z",
+    "medication_a": 44,
+    "medication_b": 45,
+    "severity": "moderate",
+    "description": "Dual RAAS blockade risks hyperkalaemia and renal failure.",
+    "recommendation": "Avoid routine combination."
+  }
+},
+{
+  "model": "catalog.druginteraction",
+  "pk": 27,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.311Z",
+    "updated_at": "2026-06-25T14:14:29.311Z",
+    "medication_a": 44,
+    "medication_b": 46,
+    "severity": "minor",
+    "description": "Risk of first-dose hypotension.",
+    "recommendation": "Start low; monitor BP."
+  }
+},
+{
+  "model": "catalog.druginteraction",
+  "pk": 28,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.312Z",
+    "updated_at": "2026-06-25T14:14:29.312Z",
+    "medication_a": 59,
+    "medication_b": 58,
+    "severity": "major",
+    "description": "Additive serotonergic effect and raised TCA levels.",
+    "recommendation": "Avoid or reduce TCA dose; watch for toxicity."
+  }
+},
+{
+  "model": "catalog.druginteraction",
+  "pk": 29,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.314Z",
+    "updated_at": "2026-06-25T14:14:29.314Z",
+    "medication_a": 48,
+    "medication_b": 32,
+    "severity": "moderate",
+    "description": "Increased statin exposure and myopathy risk.",
+    "recommendation": "Monitor for muscle symptoms."
+  }
+},
+{
+  "model": "catalog.druginteraction",
+  "pk": 30,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.316Z",
+    "updated_at": "2026-06-25T14:14:29.316Z",
+    "medication_a": 33,
+    "medication_b": 60,
+    "severity": "moderate",
+    "description": "Iron chelates ciprofloxacin, reducing absorption.",
+    "recommendation": "Separate doses by at least 2 hours."
+  }
+},
+{
+  "model": "catalog.druginteraction",
+  "pk": 31,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.319Z",
+    "updated_at": "2026-06-25T14:14:29.319Z",
+    "medication_a": 52,
+    "medication_b": 42,
+    "severity": "moderate",
+    "description": "Corticosteroids raise blood glucose, opposing hypoglycaemics.",
+    "recommendation": "Monitor glucose; adjust antidiabetic dose."
+  }
+},
+{
+  "model": "catalog.specialty",
+  "pk": 11,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.185Z",
+    "updated_at": "2026-06-25T14:14:29.185Z",
+    "name": "Pulmonology",
+    "description": "Pulmonology specialty.",
+    "diseases": [
+      31,
+      32,
+      36,
+      37,
+      38,
+      46,
+      59
+    ]
+  }
+},
+{
+  "model": "catalog.specialty",
+  "pk": 12,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.193Z",
+    "updated_at": "2026-06-25T14:14:29.193Z",
+    "name": "Infectious Disease",
+    "description": "Infectious Disease specialty.",
+    "diseases": [
+      32,
+      33,
+      38,
+      41,
+      42,
+      43,
+      44,
+      45,
+      46,
+      56,
+      57
+    ]
+  }
+},
+{
+  "model": "catalog.specialty",
+  "pk": 13,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.202Z",
+    "updated_at": "2026-06-25T14:14:29.203Z",
+    "name": "Endocrinology",
+    "description": "Endocrinology specialty.",
+    "diseases": [
+      34,
+      54
+    ]
+  }
+},
+{
+  "model": "catalog.specialty",
+  "pk": 14,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.207Z",
+    "updated_at": "2026-06-25T14:14:29.207Z",
+    "name": "Cardiology",
+    "description": "Cardiology specialty.",
+    "diseases": [
+      35,
+      39,
+      40
+    ]
+  }
+},
+{
+  "model": "catalog.specialty",
+  "pk": 15,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.233Z",
+    "updated_at": "2026-06-25T14:14:29.233Z",
+    "name": "Gastroenterology",
+    "description": "Gastroenterology specialty.",
+    "diseases": [
+      42,
+      47,
+      58
+    ]
+  }
+},
+{
+  "model": "catalog.specialty",
+  "pk": 16,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.254Z",
+    "updated_at": "2026-06-25T14:14:29.254Z",
+    "name": "Nephrology",
+    "description": "Nephrology specialty.",
+    "diseases": [
+      48,
+      53
+    ]
+  }
+},
+{
+  "model": "catalog.specialty",
+  "pk": 17,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.257Z",
+    "updated_at": "2026-06-25T14:14:29.257Z",
+    "name": "Hematology",
+    "description": "Hematology specialty.",
+    "diseases": [
+      49
+    ]
+  }
+},
+{
+  "model": "catalog.specialty",
+  "pk": 18,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.260Z",
+    "updated_at": "2026-06-25T14:14:29.260Z",
+    "name": "Psychiatry",
+    "description": "Psychiatry specialty.",
+    "diseases": [
+      50
+    ]
+  }
+},
+{
+  "model": "catalog.specialty",
+  "pk": 19,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.263Z",
+    "updated_at": "2026-06-25T14:14:29.263Z",
+    "name": "Neurology",
+    "description": "Neurology specialty.",
+    "diseases": [
+      51,
+      55,
+      57
+    ]
+  }
+},
+{
+  "model": "catalog.specialty",
+  "pk": 20,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.266Z",
+    "updated_at": "2026-06-25T14:14:29.266Z",
+    "name": "Rheumatology",
+    "description": "Rheumatology specialty.",
+    "diseases": [
+      52
+    ]
+  }
+},
+{
+  "model": "catalog.procedure",
+  "pk": 7,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.337Z",
+    "updated_at": "2026-06-25T14:14:29.337Z",
+    "name": "Chest X-ray",
+    "slug": "chest-x-ray",
+    "description": "Plain radiograph of the chest.",
+    "indications": "Suspected pneumonia, TB, heart failure.",
+    "preparation": "",
+    "risks": "",
+    "recovery": "",
+    "references": "",
+    "status": "published",
+    "diseases": [
+      32,
+      37,
+      38
+    ]
+  }
+},
+{
+  "model": "catalog.procedure",
+  "pk": 8,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.340Z",
+    "updated_at": "2026-06-25T14:14:29.340Z",
+    "name": "Electrocardiogram",
+    "slug": "electrocardiogram",
+    "description": "Records the heart's electrical activity.",
+    "indications": "Chest pain, palpitations, arrhythmia.",
+    "preparation": "",
+    "risks": "",
+    "recovery": "",
+    "references": "",
+    "status": "published",
+    "diseases": [
+      35,
+      39
+    ]
+  }
+},
+{
+  "model": "catalog.procedure",
+  "pk": 9,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.342Z",
+    "updated_at": "2026-06-25T14:14:29.342Z",
+    "name": "Upper GI Endoscopy",
+    "slug": "upper-gi-endoscopy",
+    "description": "Direct visualisation of upper GI tract.",
+    "indications": "Suspected peptic ulcer, bleeding, reflux.",
+    "preparation": "",
+    "risks": "",
+    "recovery": "",
+    "references": "",
+    "status": "published",
+    "diseases": [
+      58
+    ]
+  }
+},
+{
+  "model": "catalog.procedure",
+  "pk": 10,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.343Z",
+    "updated_at": "2026-06-25T14:14:29.343Z",
+    "name": "Lumbar Puncture",
+    "slug": "lumbar-puncture",
+    "description": "CSF sampling from the lumbar spine.",
+    "indications": "Suspected meningitis or CNS infection.",
+    "preparation": "",
+    "risks": "",
+    "recovery": "",
+    "references": "",
+    "status": "published",
+    "diseases": [
+      57
+    ]
+  }
+},
+{
+  "model": "catalog.procedure",
+  "pk": 11,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.345Z",
+    "updated_at": "2026-06-25T14:14:29.345Z",
+    "name": "Spirometry",
+    "slug": "spirometry",
+    "description": "Measures lung volumes and airflow.",
+    "indications": "Diagnose and grade asthma and COPD.",
+    "preparation": "",
+    "risks": "",
+    "recovery": "",
+    "references": "",
+    "status": "published",
+    "diseases": [
+      36,
+      37
+    ]
+  }
+},
+{
+  "model": "catalog.labtest",
+  "pk": 10,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.321Z",
+    "updated_at": "2026-06-25T14:14:29.322Z",
+    "name": "Full Blood Count",
+    "slug": "full-blood-count",
+    "description": "",
+    "purpose": "Screen for anaemia, infection and clotting cells.",
+    "preparation": "",
+    "normal_range": "Hb 13-17 (M) / 12-15 (F)",
+    "units": "g/dL",
+    "references": "",
+    "status": "published",
+    "diseases": [
+      33,
+      49
+    ]
+  }
+},
+{
+  "model": "catalog.labtest",
+  "pk": 11,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.324Z",
+    "updated_at": "2026-06-25T14:14:29.324Z",
+    "name": "Fasting Blood Glucose",
+    "slug": "fasting-blood-glucose",
+    "description": "",
+    "purpose": "Diagnose and monitor diabetes.",
+    "preparation": "",
+    "normal_range": "3.9-5.5",
+    "units": "mmol/L",
+    "references": "",
+    "status": "published",
+    "diseases": [
+      34
+    ]
+  }
+},
+{
+  "model": "catalog.labtest",
+  "pk": 12,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.325Z",
+    "updated_at": "2026-06-25T14:14:29.325Z",
+    "name": "HbA1c",
+    "slug": "hba1c",
+    "description": "",
+    "purpose": "Assess 3-month average glycaemic control.",
+    "preparation": "",
+    "normal_range": "<5.7",
+    "units": "%",
+    "references": "",
+    "status": "published",
+    "diseases": [
+      34
+    ]
+  }
+},
+{
+  "model": "catalog.labtest",
+  "pk": 13,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.327Z",
+    "updated_at": "2026-06-25T14:14:29.327Z",
+    "name": "Blood Pressure Measurement",
+    "slug": "blood-pressure-measurement",
+    "description": "",
+    "purpose": "Assess arterial pressure.",
+    "preparation": "",
+    "normal_range": "<120/80",
+    "units": "mmHg",
+    "references": "",
+    "status": "published",
+    "diseases": [
+      35
+    ]
+  }
+},
+{
+  "model": "catalog.labtest",
+  "pk": 14,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.328Z",
+    "updated_at": "2026-06-25T14:14:29.328Z",
+    "name": "Sputum AFB Smear",
+    "slug": "sputum-afb-smear",
+    "description": "",
+    "purpose": "Detect acid-fast bacilli for TB.",
+    "preparation": "",
+    "normal_range": "Negative",
+    "units": "",
+    "references": "",
+    "status": "published",
+    "diseases": [
+      32
+    ]
+  }
+},
+{
+  "model": "catalog.labtest",
+  "pk": 15,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.331Z",
+    "updated_at": "2026-06-25T14:14:29.331Z",
+    "name": "Malaria Rapid Diagnostic Test",
+    "slug": "malaria-rdt",
+    "description": "",
+    "purpose": "Detect Plasmodium antigen.",
+    "preparation": "",
+    "normal_range": "Negative",
+    "units": "",
+    "references": "",
+    "status": "published",
+    "diseases": [
+      33
+    ]
+  }
+},
+{
+  "model": "catalog.labtest",
+  "pk": 16,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.333Z",
+    "updated_at": "2026-06-25T14:14:29.333Z",
+    "name": "Serum Creatinine",
+    "slug": "serum-creatinine",
+    "description": "",
+    "purpose": "Assess renal function.",
+    "preparation": "",
+    "normal_range": "60-110",
+    "units": "umol/L",
+    "references": "",
+    "status": "published",
+    "diseases": [
+      53
+    ]
+  }
+},
+{
+  "model": "catalog.labtest",
+  "pk": 17,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.335Z",
+    "updated_at": "2026-06-25T14:14:29.335Z",
+    "name": "Thyroid Stimulating Hormone",
+    "slug": "tsh",
+    "description": "",
+    "purpose": "Assess thyroid function.",
+    "preparation": "",
+    "normal_range": "0.4-4.0",
+    "units": "mIU/L",
+    "references": "",
+    "status": "published",
+    "diseases": [
+      54
+    ]
+  }
+},
+{
+  "model": "catalog.article",
+  "pk": 7,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.347Z",
+    "updated_at": "2026-06-25T14:14:29.347Z",
+    "title": "Understanding Hypertension",
+    "slug": "understanding-hypertension",
+    "summary": "Why blood pressure matters and how it is managed.",
+    "body": "Most hypertension is symptomless; regular measurement and adherence to medication and lifestyle change prevent stroke, heart and kidney disease.",
+    "references": "",
+    "status": "published",
+    "diseases": [
+      35
+    ],
+    "medications": [
+      43,
+      44
+    ]
+  }
+},
+{
+  "model": "catalog.article",
+  "pk": 8,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.351Z",
+    "updated_at": "2026-06-25T14:14:29.351Z",
+    "title": "Living with Type 2 Diabetes",
+    "slug": "living-with-type-2-diabetes",
+    "summary": "Daily management, diet and monitoring.",
+    "body": "Consistent glucose control through diet, activity and medication prevents long-term complications affecting eyes, nerves and kidneys.",
+    "references": "",
+    "status": "published",
+    "diseases": [
+      34
+    ],
+    "medications": [
+      40
+    ]
+  }
+},
+{
+  "model": "catalog.article",
+  "pk": 9,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.354Z",
+    "updated_at": "2026-06-25T14:14:29.354Z",
+    "title": "Recognising an Asthma Attack",
+    "slug": "recognising-an-asthma-attack",
+    "summary": "Warning signs and reliever-inhaler use.",
+    "body": "Increasing breathlessness, wheeze and reliever use signal worsening asthma; seek urgent help when a reliever no longer controls symptoms.",
+    "references": "",
+    "status": "published",
+    "diseases": [
+      36
+    ],
+    "medications": [
+      50
+    ]
+  }
+},
+{
+  "model": "catalog.article",
+  "pk": 10,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.356Z",
+    "updated_at": "2026-06-25T14:14:29.356Z",
+    "title": "Preventing Malaria",
+    "slug": "preventing-malaria",
+    "summary": "Bite avoidance, prophylaxis and early treatment.",
+    "body": "Insecticide-treated nets, indoor spraying and prompt testing of any fever in endemic areas reduce malaria deaths.",
+    "references": "",
+    "status": "published",
+    "diseases": [
+      33
+    ],
+    "medications": [
+      54
+    ]
+  }
+},
+{
+  "model": "catalog.article",
+  "pk": 11,
+  "fields": {
+    "tenant": null,
+    "created_at": "2026-06-25T14:14:29.358Z",
+    "updated_at": "2026-06-25T14:14:29.358Z",
+    "title": "Completing TB Treatment",
+    "slug": "completing-tb-treatment",
+    "summary": "Why the full course matters.",
+    "body": "Tuberculosis needs months of combination therapy; stopping early drives drug resistance and relapse. Directly observed therapy improves cure rates.",
+    "references": "",
+    "status": "published",
+    "diseases": [
+      32
+    ],
+    "medications": [
+      55,
+      56
+    ]
+  }
+},
+{
+  "model": "governance.runtimeconfig",
+  "pk": 1,
+  "fields": {
+    "mode": "dev",
+    "updated_at": "2026-06-26T17:01:02.874Z"
+  }
+}
+]
