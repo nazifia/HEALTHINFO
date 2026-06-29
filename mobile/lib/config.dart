@@ -38,13 +38,3 @@ Future<void> setTenant(String slug) async {
 // keep it short. Override: --dart-define=IDLE_TIMEOUT_MINUTES=10
 const int _idleMinutes = int.fromEnvironment('IDLE_TIMEOUT_MINUTES', defaultValue: 5);
 const Duration idleTimeout = Duration(minutes: _idleMinutes);
-
-// Direct APK download shown to web visitors. Firebase's free (Spark) plan
-// forbids hosting .apk, so the file lives on GitHub Releases. Upload the built
-// APK as an asset named `health-info.apk` on a release; this "latest" URL then
-// always points at the newest one. Override if hosted elsewhere:
-//   flutter build web --dart-define=APP_DOWNLOAD_URL=https://cdn.example.com/app.apk
-const String appDownloadUrl = String.fromEnvironment(
-  'APP_DOWNLOAD_URL',
-  defaultValue: 'https://github.com/nazifia/HEALTHINFO/releases/latest/download/health-info.apk',
-);
