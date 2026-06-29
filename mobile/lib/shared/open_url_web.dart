@@ -5,11 +5,12 @@ import 'dart:html' as html;
 bool get isAndroidWeb =>
     html.window.navigator.userAgent.toLowerCase().contains('android');
 
-// Anchor with `download` so the APK saves to disk instead of the browser
-// trying to navigate to / render it.
+// Anchor with an explicit `.apk` download name so Android saves it and the
+// system installer recognizes it on tap. (The web can't trigger the install
+// itself — Android blocks that; the user taps the downloaded file.)
 void openUrl(String url) {
+  final name = url.split('/').last.split('?').first;
   html.AnchorElement(href: url)
-    ..download = ''
-    ..target = '_blank'
+    ..download = name.endsWith('.apk') ? name : 'health-info.apk'
     ..click();
 }
