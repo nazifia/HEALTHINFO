@@ -1,3 +1,10 @@
 import 'dart:html' as html;
 
-void openUrl(String url) => html.window.open(url, '_blank');
+// Anchor with `download` so the APK saves to disk instead of the browser
+// trying to navigate to / render it.
+void openUrl(String url) {
+  html.AnchorElement(href: url)
+    ..download = ''
+    ..target = '_blank'
+    ..click();
+}
