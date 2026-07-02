@@ -28,6 +28,49 @@ function fmtVal(v) {
 
 const label = (k) => k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
+/* ------------------------------------------------------------------ theme */
+
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  const b = $('#theme-toggle');
+  if (b) { b.textContent = t === 'dark' ? '☀' : '☾'; b.title = t === 'dark' ? 'Light mode' : 'Dark mode'; }
+}
+applyTheme(localStorage.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+
+/* Inline 24px stroke icons (feather-style). One <svg> wrapper, path data only. */
+const ICONS = {
+  home: '<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>',
+  zap: '<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>',
+  chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  activity: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+  pill: '<path d="M10.5 20.5l-7-7a5 5 0 0 1 7-7l7 7a5 5 0 0 1-7 7z"/><line x1="8.5" y1="8.5" x2="15.5" y2="15.5"/>',
+  flag: '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>',
+  book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
+  file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>',
+  chart: '<line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/>',
+  users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+  grid: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
+};
+const ico = (name) => ICONS[name]
+  ? `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`
+  : '';
+
+/* Status-ish values render as tinted pills in tables and detail lists. */
+const PILL_COLORS = {
+  draft: 'gray', review: 'amber', approved: 'blue', published: 'green', archived: 'gray',
+  active: 'green', pending: 'amber', suspended: 'red', rejected: 'red', trial: 'amber', expired: 'red',
+  mild: 'green', moderate: 'amber', severe: 'red', critical: 'red', high: 'red', medium: 'amber', low: 'green',
+};
+const PILL_KEYS = /(^|_)(status|severity|priority|state)$/;
+function cellHtml(key, v) {
+  if (PILL_KEYS.test(key) && typeof v === 'string' && v) {
+    return `<span class="pill pill-${PILL_COLORS[v.toLowerCase()] || 'gray'}">${esc(label(v))}</span>`;
+  }
+  return esc(fmtVal(v));
+}
+
 /* ---------------------------------------------------------------- outbox */
 
 /* Report submissions made while offline queue here and flush when
@@ -145,26 +188,28 @@ const PLATFORM = [
 let ME = null; // current user object
 
 function navHtml() {
+  const iconFor = (slug, r) => slug === 'users' ? 'users' : slug === 'tenants' ? 'shield'
+    : r.group === 'Reports' ? 'file' : 'book';
   const groups = {};
   for (const [slug, r] of Object.entries(RESOURCES)) {
     if (r.superOnly && ME?.role !== 'super_admin') continue;
     if (slug === 'users' && !['super_admin', 'tenant_admin'].includes(ME?.role)) continue;
-    (groups[r.group] ||= []).push(`<a href="#/r/${slug}" data-route="/r/${slug}">${esc(r.title)}</a>`);
+    (groups[r.group] ||= []).push(`<a href="#/r/${slug}" data-route="/r/${slug}">${ico(iconFor(slug, r))}${esc(r.title)}</a>`);
   }
   const tools = [
-    '<a href="#/search" data-route="/search">Search</a>',
-    '<a href="#/semantic" data-route="/semantic">Semantic Search</a>',
-    '<a href="#/ask" data-route="/ask">Ask AI</a>',
-    '<a href="#/differential" data-route="/differential">Differential Dx</a>',
-    '<a href="#/interaction-check" data-route="/interaction-check">Interaction Check</a>',
-    '<a href="#/notifiable" data-route="/notifiable">Notifiable Cases</a>',
+    `<a href="#/search" data-route="/search">${ico('search')}Search</a>`,
+    `<a href="#/semantic" data-route="/semantic">${ico('grid')}Semantic Search</a>`,
+    `<a href="#/ask" data-route="/ask">${ico('chat')}Ask AI</a>`,
+    `<a href="#/differential" data-route="/differential">${ico('activity')}Differential Dx</a>`,
+    `<a href="#/interaction-check" data-route="/interaction-check">${ico('pill')}Interaction Check</a>`,
+    `<a href="#/notifiable" data-route="/notifiable">${ico('flag')}Notifiable Cases</a>`,
   ];
-  let html = `<a href="#/" data-route="/" class="nav-home">Home</a>`;
+  let html = `<a href="#/" data-route="/" class="nav-home">${ico('home')}Home</a>`;
   html += `<div class="nav-group"><h4>Tools</h4>${tools.join('')}</div>`;
   html += `<div class="nav-group"><h4>Catalog</h4>${groups.Catalog.join('')}</div>`;
   html += `<div class="nav-group"><h4>Reports</h4>${groups.Reports.join('')}</div>`;
-  html += `<div class="nav-group"><h4>Analytics</h4><a href="#/analytics" data-route="/analytics">Tenant Analytics</a>`;
-  if (ME?.role === 'super_admin') html += `<a href="#/platform" data-route="/platform">Platform Analytics</a>`;
+  html += `<div class="nav-group"><h4>Analytics</h4><a href="#/analytics" data-route="/analytics">${ico('chart')}Tenant Analytics</a>`;
+  if (ME?.role === 'super_admin') html += `<a href="#/platform" data-route="/platform">${ico('chart')}Platform Analytics</a>`;
   html += `</div>`;
   if (groups.Admin?.length) html += `<div class="nav-group"><h4>Admin</h4>${groups.Admin.join('')}</div>`;
   return html;
@@ -206,12 +251,15 @@ function errorBox(e) {
 
 /* ----------------------------------------------------------------- charts */
 
-// Chart chrome + categorical slots (fixed order, validated: worst adjacent
-// CVD dE 24.2 on white). Aqua/yellow sit under 3:1 contrast — relief rule is
-// satisfied by bar-tip value labels and the table under every chart.
+// Chart chrome + categorical slots as CSS vars so charts re-theme live
+// (hexes live in styles.css :root / [data-theme="dark"]). Both modes
+// validated: light worst adjacent CVD dE 24.2; dark 10.3 (floor band) —
+// relief rule satisfied by bar-tip value labels and the table under
+// every chart.
 const VIZ = {
-  series: ['#2a78d6', '#1baf7a', '#eda100', '#008300'],
-  grid: '#e1e0d9', axis: '#c3c2b7', muted: '#898781', ink: '#1f2937', surface: '#ffffff',
+  series: ['var(--viz-s1)', 'var(--viz-s2)', 'var(--viz-s3)', 'var(--viz-s4)'],
+  grid: 'var(--viz-grid)', axis: 'var(--viz-axis)', muted: 'var(--viz-muted)',
+  ink: 'var(--viz-ink)', surface: 'var(--viz-surface)',
 };
 
 // An array of objects is chartable when it has exactly one label column and
@@ -423,7 +471,7 @@ function tableHtml(rows, linkFor) {
   const cols = pickColumns(rows[0]);
   const head = cols.map((c) => `<th>${esc(label(c))}</th>`).join('');
   const body = rows.map((r, i) => {
-    const cells = cols.map((c) => `<td>${esc(fmtVal(r[c]))}</td>`).join('');
+    const cells = cols.map((c) => `<td>${cellHtml(c, r[c])}</td>`).join('');
     const href = linkFor && linkFor(r);
     return href ? `<tr class="rowlink" onclick="location.hash='${href}'">${cells}</tr>` : `<tr>${cells}</tr>`;
   }).join('');
@@ -554,22 +602,46 @@ async function viewProfile() {
 
 async function viewHome() {
   if (!await ensureChrome()) return;
+  spinner();
   const tiles = [
-    ['#/search', 'Global Search', 'Find diseases, drugs, procedures, tests, articles'],
-    ['#/ask', 'Ask AI', 'RAG answers grounded in the catalog'],
-    ['#/differential', 'Differential Dx', 'Rank diseases by matched symptoms'],
-    ['#/interaction-check', 'Interaction Check', 'Conflicts among a set of medications'],
-    ['#/r/case-reports', 'Case Reports', 'File and browse case reports'],
-    ['#/analytics', 'Analytics', 'Tenant dashboards and stats'],
+    ['#/search', 'search', 'Global Search', 'Find diseases, drugs, procedures, tests, articles'],
+    ['#/ask', 'chat', 'Ask AI', 'RAG answers grounded in the catalog'],
+    ['#/differential', 'activity', 'Differential Dx', 'Rank diseases by matched symptoms'],
+    ['#/interaction-check', 'pill', 'Interaction Check', 'Conflicts among a set of medications'],
+    ['#/r/case-reports', 'file', 'Case Reports', 'File and browse case reports'],
+    ['#/analytics', 'chart', 'Analytics', 'Tenant dashboards and stats'],
   ];
-  if (ME.role === 'super_admin') tiles.push(['#/platform', 'Platform', 'Cross-tenant analytics'], ['#/r/tenants', 'Tenants', 'Approve and manage organizations']);
-  let health = '';
-  try { const h = await Api.public('/api/health/'); health = `API: ${h.status} · DB: ${h.db}`; }
-  catch { health = 'API unreachable'; }
+  if (ME.role === 'super_admin') tiles.push(['#/platform', 'chart', 'Platform', 'Cross-tenant analytics'], ['#/r/tenants', 'shield', 'Tenants', 'Approve and manage organizations']);
+  const [health, dash] = await Promise.all([
+    Api.public('/api/health/').then((h) => `API: ${h.status} · DB: ${h.db}`, () => 'API unreachable'),
+    Api.get('/api/analytics/tenant/').catch(() => null),
+  ]);
+  let dashHtml = '';
+  if (dash) {
+    const kpis = [
+      ['Searches (Total)', dash.total_searches],
+      ['Active Users (30d)', dash.active_users],
+      ['AI Answers Rated Up', dash.ai_feedback?.up],
+      ['AI Answers Rated Down', dash.ai_feedback?.down],
+    ].filter(([, v]) => v !== undefined);
+    dashHtml = `<div class="tiles">${kpis.map(([k, v]) =>
+      `<div class="tile kpi-tile"><span class="tile-label">${esc(k)}</span><span class="tile-val">${esc(fmtVal(v))}</span></div>`).join('')}</div>`;
+    const panel = (title, rows) => {
+      const c = Array.isArray(rows) && rows.length ? chartable(rows) : null;
+      return c ? `<section><h3>${esc(title)}</h3>${chartHtml(rows, c)}</section>` : '';
+    };
+    const panels = panel('Search Trend (30d)', dash.search_trend) +
+      panel('Top Searches', dash.top_searches) +
+      panel('Most Viewed Diseases', dash.popular_diseases) +
+      panel('Most Viewed Medications', dash.popular_medications);
+    if (panels) dashHtml += `<div class="grid-2">${panels}</div>`;
+  }
   render(`<h2>Welcome${ME.username ? ', ' + esc(ME.username) : ''}</h2>
-    <p class="muted">${esc(Api.base)} · ${esc(health)}</p>
-    <div class="tiles home-tiles">${tiles.map(([href, t, d]) =>
-      `<a class="tile linktile" href="${href}"><span class="tile-label">${esc(t)}</span><span class="muted">${esc(d)}</span></a>`).join('')}
+    <p class="page-sub">${esc(Api.base)} · ${esc(health)}</p>
+    ${dashHtml}
+    <h3>Quick Actions</h3>
+    <div class="tiles home-tiles">${tiles.map(([href, icon, t, d]) =>
+      `<a class="tile linktile" href="${href}"><span class="tile-label">${ico(icon)}${esc(t)}</span><span class="muted">${esc(d)}</span></a>`).join('')}
     </div>`);
 }
 
@@ -617,7 +689,7 @@ async function viewList(slug) {
 
 function dlHtml(obj) {
   return `<dl class="detail">${Object.entries(obj).map(([k, v]) =>
-    `<dt>${esc(label(k))}</dt><dd>${esc(fmtVal(v))}</dd>`).join('')}</dl>`;
+    `<dt>${esc(label(k))}</dt><dd>${cellHtml(k, v)}</dd>`).join('')}</dl>`;
 }
 
 async function viewDetail(slug, id) {
@@ -992,7 +1064,7 @@ async function viewGraph(type, id) {
 
 function statIndex(title, registry, prefix) {
   return `<h2>${esc(title)}</h2><div class="tiles home-tiles">` +
-    registry.map((m) => `<a class="tile linktile" href="#${prefix}/${m.key}"><span class="tile-label">${esc(m.label)}</span></a>`).join('') +
+    registry.map((m) => `<a class="tile linktile" href="#${prefix}/${m.key}"><span class="tile-label">${ico('chart')}${esc(m.label)}</span></a>`).join('') +
     '</div>';
 }
 
@@ -1073,5 +1145,10 @@ function route() {
 
 window.addEventListener('hashchange', () => { vizTip().hidden = true; route(); });
 $('#nav-toggle').onclick = () => $('#sidebar').classList.toggle('open');
+$('#theme-toggle').onclick = () => {
+  const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  localStorage.theme = t;
+  applyTheme(t);
+};
 route();
 Outbox.flush(); // send anything queued from a previous offline session
