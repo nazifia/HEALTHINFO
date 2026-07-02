@@ -1,5 +1,6 @@
 """Keep embeddings in sync with content. Enqueued on commit so the worker only
 ever sees rows that actually landed; under test rollback these never fire."""
+import sys
 from django.db import transaction
 from django.db.models.signals import post_delete, post_save
 
@@ -12,13 +13,20 @@ WORKFLOW = {Disease, Medication}
 
 
 def _enqueue(instance, *, deleted):
+    # Don't queue Celery tasks while loading fixtures
+    if "loaddata" in sys.argv:
+        return
+
     label = instance._meta.app_label
     model = instance._meta.model_name
     pk = instance.pk
+
     if deleted or (type(instance) in WORKFLOW and instance.status != "published"):
         transaction.on_commit(lambda: remove_embedding.delay(label, model, pk))
     else:
         transaction.on_commit(lambda: embed_object.delay(label, model, pk))
+
+
 
 
 def _on_save(sender, instance, **kwargs):
