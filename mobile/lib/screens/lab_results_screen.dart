@@ -4,6 +4,8 @@ import '../main.dart';
 import '../nigeria.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
+import '../shared/widgets/stats_kit.dart';
+import '../shared/widgets/bar_chart.dart';
 import 'report_scaffold.dart';
 
 /// Laboratory results — GET/POST /api/lab-results/.
@@ -21,8 +23,77 @@ class LabResultsScreen extends StatelessWidget {
       emptyTitle: 'No lab results yet',
       emptyMessage: 'Tap "Add result" to file the first one.',
       savedMessage: 'Result saved.',
+      header: (items) => _Header(items: items),
       card: (row, reload, edit) => _Card(row: row, reload: reload, edit: edit),
       form: (existing) => _Form(existing: existing),
+    );
+  }
+}
+
+/// Chart summary: totals + a donut of the AMR resistant share + flag breakdown.
+class _Header extends StatelessWidget {
+  final List<Map<String, dynamic>> items;
+  const _Header({required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    final byFlag = countBy(items, 'flag');
+    final critical = countEq(items, 'flag', 'critical');
+    final tested = countEq(items, 'susceptibility', 'susceptible') +
+        countEq(items, 'susceptibility', 'intermediate') +
+        countEq(items, 'susceptibility', 'resistant');
+    final resistant = countEq(items, 'susceptibility', 'resistant');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Column(
+        children: [
+          StatsHeader(
+            icon: Icons.science_outlined,
+            title: 'Lab results',
+            subtitle: '${items.length} result${items.length == 1 ? '' : 's'} filed',
+            color: EnhancedTheme.accentCyan,
+          ),
+          KpiRow(tiles: [
+            KpiTile(
+                icon: Icons.science_outlined,
+                label: 'Results',
+                value: '${items.length}',
+                color: EnhancedTheme.accentCyan),
+            KpiTile(
+                icon: Icons.priority_high_rounded,
+                label: 'Critical',
+                value: '$critical',
+                color: EnhancedTheme.errorRed),
+            KpiTile(
+                icon: Icons.coronavirus_outlined,
+                label: 'AMR tests',
+                value: '$tested',
+                color: EnhancedTheme.accentOrange),
+          ]),
+          const SizedBox(height: 10),
+          if (tested > 0)
+            StatSection(
+              icon: Icons.coronavirus_outlined,
+              heading: 'Antimicrobial resistance',
+              color: EnhancedTheme.errorRed,
+              child: Center(
+                child: DonutChart(
+                  value: resistant,
+                  total: tested,
+                  color: EnhancedTheme.errorRed,
+                  centerLabel: pctOf(tested == 0 ? null : resistant / tested),
+                  centerSub: 'resistant',
+                ),
+              ),
+            ),
+          if (byFlag.isNotEmpty)
+            StatSection(
+              icon: Icons.bar_chart_rounded,
+              heading: 'Results by flag',
+              child: MiniBarChart(rows: byFlag),
+            ),
+        ],
+      ),
     );
   }
 }

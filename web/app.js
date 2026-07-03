@@ -645,6 +645,82 @@ async function viewHome() {
     </div>`);
 }
 
+/* ----------------------------------------------- report summary (charts) */
+
+// Small tallies over the loaded rows, mirroring the mobile report headers.
+const distinct = (rows, k) =>
+  new Set(rows.map((r) => String(r[k] ?? '').trim()).filter(Boolean)).size;
+const countTrue = (rows, k) => rows.filter((r) => r[k] === true).length;
+const countEq = (rows, k, v) =>
+  rows.filter((r) => String(r[k] ?? '').trim() === v).length;
+const sumOf = (rows, k) => rows.reduce((a, r) => a + (Number(r[k]) || 0), 0);
+
+// Group rows by a string field into chart-shaped objects {key, [outLabel]: n},
+// biggest first. `valKey` sums that field instead of counting rows.
+function groupRows(rows, key, outLabel, { valKey, limit = 8 } = {}) {
+  const m = new Map();
+  for (const r of rows) {
+    const k = String(r[key] ?? '').trim();
+    if (!k) continue;
+    m.set(k, (m.get(k) || 0) + (valKey ? Number(r[valKey]) || 0 : 1));
+  }
+  return [...m.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([k, v]) => ({ [key]: k, [outLabel]: v }));
+}
+
+// Per-resource summary: KPI tiles + breakdown charts, from the current page.
+const REPORT_SUMMARY = {
+  'immunizations': (rows) => ({
+    kpis: [['Doses', rows.length], ['Vaccines', distinct(rows, 'vaccine')], ['States', distinct(rows, 'region')]],
+    charts: [['Doses by vaccine', groupRows(rows, 'vaccine', 'doses')]],
+  }),
+  'lab-results': (rows) => ({
+    kpis: [['Results', rows.length], ['Critical', countEq(rows, 'flag', 'critical')], ['Resistant', countEq(rows, 'susceptibility', 'resistant')]],
+    charts: [['Results by flag', groupRows(rows, 'flag', 'results')]],
+  }),
+  'vital-events': (rows) => ({
+    kpis: [['Births', countEq(rows, 'event_type', 'birth')], ['Deaths', countEq(rows, 'event_type', 'death')], ['Maternal', countTrue(rows, 'maternal_death')], ['Infant', countTrue(rows, 'infant_death')]],
+    charts: [['Deaths by cause', groupRows(rows, 'cause_name', 'deaths')]],
+  }),
+  'stock-reports': (rows) => ({
+    kpis: [['Medications', distinct(rows, 'medication_name')], ['Shortages', countTrue(rows, 'shortage')], ['Units consumed', sumOf(rows, 'consumed')]],
+    charts: [['Most consumed', groupRows(rows, 'medication_name', 'consumed', { valKey: 'consumed' })]],
+  }),
+  'chw-reports': (rows) => ({
+    kpis: [['Reports', rows.length], ['Danger signs', countTrue(rows, 'danger_signs')], ['Referred', countTrue(rows, 'referred')]],
+    charts: [['By report type', groupRows(rows, 'report_type', 'reports')]],
+  }),
+  'facility-metrics': (rows) => ({
+    kpis: [['Snapshots', rows.length], ['Patients treated', sumOf(rows, 'patients_treated')], ['Avg staff', rows.length ? Math.round(sumOf(rows, 'staff_on_duty') / rows.length) : 0]],
+    charts: [],
+  }),
+  'insurance-claims': (rows) => ({
+    kpis: [['Claims', rows.length], ['Total (₦)', sumOf(rows, 'amount')], ['Approved', countEq(rows, 'status', 'approved') + countEq(rows, 'status', 'paid')]],
+    charts: [['By status', groupRows(rows, 'status', 'claims')], ['Top diagnoses', groupRows(rows, 'diagnosis_name', 'claims')]],
+  }),
+  'appointments': (rows) => ({
+    kpis: [['Appointments', rows.length], ['Telemedicine', countEq(rows, 'mode', 'telemedicine')], ['No-shows', countEq(rows, 'status', 'no_show')]],
+    charts: [['By status', groupRows(rows, 'status', 'appts')]],
+  }),
+};
+
+// KPI tiles + any chartable breakdowns. A chart needs ≥2 categories
+// (chartable()'s floor); single-category breakdowns just show the tiles.
+function reportSummaryHtml(slug, rows) {
+  const f = REPORT_SUMMARY[slug];
+  if (!f || !rows.length) return '';
+  const { kpis, charts } = f(rows);
+  const tiles = `<div class="tiles">${kpis.map(([k, v]) =>
+    `<div class="tile kpi-tile"><span class="tile-label">${esc(k)}</span><span class="tile-val">${esc(fmtVal(v))}</span></div>`).join('')}</div>`;
+  const panels = charts.map(([title, data]) => {
+    const c = Array.isArray(data) && data.length ? chartable(data) : null;
+    return c ? `<section><h3>${esc(title)}</h3>${chartHtml(data, c)}</section>` : '';
+  }).join('');
+  return `<div class="report-summary">${tiles}${panels ? `<div class="grid-2">${panels}</div>` : ''}</div>`;
+}
+
 /* -------------------------------------------------- generic resource views */
 
 const listState = {}; // per-resource {page, search} kept across visits
@@ -670,6 +746,7 @@ async function viewList(slug) {
         <input name="q" placeholder="${res.search ? 'Search…' : 'Filter by search…'}" value="${esc(st.search)}">
         <button>Search</button>
       </form>
+      ${res.report ? reportSummaryHtml(slug, rows) : ''}
       ${rows.length ? tableHtml(rows, (r) => `#/r/${slug}/${r.id}`) : '<p class="muted">Nothing here yet.</p>'}
       <div class="pager">
         <button id="prev" ${st.page <= 1 ? 'disabled' : ''}>&larr; Prev</button>

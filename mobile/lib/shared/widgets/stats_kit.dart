@@ -628,3 +628,38 @@ class ComparisonBars extends StatelessWidget {
 }
 
 String pctOf(num? ratio) => ratio == null ? '—' : '${(ratio * 100).round()}%';
+
+/// Tally loaded report rows by a string field into chart rows, sorted
+/// biggest-first and capped at [limit]. Blank/missing values are skipped.
+/// Shared by the report-list summary headers so each stays a few lines.
+List<({String label, num value})> countBy(
+  List<Map<String, dynamic>> items,
+  String key, {
+  int limit = 6,
+}) {
+  final counts = <String, num>{};
+  for (final r in items) {
+    final k = '${r[key] ?? ''}'.trim();
+    if (k.isEmpty) continue;
+    counts[k] = (counts[k] ?? 0) + 1;
+  }
+  final entries = counts.entries.toList()
+    ..sort((a, b) => b.value.compareTo(a.value));
+  return [for (final e in entries.take(limit)) (label: e.key, value: e.value)];
+}
+
+/// Number of distinct non-blank values of [key] across the loaded rows.
+int distinctCount(List<Map<String, dynamic>> items, String key) => items
+    .map((r) => '${r[key] ?? ''}'.trim())
+    .where((s) => s.isNotEmpty)
+    .toSet()
+    .length;
+
+/// Count rows where [key] equals the boolean `true`. For flag fields like
+/// shortage / danger_signs / maternal_death.
+int countTrue(List<Map<String, dynamic>> items, String key) =>
+    items.where((r) => r[key] == true).length;
+
+/// Count rows whose [key] string equals [value].
+int countEq(List<Map<String, dynamic>> items, String key, String value) =>
+    items.where((r) => '${r[key] ?? ''}'.trim() == value).length;

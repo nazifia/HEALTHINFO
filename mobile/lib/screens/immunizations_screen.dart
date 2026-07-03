@@ -4,6 +4,8 @@ import '../main.dart';
 import '../nigeria.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
+import '../shared/widgets/stats_kit.dart';
+import '../shared/widgets/bar_chart.dart';
 import 'report_scaffold.dart';
 
 /// Immunization registry — GET/POST /api/immunizations/.
@@ -21,8 +23,57 @@ class ImmunizationsScreen extends StatelessWidget {
       emptyTitle: 'No doses recorded yet',
       emptyMessage: 'Tap "Record dose" to add the first one.',
       savedMessage: 'Dose recorded.',
+      header: (items) => _Header(items: items),
       card: (row, reload, edit) => _Card(row: row, reload: reload, edit: edit),
       form: (existing) => _Form(existing: existing),
+    );
+  }
+}
+
+/// Chart summary above the list: totals + doses grouped by vaccine.
+class _Header extends StatelessWidget {
+  final List<Map<String, dynamic>> items;
+  const _Header({required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    final byVaccine = countBy(items, 'vaccine');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Column(
+        children: [
+          StatsHeader(
+            icon: Icons.vaccines_outlined,
+            title: 'Immunizations',
+            subtitle: '${items.length} dose${items.length == 1 ? '' : 's'} recorded',
+            color: EnhancedTheme.primaryTeal,
+          ),
+          KpiRow(tiles: [
+            KpiTile(
+                icon: Icons.vaccines_outlined,
+                label: 'Doses',
+                value: '${items.length}',
+                color: EnhancedTheme.primaryTeal),
+            KpiTile(
+                icon: Icons.category_outlined,
+                label: 'Vaccines',
+                value: '${distinctCount(items, 'vaccine')}',
+                color: EnhancedTheme.accentPurple),
+            KpiTile(
+                icon: Icons.map_outlined,
+                label: 'States',
+                value: '${distinctCount(items, 'region')}',
+                color: EnhancedTheme.accentOrange),
+          ]),
+          const SizedBox(height: 10),
+          if (byVaccine.isNotEmpty)
+            StatSection(
+              icon: Icons.bar_chart_rounded,
+              heading: 'Doses by vaccine',
+              child: MiniBarChart(rows: byVaccine),
+            ),
+        ],
+      ),
     );
   }
 }

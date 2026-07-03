@@ -4,9 +4,14 @@
 'use strict';
 
 const Api = (() => {
-  const DEFAULT_BASE = 'https://healthinfo.pythonanywhere.com';
+  // Served from a dev host → talk to the local Django backend, ignoring any
+  // stale prod base saved in localStorage. Prod build keeps the deployed API.
+  const DEV = ['localhost', '127.0.0.1'].includes(location.hostname);
+  const DEFAULT_BASE = DEV
+    ? `http://${location.hostname}:8000`
+    : 'https://healthinfo.pythonanywhere.com';
 
-  let base = localStorage.getItem('api_base') || DEFAULT_BASE;
+  let base = DEV ? DEFAULT_BASE : (localStorage.getItem('api_base') || DEFAULT_BASE);
   let tenant = localStorage.getItem('tenant_slug') || 'demo';
   let access = localStorage.getItem('access');
   let refresh = localStorage.getItem('refresh');

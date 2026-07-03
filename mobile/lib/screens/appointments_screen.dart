@@ -4,6 +4,8 @@ import '../main.dart';
 import '../nigeria.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
+import '../shared/widgets/stats_kit.dart';
+import '../shared/widgets/bar_chart.dart';
 import 'report_scaffold.dart';
 
 /// Appointments / telemedicine — GET/POST /api/appointments/.
@@ -20,8 +22,74 @@ class AppointmentsScreen extends StatelessWidget {
       emptyTitle: 'No appointments yet',
       emptyMessage: 'Tap "Add appointment" to schedule one.',
       savedMessage: 'Appointment saved.',
+      header: (items) => _Header(items: items),
       card: (row, reload, edit) => _Card(row: row, reload: reload, edit: edit),
       form: (existing) => _Form(existing: existing),
+    );
+  }
+}
+
+/// Chart summary: totals + no-show rate donut + status breakdown.
+class _Header extends StatelessWidget {
+  final List<Map<String, dynamic>> items;
+  const _Header({required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    final tele = countEq(items, 'mode', 'telemedicine');
+    final noShow = countEq(items, 'status', 'no_show');
+    final byStatus = countBy(items, 'status');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Column(
+        children: [
+          StatsHeader(
+            icon: Icons.event_outlined,
+            title: 'Appointments',
+            subtitle: '${items.length} appointment${items.length == 1 ? '' : 's'}',
+            color: EnhancedTheme.accentCyan,
+          ),
+          KpiRow(tiles: [
+            KpiTile(
+                icon: Icons.event_outlined,
+                label: 'Total',
+                value: '${items.length}',
+                color: EnhancedTheme.accentCyan),
+            KpiTile(
+                icon: Icons.videocam_outlined,
+                label: 'Telemedicine',
+                value: '$tele',
+                color: EnhancedTheme.accentPurple),
+            KpiTile(
+                icon: Icons.person_off_outlined,
+                label: 'No-shows',
+                value: '$noShow',
+                color: EnhancedTheme.errorRed),
+          ]),
+          const SizedBox(height: 10),
+          if (items.isNotEmpty)
+            StatSection(
+              icon: Icons.person_off_outlined,
+              heading: 'No-show rate',
+              color: EnhancedTheme.errorRed,
+              child: Center(
+                child: DonutChart(
+                  value: noShow,
+                  total: items.length,
+                  color: EnhancedTheme.errorRed,
+                  centerLabel: pctOf(noShow / items.length),
+                  centerSub: 'no-show',
+                ),
+              ),
+            ),
+          if (byStatus.isNotEmpty)
+            StatSection(
+              icon: Icons.bar_chart_rounded,
+              heading: 'By status',
+              child: MiniBarChart(rows: byStatus),
+            ),
+        ],
+      ),
     );
   }
 }

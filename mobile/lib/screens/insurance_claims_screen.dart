@@ -4,6 +4,8 @@ import '../main.dart';
 import '../nigeria.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
+import '../shared/widgets/stats_kit.dart';
+import '../shared/widgets/bar_chart.dart';
 import 'report_scaffold.dart';
 
 /// Health-insurance claims — GET/POST /api/insurance-claims/.
@@ -20,8 +22,82 @@ class InsuranceClaimsScreen extends StatelessWidget {
       emptyTitle: 'No claims yet',
       emptyMessage: 'Tap "Add claim" to file the first one.',
       savedMessage: 'Claim saved.',
+      header: (items) => _Header(items: items),
       card: (row, reload, edit) => _Card(row: row, reload: reload, edit: edit),
       form: (existing) => _Form(existing: existing),
+    );
+  }
+}
+
+/// Chart summary: totals + approval-rate donut + status & diagnosis breakdowns.
+class _Header extends StatelessWidget {
+  final List<Map<String, dynamic>> items;
+  const _Header({required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    final approved =
+        countEq(items, 'status', 'approved') + countEq(items, 'status', 'paid');
+    final totalAmount = items.fold<num>(
+        0, (a, r) => a + ((r['amount'] as num?) ?? 0));
+    final byStatus = countBy(items, 'status');
+    final byDx = countBy(items, 'diagnosis_name');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Column(
+        children: [
+          StatsHeader(
+            icon: Icons.receipt_long_outlined,
+            title: 'Insurance claims',
+            subtitle: '${items.length} claim${items.length == 1 ? '' : 's'}',
+            color: EnhancedTheme.infoBlue,
+          ),
+          KpiRow(tiles: [
+            KpiTile(
+                icon: Icons.receipt_long_outlined,
+                label: 'Claims',
+                value: '${items.length}',
+                color: EnhancedTheme.infoBlue),
+            KpiTile(
+                icon: Icons.payments_outlined,
+                label: 'Total (₦)',
+                value: '$totalAmount',
+                color: EnhancedTheme.successGreen),
+            KpiTile(
+                icon: Icons.verified_outlined,
+                label: 'Approved',
+                value: '$approved',
+                color: EnhancedTheme.primaryTeal),
+          ]),
+          const SizedBox(height: 10),
+          if (items.isNotEmpty)
+            StatSection(
+              icon: Icons.verified_outlined,
+              heading: 'Approval rate',
+              child: Center(
+                child: DonutChart(
+                  value: approved,
+                  total: items.length,
+                  centerLabel: pctOf(approved / items.length),
+                  centerSub: 'approved',
+                ),
+              ),
+            ),
+          if (byStatus.isNotEmpty)
+            StatSection(
+              icon: Icons.bar_chart_rounded,
+              heading: 'By status',
+              child: MiniBarChart(rows: byStatus),
+            ),
+          if (byDx.isNotEmpty)
+            StatSection(
+              icon: Icons.coronavirus_outlined,
+              heading: 'Top diagnoses',
+              color: EnhancedTheme.accentOrange,
+              child: MiniBarChart(rows: byDx),
+            ),
+        ],
+      ),
     );
   }
 }

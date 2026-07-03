@@ -4,6 +4,8 @@ import '../main.dart';
 import '../nigeria.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
+import '../shared/widgets/stats_kit.dart';
+import '../shared/widgets/bar_chart.dart';
 import 'report_scaffold.dart';
 
 /// Pharmacy stock & usage — GET/POST /api/stock-reports/.
@@ -21,8 +23,85 @@ class StockReportsScreen extends StatelessWidget {
       emptyTitle: 'No stock reports yet',
       emptyMessage: 'Tap "Add snapshot" to record stock levels.',
       savedMessage: 'Snapshot saved.',
+      header: (items) => _Header(items: items),
       card: (row, reload, edit) => _Card(row: row, reload: reload, edit: edit),
       form: (existing) => _Form(existing: existing),
+    );
+  }
+}
+
+/// Chart summary: totals + shortage share donut + most-consumed medications.
+class _Header extends StatelessWidget {
+  final List<Map<String, dynamic>> items;
+  const _Header({required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    final shortages = countTrue(items, 'shortage');
+    // Sum consumed units per medication, biggest 6.
+    final consumed = <String, num>{};
+    for (final r in items) {
+      final med = '${r['medication_name'] ?? ''}'.trim();
+      if (med.isEmpty) continue;
+      consumed[med] = (consumed[med] ?? 0) + ((r['consumed'] as num?) ?? 0);
+    }
+    final topConsumed = consumed.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final totalConsumed = consumed.values.fold<num>(0, (a, b) => a + b);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Column(
+        children: [
+          StatsHeader(
+            icon: Icons.inventory_2_outlined,
+            title: 'Pharmacy stock',
+            subtitle: '${items.length} snapshot${items.length == 1 ? '' : 's'}',
+            color: EnhancedTheme.accentOrange,
+          ),
+          KpiRow(tiles: [
+            KpiTile(
+                icon: Icons.medication_outlined,
+                label: 'Medications',
+                value: '${distinctCount(items, 'medication_name')}',
+                color: EnhancedTheme.primaryTeal),
+            KpiTile(
+                icon: Icons.warning_amber_rounded,
+                label: 'Shortages',
+                value: '$shortages',
+                color: EnhancedTheme.errorRed),
+            KpiTile(
+                icon: Icons.local_pharmacy_outlined,
+                label: 'Units consumed',
+                value: '$totalConsumed',
+                color: EnhancedTheme.accentOrange),
+          ]),
+          const SizedBox(height: 10),
+          if (items.isNotEmpty)
+            StatSection(
+              icon: Icons.warning_amber_rounded,
+              heading: 'Shortage share',
+              color: EnhancedTheme.errorRed,
+              child: Center(
+                child: DonutChart(
+                  value: shortages,
+                  total: items.length,
+                  color: EnhancedTheme.errorRed,
+                  centerLabel: '$shortages',
+                  centerSub: 'in shortage',
+                ),
+              ),
+            ),
+          if (topConsumed.isNotEmpty)
+            StatSection(
+              icon: Icons.bar_chart_rounded,
+              heading: 'Most consumed',
+              color: EnhancedTheme.accentOrange,
+              child: MiniBarChart(rows: [
+                for (final e in topConsumed.take(6)) (label: e.key, value: e.value),
+              ]),
+            ),
+        ],
+      ),
     );
   }
 }
