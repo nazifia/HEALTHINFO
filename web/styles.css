@@ -193,6 +193,7 @@ tr.rowlink:hover { background: var(--brand-soft); }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
 .grid-2 > section { min-width: 0; }
 .grid-2 h3 { margin-top: 8px; }
+.report-summary { margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
 
 dl.detail { display: grid; grid-template-columns: minmax(140px, max-content) 1fr; gap: 8px 24px; margin: 0; }
 dl.detail dt { color: var(--muted); font-size: 13px; padding-top: 2px; }

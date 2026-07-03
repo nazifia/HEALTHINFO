@@ -7,9 +7,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 // local dev or a real device:
 //   flutter run --dart-define=API_BASE=http://localhost:8000
 const String _apiBaseOverride = String.fromEnvironment('API_BASE');
-final String apiBase = _apiBaseOverride.isNotEmpty
-    ? _apiBaseOverride
-    : (kIsWeb ? 'https://healthinfo.pythonanywhere.com' : 'http://10.0.2.2:8000');
+
+String _defaultApiBase() {
+  if (_apiBaseOverride.isNotEmpty) return _apiBaseOverride;
+  if (kIsWeb) {
+    // Served from a dev host → local backend; deployed host → prod API.
+    final host = Uri.base.host;
+    if (host == 'localhost' || host == '127.0.0.1') return 'http://$host:8000';
+    return 'https://healthinfo.pythonanywhere.com';
+  }
+  return 'http://10.0.2.2:8000'; // Android emulator alias for the host machine
+}
+
+final String apiBase = _defaultApiBase();
 
 // Tenant slug sent as X-Tenant-ID header (see apps/tenants/middleware.py).
 // Runtime value: the user picks their organization at login / onboarding, so a

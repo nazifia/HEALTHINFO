@@ -4,6 +4,8 @@ import '../main.dart';
 import '../nigeria.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
+import '../shared/widgets/stats_kit.dart';
+import '../shared/widgets/bar_chart.dart';
 import 'report_scaffold.dart';
 
 /// Vital registration — GET/POST /api/vital-events/.
@@ -21,8 +23,74 @@ class VitalEventsScreen extends StatelessWidget {
       emptyTitle: 'No vital events yet',
       emptyMessage: 'Tap "Record event" to register a birth or death.',
       savedMessage: 'Event recorded.',
+      header: (items) => _Header(items: items),
       card: (row, reload, edit) => _Card(row: row, reload: reload, edit: edit),
       form: (existing) => _Form(existing: existing),
+    );
+  }
+}
+
+/// Chart summary: births vs deaths bars + mortality-flag totals + causes.
+class _Header extends StatelessWidget {
+  final List<Map<String, dynamic>> items;
+  const _Header({required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    final births = countEq(items, 'event_type', 'birth');
+    final deaths = countEq(items, 'event_type', 'death');
+    final byCause = countBy(items, 'cause_name');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Column(
+        children: [
+          StatsHeader(
+            icon: Icons.monitor_heart_outlined,
+            title: 'Vital events',
+            subtitle: '${items.length} event${items.length == 1 ? '' : 's'} registered',
+            color: EnhancedTheme.accentPurple,
+          ),
+          KpiRow(tiles: [
+            KpiTile(
+                icon: Icons.child_friendly_outlined,
+                label: 'Births',
+                value: '$births',
+                color: EnhancedTheme.successGreen),
+            KpiTile(
+                icon: Icons.dangerous_outlined,
+                label: 'Deaths',
+                value: '$deaths',
+                color: EnhancedTheme.errorRed),
+            KpiTile(
+                icon: Icons.pregnant_woman_outlined,
+                label: 'Maternal',
+                value: '${countTrue(items, 'maternal_death')}',
+                color: EnhancedTheme.accentPurple),
+            KpiTile(
+                icon: Icons.baby_changing_station_outlined,
+                label: 'Infant',
+                value: '${countTrue(items, 'infant_death')}',
+                color: EnhancedTheme.accentOrange),
+          ]),
+          const SizedBox(height: 10),
+          StatSection(
+            icon: Icons.bar_chart_rounded,
+            heading: 'Births vs deaths',
+            color: EnhancedTheme.accentPurple,
+            child: MiniBarChart(rows: [
+              (label: 'Births', value: births),
+              (label: 'Deaths', value: deaths),
+            ]),
+          ),
+          if (byCause.isNotEmpty)
+            StatSection(
+              icon: Icons.coronavirus_outlined,
+              heading: 'Deaths by cause',
+              color: EnhancedTheme.errorRed,
+              child: MiniBarChart(rows: byCause),
+            ),
+        ],
+      ),
     );
   }
 }

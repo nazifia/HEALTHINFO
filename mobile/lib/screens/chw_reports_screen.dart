@@ -4,6 +4,8 @@ import '../main.dart';
 import '../nigeria.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
+import '../shared/widgets/stats_kit.dart';
+import '../shared/widgets/bar_chart.dart';
 import 'report_scaffold.dart';
 
 /// Community health worker reports — GET/POST /api/chw-reports/.
@@ -20,8 +22,57 @@ class ChwReportsScreen extends StatelessWidget {
       emptyTitle: 'No field reports yet',
       emptyMessage: 'Tap "Add report" to file the first one.',
       savedMessage: 'Report saved.',
+      header: (items) => _Header(items: items),
       card: (row, reload, edit) => _Card(row: row, reload: reload, edit: edit),
       form: (existing) => _Form(existing: existing),
+    );
+  }
+}
+
+/// Chart summary: totals + danger/referral flags + report-type breakdown.
+class _Header extends StatelessWidget {
+  final List<Map<String, dynamic>> items;
+  const _Header({required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    final byType = countBy(items, 'report_type');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Column(
+        children: [
+          StatsHeader(
+            icon: Icons.groups_outlined,
+            title: 'CHW reports',
+            subtitle: '${items.length} field report${items.length == 1 ? '' : 's'}',
+            color: EnhancedTheme.primaryTeal,
+          ),
+          KpiRow(tiles: [
+            KpiTile(
+                icon: Icons.assignment_ind_outlined,
+                label: 'Reports',
+                value: '${items.length}',
+                color: EnhancedTheme.primaryTeal),
+            KpiTile(
+                icon: Icons.warning_amber_rounded,
+                label: 'Danger signs',
+                value: '${countTrue(items, 'danger_signs')}',
+                color: EnhancedTheme.errorRed),
+            KpiTile(
+                icon: Icons.local_hospital_outlined,
+                label: 'Referred',
+                value: '${countTrue(items, 'referred')}',
+                color: EnhancedTheme.infoBlue),
+          ]),
+          const SizedBox(height: 10),
+          if (byType.isNotEmpty)
+            StatSection(
+              icon: Icons.bar_chart_rounded,
+              heading: 'By report type',
+              child: MiniBarChart(rows: byType),
+            ),
+        ],
+      ),
     );
   }
 }
