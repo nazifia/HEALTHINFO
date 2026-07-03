@@ -489,28 +489,46 @@ function pickColumns(row) {
 
 /* ------------------------------------------------------------- auth views */
 
+// Branded split-screen shell shared by all auth views.
+function authShell(title, subtitle, formHtml, footerHtml) {
+  return `
+  <div class="auth-wrap">
+    <aside class="auth-brand">
+      <div class="auth-logo" aria-hidden="true">
+        <svg viewBox="0 0 64 64" width="40" height="40"><rect width="64" height="64" rx="14" fill="#fff"/><path d="M28 14h8v14h14v8H36v14h-8V36H14v-8h14z" fill="#0f766e"/></svg>
+        <span>HEALTH INFO</span>
+      </div>
+      <div class="auth-brand-copy">
+        <h1>Health data, organized.</h1>
+        <p>Secure records and reporting for your organization.</p>
+      </div>
+    </aside>
+    <div class="card auth-card">
+      <h2>${esc(title)}</h2>
+      ${subtitle ? `<p class="auth-sub muted">${esc(subtitle)}</p>` : ''}
+      ${formHtml}
+      ${footerHtml || ''}
+    </div>
+  </div>`;
+}
+
 function viewLogin() {
   authChrome();
-  render(`
-  <div class="auth-wrap"><div class="card auth-card">
-    <h2>Sign in</h2>
+  render(authShell('Welcome back', 'Sign in to continue', `
     <form id="f">
-      <label>Organization (tenant slug)<input name="tenant" value="${esc(Api.tenant)}" required></label>
       <label>Phone<input name="phone" placeholder="08031234567" required></label>
       <label>Password<input name="password" type="password" required></label>
       <button type="submit">Sign in</button>
-    </form>
+    </form>`, `
     <p class="muted center">No account? <a href="#/register">Register</a> ·
       New organization? <a href="#/onboarding">Sign up</a></p>
     <details><summary class="muted">Advanced</summary>
       <label>API base URL<input id="api-base" value="${esc(Api.base)}"></label>
-    </details>
-  </div></div>`);
+    </details>`));
   $('#api-base').onchange = (e) => { Api.base = e.target.value; };
   $('#f').onsubmit = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
-    Api.tenant = fd.get('tenant');
     try {
       await Api.login(fd.get('phone'), fd.get('password'));
       ME = null;
@@ -521,9 +539,7 @@ function viewLogin() {
 
 function viewRegister() {
   authChrome();
-  render(`
-  <div class="auth-wrap"><div class="card auth-card">
-    <h2>Create account</h2>
+  render(authShell('Create account', 'Join your organization', `
     <form id="f">
       <label>Organization (tenant slug)<input name="tenant" value="${esc(Api.tenant)}" required></label>
       <label>Display name (optional)<input name="username"></label>
@@ -531,9 +547,8 @@ function viewRegister() {
       <label>Email<input name="email" type="email" required></label>
       <label>Password<input name="password" type="password" required></label>
       <button type="submit">Register</button>
-    </form>
-    <p class="muted center"><a href="#/login">Back to sign in</a></p>
-  </div></div>`);
+    </form>`, `
+    <p class="muted center"><a href="#/login">Back to sign in</a></p>`));
   $('#f').onsubmit = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -554,23 +569,20 @@ async function viewOnboarding() {
   try { jurisdictions = await Api.public('/api/auth/onboarding/jurisdictions/'); } catch { /* optional */ }
   const jOpts = jurisdictions.map((j) =>
     `<option value="${j.id}">${esc(j.name)} (level ${esc(j.level)})</option>`).join('');
-  render(`
-  <div class="auth-wrap"><div class="card auth-card">
-    <h2>Register your organization</h2>
+  render(authShell('Register your organization', 'Set up your workspace and admin account', `
     <form id="f">
       <label>Organization name<input name="org_name" required></label>
       <label>Slug (short id, e.g. "my-clinic")<input name="org_slug" required pattern="[a-z0-9-]+"></label>
       <label>Address<input name="org_address" required></label>
       <label>Contact<input name="org_contact" required></label>
       ${jOpts ? `<label>Jurisdiction<select name="jurisdiction"><option value="">—</option>${jOpts}</select></label>` : ''}
-      <h3>Admin account</h3>
+      <h3 class="auth-section">Admin account</h3>
       <label>Phone<input name="phone" placeholder="08031234567" required></label>
       <label>Email<input name="email" type="email" required></label>
       <label>Password<input name="password" type="password" required></label>
       <button type="submit">Create organization</button>
-    </form>
-    <p class="muted center"><a href="#/login">Back to sign in</a></p>
-  </div></div>`);
+    </form>`, `
+    <p class="muted center"><a href="#/login">Back to sign in</a></p>`));
   $('#f').onsubmit = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
