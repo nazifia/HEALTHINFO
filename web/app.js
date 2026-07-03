@@ -521,11 +521,7 @@ function viewLogin() {
       <button type="submit">Sign in</button>
     </form>`, `
     <p class="muted center">No account? <a href="#/register">Register</a> ·
-      New organization? <a href="#/onboarding">Sign up</a></p>
-    <details><summary class="muted">Advanced</summary>
-      <label>API base URL<input id="api-base" value="${esc(Api.base)}"></label>
-    </details>`));
-  $('#api-base').onchange = (e) => { Api.base = e.target.value; };
+      New organization? <a href="#/onboarding">Sign up</a></p>`));
   $('#f').onsubmit = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
