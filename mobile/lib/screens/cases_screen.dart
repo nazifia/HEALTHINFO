@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../main.dart';
 import '../nigeria.dart';
+import 'report_scaffold.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/empty_state.dart';
@@ -243,6 +244,8 @@ class _ReportFormState extends State<_ReportForm> {
   List<Map<String, dynamic>> _medications = [];
   final Set<int> _symptomIds = {};
   final Set<int> _medicationIds = {};
+  int? _patientId;
+  String? _patientLabel;
   bool _saving = false;
   String? _error;
 
@@ -253,6 +256,8 @@ class _ReportFormState extends State<_ReportForm> {
     super.initState();
     final e = widget.existing;
     if (e != null) {
+      _patientId = e['patient'] as int?;
+      _patientLabel = '${e['patient_name'] ?? ''}';
       _notes.text = '${e['notes'] ?? ''}';
       _age.text = '${e['patient_age_group'] ?? ''}';
       if (_severity.contains(e['severity'])) _sev = e['severity'];
@@ -291,6 +296,7 @@ class _ReportFormState extends State<_ReportForm> {
     });
     try {
       final body = {
+        'patient': _patientId,
         'disease': _diseaseId,
         'severity': _sev,
         'outcome': _out,
@@ -395,6 +401,12 @@ class _ReportFormState extends State<_ReportForm> {
                 controller: _age,
                 decoration: const InputDecoration(
                     labelText: 'Patient age group (e.g. 0-5, 60+)'),
+              ),
+              const SizedBox(height: 12),
+              PatientPicker(
+                initialId: _patientId,
+                initialLabel: _patientLabel,
+                onChanged: (id) => _patientId = id,
               ),
               const SizedBox(height: 12),
               RegionPicker(

@@ -25,6 +25,7 @@ def _validate_region(value):
 
 
 class CaseReportSerializer(serializers.ModelSerializer):
+    patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     # reporter + tenant set server-side, never client-supplied. M2M managers are
     # tenant-scoped, so DRF rejects any symptom/medication/disease from another tenant.
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
@@ -39,6 +40,7 @@ class CaseReportSerializer(serializers.ModelSerializer):
 
 
 class AdverseDrugReactionSerializer(serializers.ModelSerializer):
+    patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
     medication_name = serializers.CharField(
         source="medication.generic_name", read_only=True
@@ -54,6 +56,7 @@ class AdverseDrugReactionSerializer(serializers.ModelSerializer):
 
 
 class LabResultSerializer(serializers.ModelSerializer):
+    patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
     lab_test_name = serializers.CharField(source="lab_test.name", read_only=True)
     disease_name = serializers.CharField(source="disease.name", read_only=True)
@@ -68,6 +71,7 @@ class LabResultSerializer(serializers.ModelSerializer):
 
 
 class ImmunizationSerializer(serializers.ModelSerializer):
+    patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
 
     class Meta:
@@ -80,6 +84,7 @@ class ImmunizationSerializer(serializers.ModelSerializer):
 
 
 class VitalEventSerializer(serializers.ModelSerializer):
+    patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
     cause_name = serializers.CharField(source="cause.name", read_only=True)
 
@@ -108,6 +113,7 @@ class StockReportSerializer(serializers.ModelSerializer):
 
 
 class CommunityHealthReportSerializer(serializers.ModelSerializer):
+    patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
 
     class Meta:
@@ -133,6 +139,7 @@ class FacilityMetricSerializer(serializers.ModelSerializer):
 
 
 class InsuranceClaimSerializer(serializers.ModelSerializer):
+    patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
     diagnosis_name = serializers.CharField(source="diagnosis.name", read_only=True)
 
@@ -146,6 +153,7 @@ class InsuranceClaimSerializer(serializers.ModelSerializer):
 
 
 class AppointmentSerializer(serializers.ModelSerializer):
+    patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
 
     class Meta:

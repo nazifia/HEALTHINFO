@@ -180,6 +180,8 @@ class _FormState extends State<_Form> {
   String _region = '';
   int? _diagnosisId;
   List<Map<String, dynamic>> _diseases = [];
+  int? _patientId;
+  String? _patientLabel;
   bool _saving = false;
   String? _error;
 
@@ -190,6 +192,8 @@ class _FormState extends State<_Form> {
     super.initState();
     final e = widget.existing;
     if (e != null) {
+      _patientId = e['patient'] as int?;
+      _patientLabel = '${e['patient_name'] ?? ''}';
       _amount.text = '${e['amount'] ?? 0}';
       _age.text = '${e['patient_age_group'] ?? ''}';
       _notes.text = '${e['notes'] ?? ''}';
@@ -222,6 +226,7 @@ class _FormState extends State<_Form> {
     });
     try {
       final body = {
+        'patient': _patientId,
         'diagnosis': _diagnosisId,
         'amount': double.tryParse(_amount.text.trim()) ?? 0,
         'status': _status,
@@ -280,6 +285,12 @@ class _FormState extends State<_Form> {
         TextField(
           controller: _age,
           decoration: const InputDecoration(labelText: 'Patient age group'),
+        ),
+        const SizedBox(height: 12),
+        PatientPicker(
+          initialId: _patientId,
+          initialLabel: _patientLabel,
+          onChanged: (id) => _patientId = id,
         ),
         const SizedBox(height: 12),
         RegionPicker(

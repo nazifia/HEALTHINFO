@@ -3,6 +3,33 @@ from django.db import models
 from apps.tenants.models import TenantOwnedModel
 
 
+class PatientLinkedModel(models.Model):
+    """De-identified patient demographics, plus an optional link to a registered
+    patient (apps.patients).
+
+    The age band and sex columns stay the source of truth for every rollup, so
+    central collation never has to touch the patient row and cross-tenant
+    pooling stays PII-free. Linking a patient just fills them in — an explicit
+    value the reporter typed always wins.
+    """
+
+    patient = models.ForeignKey(
+        "patients.Patient", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="%(class)ss",
+    )
+    patient_age_group = models.CharField(max_length=20, blank=True)  # e.g. "0-5", "60+"
+    patient_sex = models.CharField(max_length=10, blank=True)  # M/F/other, optional
+
+    class Meta:
+        abstract = True
+
+    def save(self, *args, **kwargs):
+        if self.patient_id:
+            self.patient_age_group = self.patient_age_group or self.patient.age_group
+            self.patient_sex = self.patient_sex or self.patient.sex
+        super().save(*args, **kwargs)
+
+
 class AnalyticsEvent(TenantOwnedModel):
     """One table for every tracked interaction. event_type discriminates
     searches (query set) from content views (object_type + object_id set)."""
@@ -28,7 +55,7 @@ class AnalyticsEvent(TenantOwnedModel):
         ]
 
 
-class CaseReport(TenantOwnedModel):
+class CaseReport(PatientLinkedModel, TenantOwnedModel):
     """A case reported by tenant staff, linked to catalog content.
 
     Stored tenant-scoped like everything else; the platform (super-admin) view
@@ -68,8 +95,6 @@ class CaseReport(TenantOwnedModel):
     outcome = models.CharField(
         max_length=20, choices=Outcome.choices, default=Outcome.ONGOING
     )
-    patient_age_group = models.CharField(max_length=20, blank=True)  # e.g. "0-5", "60+"
-    patient_sex = models.CharField(max_length=10, blank=True)  # M/F/other, optional
     # Coarse location (district/state). No street address — keeps reports
     # poolable centrally without identifying anyone. Drives hotspot maps.
     region = models.CharField(max_length=120, blank=True)
@@ -110,7 +135,7 @@ class AiInteraction(TenantOwnedModel):
         indexes = [models.Index(fields=["tenant", "created_at"])]
 
 
-class AdverseDrugReaction(TenantOwnedModel):
+class AdverseDrugReaction(PatientLinkedModel, TenantOwnedModel):
     """Pharmacovigilance report: a suspected harm from a medication.
 
     Distinct from CaseReport (which is disease-centric) — the unit here is a
@@ -143,8 +168,6 @@ class AdverseDrugReaction(TenantOwnedModel):
     outcome = models.CharField(
         max_length=25, choices=Outcome.choices, default=Outcome.ONGOING
     )
-    patient_age_group = models.CharField(max_length=20, blank=True)
-    patient_sex = models.CharField(max_length=10, blank=True)
     region = models.CharField(max_length=120, blank=True)
     notes = models.TextField(blank=True)
 
@@ -159,7 +182,7 @@ class AdverseDrugReaction(TenantOwnedModel):
         return f"ADR #{self.pk} ({self.reaction})"
 
 
-class LabResult(TenantOwnedModel):
+class LabResult(PatientLinkedModel, TenantOwnedModel):
     """A laboratory test result — lab-confirmed surveillance + the AMR signal.
 
     When organism + antibiotic + susceptibility are filled the row doubles as an
@@ -196,8 +219,6 @@ class LabResult(TenantOwnedModel):
     susceptibility = models.CharField(
         max_length=20, choices=Susceptibility.choices, blank=True
     )
-    patient_age_group = models.CharField(max_length=20, blank=True)
-    patient_sex = models.CharField(max_length=10, blank=True)
     region = models.CharField(max_length=120, blank=True)
     notes = models.TextField(blank=True)
 
@@ -212,7 +233,7 @@ class LabResult(TenantOwnedModel):
         return f"Lab #{self.pk} ({self.organism or self.flag})"
 
 
-class Immunization(TenantOwnedModel):
+class Immunization(PatientLinkedModel, TenantOwnedModel):
     """A vaccine dose administered — one row of the immunization registry.
 
     Coverage analysis groups by vaccine, region and age band. No PII; coarse
@@ -224,8 +245,6 @@ class Immunization(TenantOwnedModel):
     )
     vaccine = models.CharField(max_length=120)  # e.g. "BCG", "Measles", "OPV"
     dose_number = models.PositiveSmallIntegerField(default=1)
-    patient_age_group = models.CharField(max_length=20, blank=True)
-    patient_sex = models.CharField(max_length=10, blank=True)
     region = models.CharField(max_length=120, blank=True)
     notes = models.TextField(blank=True)
 
@@ -240,7 +259,7 @@ class Immunization(TenantOwnedModel):
         return f"{self.vaccine} dose {self.dose_number}"
 
 
-class VitalEvent(TenantOwnedModel):
+class VitalEvent(PatientLinkedModel, TenantOwnedModel):
     """A birth or death — vital registration. Both kinds live in one model so the
     platform can derive maternal & infant mortality (deaths over live births).
 
@@ -264,8 +283,6 @@ class VitalEvent(TenantOwnedModel):
     maternal_death = models.BooleanField(default=False)
     # Death under 1 year — numerator of the infant mortality rate.
     infant_death = models.BooleanField(default=False)
-    patient_age_group = models.CharField(max_length=20, blank=True)
-    patient_sex = models.CharField(max_length=10, blank=True)
     region = models.CharField(max_length=120, blank=True)
     notes = models.TextField(blank=True)
 
@@ -310,7 +327,7 @@ class StockReport(TenantOwnedModel):
         return f"Stock #{self.pk} ({self.medication_id}: {self.on_hand})"
 
 
-class CommunityHealthReport(TenantOwnedModel):
+class CommunityHealthReport(PatientLinkedModel, TenantOwnedModel):
     """A community health worker's field report — care happening outside a
     facility: antenatal visits, newborns, malnutrition screening, and deaths
     that occur at home. ``referred`` flags cases sent on to a facility.
@@ -329,8 +346,6 @@ class CommunityHealthReport(TenantOwnedModel):
     report_type = models.CharField(max_length=20, choices=Kind.choices)
     danger_signs = models.BooleanField(default=False)  # needs urgent attention
     referred = models.BooleanField(default=False)  # sent on to a facility
-    patient_age_group = models.CharField(max_length=20, blank=True)
-    patient_sex = models.CharField(max_length=10, blank=True)
     region = models.CharField(max_length=120, blank=True)
     notes = models.TextField(blank=True)
 
@@ -377,7 +392,7 @@ class FacilityMetric(TenantOwnedModel):
         return f"Metrics #{self.pk} ({self.patients_treated} treated)"
 
 
-class InsuranceClaim(TenantOwnedModel):
+class InsuranceClaim(PatientLinkedModel, TenantOwnedModel):
     """A health-insurance claim — utilization + cost signal. Diagnosis links to
     the catalog so claims pool by ICD-10 like case reports. No PII.
     """
@@ -399,8 +414,6 @@ class InsuranceClaim(TenantOwnedModel):
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.SUBMITTED
     )
-    patient_age_group = models.CharField(max_length=20, blank=True)
-    patient_sex = models.CharField(max_length=10, blank=True)
     region = models.CharField(max_length=120, blank=True)
     notes = models.TextField(blank=True)
 
@@ -415,7 +428,7 @@ class InsuranceClaim(TenantOwnedModel):
         return f"Claim #{self.pk} ({self.status}: {self.amount})"
 
 
-class Appointment(TenantOwnedModel):
+class Appointment(PatientLinkedModel, TenantOwnedModel):
     """A scheduled encounter — in-person or telemedicine. Feeds utilization and
     the no-show rate that signals access/adherence problems.
     """
@@ -438,8 +451,6 @@ class Appointment(TenantOwnedModel):
         max_length=20, choices=Status.choices, default=Status.SCHEDULED
     )
     reason = models.CharField(max_length=255, blank=True)
-    patient_age_group = models.CharField(max_length=20, blank=True)
-    patient_sex = models.CharField(max_length=10, blank=True)
     region = models.CharField(max_length=120, blank=True)
     notes = models.TextField(blank=True)
 

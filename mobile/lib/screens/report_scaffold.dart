@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../main.dart';
@@ -23,6 +25,11 @@ class ReportListScreen extends StatefulWidget {
   // Optional summary widget rendered above the list, fed the loaded rows
   // (e.g. a KPI header). Hidden when the list is empty.
   final Widget Function(List<Map<String, dynamic>> items)? header;
+  // Set to show a search box that re-queries the endpoint with ?search=...
+  // (DRF SearchFilter). Null = no search box.
+  final String? searchHint;
+  // Optional tap handler on a card (e.g. open a detail page).
+  final void Function(Map<String, dynamic> row)? onTap;
 
   const ReportListScreen({
     super.key,
@@ -35,6 +42,8 @@ class ReportListScreen extends StatefulWidget {
     required this.card,
     required this.form,
     this.header,
+    this.searchHint,
+    this.onTap,
   });
 
   @override
@@ -44,6 +53,8 @@ class ReportListScreen extends StatefulWidget {
 class _ReportListScreenState extends State<ReportListScreen>
     with AutomaticKeepAliveClientMixin {
   late Future<List<dynamic>> _future;
+  String _query = '';
+  Timer? _debounce;
 
   @override
   bool get wantKeepAlive => true;
@@ -54,7 +65,24 @@ class _ReportListScreenState extends State<ReportListScreen>
     _future = api.getList(widget.path);
   }
 
-  void _reload() => setState(() => _future = api.getList(widget.path));
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  void _reload() => setState(() => _future = api.getList(
+      widget.path, _query.isEmpty ? null : {'search': _query}));
+
+  // ponytail: 350ms debounce, no in-flight cancellation — a slow earlier
+  // response can still land last. Add a request token if that ever shows up.
+  void _onSearchChanged(String value) {
+    _query = value.trim();
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 350), () {
+      if (mounted) _reload();
+    });
+  }
 
   Future<void> _openForm([Map<String, dynamic>? existing]) async {
     final saved = await showModalBottomSheet<bool>(
@@ -82,7 +110,27 @@ class _ReportListScreenState extends State<ReportListScreen>
         label: Text(widget.fabLabel,
             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
       ),
-      body: RefreshIndicator(
+      body: Column(children: [
+        if (widget.searchHint != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: TextField(
+              onChanged: _onSearchChanged,
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                hintText: widget.searchHint,
+                prefixIcon: const Icon(Icons.search, size: 20),
+                isDense: true,
+              ),
+            ),
+          ),
+        Expanded(child: _list()),
+      ]),
+    );
+  }
+
+  Widget _list() {
+    return RefreshIndicator(
         onRefresh: () async {
           _reload();
           await _future;
@@ -107,25 +155,34 @@ class _ReportListScreenState extends State<ReportListScreen>
             }
             final items = (snap.data ?? []).cast<Map<String, dynamic>>();
             if (items.isEmpty) {
+              final searching = _query.isNotEmpty;
               return ListView(children: [
                 const SizedBox(height: 80),
                 EmptyState(
-                  icon: widget.emptyIcon,
-                  title: widget.emptyTitle,
-                  message: widget.emptyMessage,
+                  icon: searching ? Icons.search_off : widget.emptyIcon,
+                  title: searching ? 'No matches' : widget.emptyTitle,
+                  message: searching
+                      ? 'Nothing found for "$_query".'
+                      : widget.emptyMessage,
                 ),
               ]);
             }
             return CardGrid(
               itemCount: items.length,
               header: widget.header == null ? null : widget.header!(items),
-              itemBuilder: (context, i) =>
-                  widget.card(items[i], _reload, () => _openForm(items[i])),
+              itemBuilder: (context, i) {
+                final card =
+                    widget.card(items[i], _reload, () => _openForm(items[i]));
+                if (widget.onTap == null) return card;
+                return InkWell(
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: () => widget.onTap!(items[i]),
+                  child: card,
+                );
+              },
             );
           },
-        ),
-      ),
-    );
+        ));
   }
 }
 
@@ -231,6 +288,195 @@ class ReportBadge extends StatelessWidget {
       child: Text(
         text.isEmpty ? '—' : text.replaceAll('_', ' ').toUpperCase(),
         style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 11),
+      ),
+    );
+  }
+}
+
+/// Form field that links a report to a registered patient (GET /api/patients/).
+/// Optional everywhere: reports stay valid — and de-identified — without one,
+/// so this never blocks a submit. When a patient is linked the backend fills in
+/// the age band and sex the rollups read.
+class PatientPicker extends StatefulWidget {
+  final int? initialId;
+  final String? initialLabel;
+  final ValueChanged<int?> onChanged;
+
+  const PatientPicker({
+    super.key,
+    required this.onChanged,
+    this.initialId,
+    this.initialLabel,
+  });
+
+  @override
+  State<PatientPicker> createState() => _PatientPickerState();
+}
+
+class _PatientPickerState extends State<PatientPicker> {
+  int? _id;
+  String? _label;
+
+  @override
+  void initState() {
+    super.initState();
+    _id = widget.initialId;
+    _label = widget.initialLabel;
+  }
+
+  Future<void> _pick() async {
+    final picked = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const _PatientSearchSheet(),
+    );
+    if (picked == null) return;
+    setState(() {
+      _id = picked['id'] as int?;
+      _label = '${picked['full_name']} · ${picked['hospital_number']}';
+    });
+    widget.onChanged(_id);
+  }
+
+  void _clear() {
+    setState(() {
+      _id = null;
+      _label = null;
+    });
+    widget.onChanged(null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InputDecorator(
+      decoration: const InputDecoration(labelText: 'Patient (optional)'),
+      child: Row(children: [
+        Expanded(
+          child: Text(
+            _label ?? (_id == null ? 'Not linked' : 'Patient #$_id'),
+            style: TextStyle(
+                color: _id == null ? context.hintColor : context.labelColor),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        if (_id != null)
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.clear, size: 18),
+            onPressed: _clear,
+          ),
+        TextButton(onPressed: _pick, child: Text(_id == null ? 'Link' : 'Change')),
+      ]),
+    );
+  }
+}
+
+/// Search sheet behind [PatientPicker]. Pops the chosen patient row.
+class _PatientSearchSheet extends StatefulWidget {
+  const _PatientSearchSheet();
+
+  @override
+  State<_PatientSearchSheet> createState() => _PatientSearchSheetState();
+}
+
+class _PatientSearchSheetState extends State<_PatientSearchSheet> {
+  Future<List<dynamic>> _future = api.getList('/api/patients/');
+  Timer? _debounce;
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  void _search(String value) {
+    final q = value.trim();
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      setState(() => _future =
+          api.getList('/api/patients/', q.isEmpty ? null : {'search': q}));
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        height: MediaQuery.of(context).size.height * 0.7,
+        decoration: BoxDecoration(
+          color: context.scaffoldBg,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+        child: Column(children: [
+          Text('Link a patient',
+              style: TextStyle(
+                  color: context.labelColor,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800)),
+          const SizedBox(height: 12),
+          TextField(
+            autofocus: true,
+            onChanged: _search,
+            decoration: const InputDecoration(
+              hintText: 'Name, hospital number or phone',
+              prefixIcon: Icon(Icons.search, size: 20),
+              isDense: true,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: FutureBuilder<List<dynamic>>(
+              future: _future,
+              builder: (context, snap) {
+                if (snap.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                      child: CircularProgressIndicator(
+                          color: EnhancedTheme.primaryTeal));
+                }
+                if (snap.hasError) {
+                  return EmptyState(
+                    icon: Icons.error_outline,
+                    title: 'Could not load patients',
+                    message: '${snap.error}',
+                    color: EnhancedTheme.errorRed,
+                  );
+                }
+                final rows = (snap.data ?? []).cast<Map<String, dynamic>>();
+                if (rows.isEmpty) {
+                  return const EmptyState(
+                    icon: Icons.person_search_outlined,
+                    title: 'No patients found',
+                    message: 'Register the patient first, or search again.',
+                  );
+                }
+                return ListView.builder(
+                  itemCount: rows.length,
+                  itemBuilder: (context, i) {
+                    final r = rows[i];
+                    return ListTile(
+                      dense: true,
+                      title: Text('${r['full_name']}',
+                          style: TextStyle(color: context.labelColor)),
+                      subtitle: Text(
+                        [
+                          '${r['hospital_number'] ?? ''}',
+                          if ('${r['sex'] ?? ''}'.isNotEmpty) '${r['sex']}',
+                          if (r['age'] != null) '${r['age']}y',
+                        ].join(' · '),
+                        style: TextStyle(color: context.hintColor, fontSize: 12),
+                      ),
+                      onTap: () => Navigator.of(context).pop(r),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ]),
       ),
     );
   }

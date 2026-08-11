@@ -147,6 +147,8 @@ class _FormState extends State<_Form> {
   final _age = TextEditingController();
   final _notes = TextEditingController();
   String _region = '';
+  int? _patientId;
+  String? _patientLabel;
   bool _saving = false;
   String? _error;
 
@@ -157,6 +159,8 @@ class _FormState extends State<_Form> {
     super.initState();
     final e = widget.existing;
     if (e != null) {
+      _patientId = e['patient'] as int?;
+      _patientLabel = '${e['patient_name'] ?? ''}';
       _vaccine.text = '${e['vaccine'] ?? ''}';
       _dose.text = '${e['dose_number'] ?? 1}';
       _age.text = '${e['patient_age_group'] ?? ''}';
@@ -185,6 +189,7 @@ class _FormState extends State<_Form> {
     });
     try {
       final body = {
+        'patient': _patientId,
         'vaccine': _vaccine.text.trim(),
         'dose_number': int.tryParse(_dose.text.trim()) ?? 1,
         'patient_age_group': _age.text.trim(),
@@ -227,6 +232,12 @@ class _FormState extends State<_Form> {
         TextField(
           controller: _age,
           decoration: const InputDecoration(labelText: 'Patient age group (e.g. 0-5)'),
+        ),
+        const SizedBox(height: 12),
+        PatientPicker(
+          initialId: _patientId,
+          initialLabel: _patientLabel,
+          onChanged: (id) => _patientId = id,
         ),
         const SizedBox(height: 12),
         RegionPicker(

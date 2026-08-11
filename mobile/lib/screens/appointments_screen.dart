@@ -171,6 +171,8 @@ class _FormState extends State<_Form> {
   String _mode = 'in_person';
   String _status = 'scheduled';
   String _region = '';
+  int? _patientId;
+  String? _patientLabel;
   bool _saving = false;
   String? _error;
 
@@ -181,6 +183,8 @@ class _FormState extends State<_Form> {
     super.initState();
     final e = widget.existing;
     if (e != null) {
+      _patientId = e['patient'] as int?;
+      _patientLabel = '${e['patient_name'] ?? ''}';
       if (_modes.contains(e['mode'])) _mode = e['mode'];
       if (_statuses.contains(e['status'])) _status = e['status'];
       _reason.text = '${e['reason'] ?? ''}';
@@ -203,6 +207,7 @@ class _FormState extends State<_Form> {
     });
     try {
       final body = {
+        'patient': _patientId,
         'mode': _mode,
         'status': _status,
         'reason': _reason.text.trim(),
@@ -262,6 +267,12 @@ class _FormState extends State<_Form> {
         TextField(
           controller: _reason,
           decoration: const InputDecoration(labelText: 'Reason'),
+        ),
+        const SizedBox(height: 12),
+        PatientPicker(
+          initialId: _patientId,
+          initialLabel: _patientLabel,
+          onChanged: (id) => _patientId = id,
         ),
         const SizedBox(height: 12),
         RegionPicker(

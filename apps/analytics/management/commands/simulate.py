@@ -12,10 +12,12 @@ ponytail: one flat loop of random.choice over existing rows. No faker, no
 config, no scheduler — Ctrl-C is the off switch. Add weighting/realism only if
 a demo actually needs it.
 """
+import datetime
 import random
 import time
 
 from django.core.management.base import BaseCommand, CommandError
+from django.utils import timezone
 
 from apps.accounts.models import Role
 from apps.analytics.models import (
@@ -24,12 +26,18 @@ from apps.analytics.models import (
     LabResult, StockReport, VitalEvent,
 )
 from apps.catalog.models import Disease, Medication, Symptom
+from apps.patients.models import Patient
 from apps.tenants.models import Tenant
 
 REGIONS = ["Ikeja, Lagos", "Kano Municipal, Kano", "Bwari, FCT",
            "Port Harcourt, Rivers", "Nsukka, Enugu"]
 AGES = ["0-1", "0-5", "6-12", "13-18", "19-40", "41-60", "60+"]
 SEXES = ["M", "F"]
+FIRST_NAMES = ["Ada", "Chidi", "Ngozi", "Emeka", "Bola", "Musa", "Aisha",
+               "Tunde", "Fatima", "Ifeoma", "Yusuf", "Zainab"]
+LAST_NAMES = ["Okafor", "Adeyemi", "Bello", "Eze", "Ibrahim", "Nwosu",
+              "Ogunleye", "Danjuma", "Olawale", "Chukwu"]
+PATIENT_POOL = 25  # registered patients the simulator draws from
 ORGANISMS = ["E. coli", "S. aureus", "K. pneumoniae", "P. aeruginosa"]
 ANTIBIOTICS = ["Ciprofloxacin", "Ceftriaxone", "Amoxicillin", "Gentamicin"]
 VACCINES = ["BCG", "OPV", "Pentavalent", "Measles", "Yellow Fever", "Tetanus"]
@@ -66,8 +74,10 @@ class Command(BaseCommand):
                  (Role.DOCTOR, Role.NURSE, Role.PHARMACIST)}
         doctor = users[Role.DOCTOR] or None
 
+        patients = self._patients(tenant)
         ctx = dict(tenant=tenant, diseases=diseases, meds=meds,
-                   symptoms=symptoms, users=users, doctor=doctor)
+                   symptoms=symptoms, users=users, doctor=doctor,
+                   patients=patients)
         actions = [self._case, self._search, self._view, self._adr, self._lab,
                    self._immunization, self._vital, self._appointment,
                    self._claim, self._facility, self._chw, self._mutate_stock,
@@ -101,14 +111,38 @@ class Command(BaseCommand):
     def _age(self):
         return random.choice(AGES)
 
+    def _patients(self, tenant):
+        """Top the tenant's registry up to PATIENT_POOL and return the pool."""
+        existing = list(Patient.all_objects.filter(tenant=tenant))
+        for _ in range(PATIENT_POOL - len(existing)):
+            born = datetime.date.today() - datetime.timedelta(
+                days=random.randint(30, 80 * 365))
+            existing.append(Patient.all_objects.create(
+                tenant=tenant, first_name=random.choice(FIRST_NAMES),
+                last_name=random.choice(LAST_NAMES), sex=random.choice(SEXES),
+                date_of_birth=born, region=self._region(),
+                consent_given=True, consent_at=timezone.now(),
+                notes="simulated",
+            ))
+        return existing
+
+    def _demographics(self, patients):
+        """Report kwargs for one patient: usually a link to a registered
+        patient (the model then fills the age band + sex itself), otherwise the
+        anonymous walk-in case — bare demographics, no patient row."""
+        if patients and random.random() < 0.7:
+            return {"patient": random.choice(patients)}
+        return {"patient_age_group": self._age(),
+                "patient_sex": random.choice(SEXES)}
+
     # --- inserts ---------------------------------------------------------
-    def _case(self, tenant, diseases, meds, symptoms, doctor, **_):
+    def _case(self, tenant, diseases, meds, symptoms, doctor, patients, **_):
         dis = random.choice(diseases)
         cr = CaseReport.all_objects.create(
             tenant=tenant, reporter=doctor, disease=dis,
             severity=random.choice(CaseReport.Severity.values),
             outcome=random.choice(CaseReport.Outcome.values),
-            patient_age_group=self._age(), patient_sex=random.choice(SEXES),
+            **self._demographics(patients),
             region=self._region(), notes="simulated",
         )
         if symptoms:
@@ -134,18 +168,18 @@ class Command(BaseCommand):
         )
         return f"view {otype} {obj.id}"
 
-    def _adr(self, tenant, meds, doctor, **_):
+    def _adr(self, tenant, meds, doctor, patients, **_):
         adr = AdverseDrugReaction.all_objects.create(
             tenant=tenant, reporter=doctor, medication=random.choice(meds),
             reaction=random.choice(REACTIONS),
             severity=random.choice(AdverseDrugReaction.Severity.values),
             outcome=random.choice(AdverseDrugReaction.Outcome.values),
-            patient_age_group=self._age(), patient_sex=random.choice(SEXES),
+            **self._demographics(patients),
             region=self._region(),
         )
         return f"ADR #{adr.pk} {adr.reaction}"
 
-    def _lab(self, tenant, diseases, doctor, **_):
+    def _lab(self, tenant, diseases, doctor, patients, **_):
         org = random.choice(ORGANISMS)
         lr = LabResult.all_objects.create(
             tenant=tenant, reporter=doctor,
@@ -153,17 +187,17 @@ class Command(BaseCommand):
             organism=org, antibiotic=random.choice(ANTIBIOTICS),
             susceptibility=random.choice(LabResult.Susceptibility.values),
             flag=random.choice(LabResult.Flag.values), value="culture + AST",
-            patient_age_group=self._age(), patient_sex=random.choice(SEXES),
+            **self._demographics(patients),
             region=self._region(),
         )
         return f"lab #{lr.pk} {org}/{lr.susceptibility}"
 
-    def _immunization(self, tenant, users, **_):
+    def _immunization(self, tenant, users, patients, **_):
         vac = random.choice(VACCINES)
         Immunization.all_objects.create(
             tenant=tenant, reporter=users.get(Role.NURSE), vaccine=vac,
-            dose_number=random.randint(1, 3), patient_age_group=self._age(),
-            patient_sex=random.choice(SEXES), region=self._region(),
+            dose_number=random.randint(1, 3), region=self._region(),
+            **self._demographics(patients),
         )
         return f"immunization {vac}"
 
@@ -184,23 +218,23 @@ class Command(BaseCommand):
         )
         return "death"
 
-    def _appointment(self, tenant, doctor, **_):
+    def _appointment(self, tenant, doctor, patients, **_):
         ap = Appointment.all_objects.create(
             tenant=tenant, reporter=doctor,
             mode=random.choice(Appointment.Mode.values),
             status=random.choice(Appointment.Status.values),
-            reason="Follow-up", patient_age_group=self._age(),
-            region=self._region(),
+            reason="Follow-up", region=self._region(),
+            **self._demographics(patients),
         )
         return f"appt #{ap.pk} {ap.mode}/{ap.status}"
 
-    def _claim(self, tenant, diseases, users, **_):
+    def _claim(self, tenant, diseases, users, patients, **_):
         cl = InsuranceClaim.all_objects.create(
             tenant=tenant, reporter=users.get(Role.PHARMACIST),
             diagnosis=random.choice(diseases),
             amount=random.randint(5, 80) * 1000,
             status=random.choice(InsuranceClaim.Status.values),
-            patient_age_group=self._age(), region=self._region(),
+            region=self._region(), **self._demographics(patients),
         )
         return f"claim #{cl.pk} {cl.amount} ({cl.status})"
 
@@ -215,12 +249,12 @@ class Command(BaseCommand):
         )
         return f"facility occ {occ}%"
 
-    def _chw(self, tenant, users, **_):
+    def _chw(self, tenant, users, patients, **_):
         kind = random.choice(CommunityHealthReport.Kind.values)
         CommunityHealthReport.all_objects.create(
             tenant=tenant, reporter=users.get(Role.NURSE), report_type=kind,
             danger_signs=random.random() < 0.3, referred=random.random() < 0.4,
-            patient_age_group=self._age(), region=self._region(),
+            region=self._region(), **self._demographics(patients),
         )
         return f"chw {kind}"
 
