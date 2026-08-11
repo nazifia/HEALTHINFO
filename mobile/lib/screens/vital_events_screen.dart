@@ -177,6 +177,8 @@ class _FormState extends State<_Form> {
   String _region = '';
   int? _causeId;
   List<Map<String, dynamic>> _diseases = [];
+  int? _patientId;
+  String? _patientLabel;
   bool _saving = false;
   String? _error;
 
@@ -188,6 +190,8 @@ class _FormState extends State<_Form> {
     super.initState();
     final e = widget.existing;
     if (e != null) {
+      _patientId = e['patient'] as int?;
+      _patientLabel = '${e['patient_name'] ?? ''}';
       if (_kinds.contains(e['event_type'])) _kind = e['event_type'];
       _maternal = e['maternal_death'] == true;
       _infant = e['infant_death'] == true;
@@ -222,6 +226,7 @@ class _FormState extends State<_Form> {
       // Birth carries no cause/death flags — clear them so an edited death→birth
       // doesn't leave stale mortality flags that would skew the ratios.
       final body = {
+        'patient': _patientId,
         'event_type': _kind,
         'cause': _isDeath ? _causeId : null,
         'maternal_death': _isDeath && _maternal,
@@ -291,6 +296,12 @@ class _FormState extends State<_Form> {
         TextField(
           controller: _age,
           decoration: const InputDecoration(labelText: 'Age group (e.g. 0-1, 25-34)'),
+        ),
+        const SizedBox(height: 12),
+        PatientPicker(
+          initialId: _patientId,
+          initialLabel: _patientLabel,
+          onChanged: (id) => _patientId = id,
         ),
         const SizedBox(height: 12),
         RegionPicker(

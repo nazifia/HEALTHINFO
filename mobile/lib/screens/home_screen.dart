@@ -8,6 +8,8 @@ import '../core/locale_provider.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../core/theme/theme_provider.dart';
 import 'catalog_list_screen.dart';
+import 'patients_screen.dart';
+import 'patient_access_log_screen.dart';
 import 'cases_screen.dart';
 import 'adr_screen.dart';
 import 'lab_results_screen.dart';
@@ -56,6 +58,7 @@ final List<_Section> _baseSections = [
   const _Section('Interaction checker', Icons.rule, InteractionCheckScreen()),
   const _Section('Differential', Icons.healing_outlined, DifferentialScreen()),
   const _Section('Semantic search', Icons.travel_explore, SemanticSearchScreen()),
+  const _Section('Patients', Icons.people_outline, PatientsScreen()),
   const _Section('Case reports', Icons.assignment_outlined, CasesScreen()),
   const _Section('Adverse reactions', Icons.medication_liquid_outlined, AdrScreen()),
   const _Section('Lab results', Icons.science_outlined, LabResultsScreen()),
@@ -81,9 +84,13 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _index = 0;
 
-  // Super-admins get the cross-tenant platform dashboard prepended; everyone
-  // else sees just the base sections.
+  // Super-admins get the cross-tenant platform dashboard prepended, tenant
+  // admins the patient access log; everyone else sees just the base sections.
   List<_Section> _sections = _baseSections;
+
+  // Governance view: who read patient data. Admin-only both here and in the API.
+  static const _accessLogSection = _Section(
+      'Patient access log', Icons.privacy_tip_outlined, PatientAccessLogScreen());
 
   @override
   void initState() {
@@ -93,7 +100,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Future<void> _loadRole() async {
     final role = await api.myRole();
-    if (!mounted || role != 'super_admin') return;
+    if (!mounted) return;
+    if (role == 'tenant_admin') {
+      setState(() => _sections = [_accessLogSection, ..._baseSections]);
+      return;
+    }
+    if (role != 'super_admin') return;
     setState(() {
       _sections = [
         const _Section('Platform', Icons.admin_panel_settings_outlined,
@@ -102,6 +114,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             TenantManagementScreen()),
         const _Section('Users', Icons.manage_accounts_outlined,
             UserManagementScreen()),
+        _accessLogSection,
         // Central-only cross-tenant collation views. Hidden from non-super-admins.
         const _Section('Collated reports', Icons.bar_chart_outlined,
             CollatedReportsScreen()),

@@ -51,6 +51,32 @@ class ReadOnlyOrWriteRole(BasePermission):
         return True
 
 
+class IsClinicalStaff(BasePermission):
+    """Clinical staff only — reads included.
+
+    Unlike ReadOnlyOrReportRole, this does not open reads to every tenant
+    member: it guards identifying patient data, where listing is as sensitive
+    as writing. Pair with IsTenantMember for the tenant check.
+    """
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user.is_authenticated:
+            return False
+        return user.is_super_admin or user.role in REPORT_ROLES
+
+
+class IsTenantAdmin(BasePermission):
+    """Tenant admin (or super admin) — for tenant-governance reads like the
+    patient access log, which clinical staff generate but must not audit."""
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user.is_authenticated:
+            return False
+        return user.is_super_admin or user.role == Role.TENANT_ADMIN
+
+
 class ReadOnlyOrReportRole(BasePermission):
     """Anyone in the tenant reads; only REPORT_ROLES (clinical staff) file reports.
 

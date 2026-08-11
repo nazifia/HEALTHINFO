@@ -85,6 +85,38 @@ All dashboards accept `?from=YYYY-MM-DD&to=YYYY-MM-DD` to window the rollup.
 - `GET /api/analytics/retention/` — distinct active users per week (8w).
 - `GET /api/analytics/benchmark/` — your case load vs anonymized platform median.
 
+## Patients
+- `GET/POST /api/patients/` — tenant's own patient registry: names, hospital
+  number, DOB, phone, blood group/genotype, allergies, chronic conditions
+  (catalog diseases), NHIS number, next of kin, consent. `?search=` matches
+  name, hospital number, phone or NHIS number; filter by sex, status, region,
+  blood group, genotype. The hospital number is generated when left blank and
+  is unique per tenant.
+- `GET  /api/patients/{id}/history/` — everything filed against that patient
+  across the clinical modules (cases, ADRs, labs, immunizations, vital events,
+  CHW reports, claims, appointments) plus per-type counts.
+- `GET  /api/patients/access-log/` — who read patient data, newest first:
+  user, action (list/retrieve/history), the `?search=` used and how many rows
+  came back. `?patient=<id>` narrows it to one record's trail, `?action=` to
+  one kind of read. **Tenant admins only** — clinical staff generate this log,
+  so they don't get to audit it. In the app it's a nav section for admins, and
+  a shortcut in each patient's app bar.
+
+This is the only endpoint that returns identifying data. It is restricted to
+clinical staff (doctor, pharmacist, nurse, tenant admin, super admin) — plain
+tenant members get a 403 — and rows never leave their tenant. Every read is
+recorded, fail-closed: if the audit write fails the read fails with it, and the
+trail survives deletion of the patient it points at. Every clinical report keeps
+an **optional** `patient` FK (filter any report list with `?patient=<id>`):
+linking one fills in the report's `patient_age_group` / `patient_sex` (an
+explicitly supplied value always wins), and those de-identified columns stay the
+source of truth for the rollups, so central collation still pools across tenants
+without touching a patient record.
+
+`python manage.py simulate` keeps a pool of 25 registered patients per tenant
+and links ~70% of the reports it generates to one of them; the rest stay
+anonymous walk-ins.
+
 ## Health surveillance, reporting & collation
 - `GET  /api/analytics/surveillance/` · `/api/analytics/platform/surveillance/`
   — outbreak alerts: diseases whose latest week spikes vs trailing baseline.

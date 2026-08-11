@@ -166,6 +166,8 @@ class _FormState extends State<_Form> {
   bool _danger = false;
   bool _referred = false;
   String _region = '';
+  int? _patientId;
+  String? _patientLabel;
   bool _saving = false;
   String? _error;
 
@@ -176,6 +178,8 @@ class _FormState extends State<_Form> {
     super.initState();
     final e = widget.existing;
     if (e != null) {
+      _patientId = e['patient'] as int?;
+      _patientLabel = '${e['patient_name'] ?? ''}';
       if (_types.contains(e['report_type'])) _type = e['report_type'];
       _danger = e['danger_signs'] == true;
       _referred = e['referred'] == true;
@@ -199,6 +203,7 @@ class _FormState extends State<_Form> {
     });
     try {
       final body = {
+        'patient': _patientId,
         'report_type': _type,
         'danger_signs': _danger,
         'referred': _referred,
@@ -252,6 +257,12 @@ class _FormState extends State<_Form> {
         TextField(
           controller: _age,
           decoration: const InputDecoration(labelText: 'Age group (e.g. 0-1, 19-40)'),
+        ),
+        const SizedBox(height: 12),
+        PatientPicker(
+          initialId: _patientId,
+          initialLabel: _patientLabel,
+          onChanged: (id) => _patientId = id,
         ),
         const SizedBox(height: 12),
         RegionPicker(

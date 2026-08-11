@@ -157,7 +157,7 @@ class CaseReportViewSet(viewsets.ModelViewSet):
 
     serializer_class = CaseReportSerializer
     permission_classes = [IsTenantMember, ReadOnlyOrReportRole]
-    filterset_fields = ("severity", "outcome", "disease", "patient_age_group", "region")
+    filterset_fields = ("severity", "outcome", "disease", "patient_age_group", "region", "patient")
     ordering_fields = ("created_at", "severity")
 
     def get_queryset(self):
@@ -173,7 +173,7 @@ class AdverseDrugReactionViewSet(viewsets.ModelViewSet):
 
     serializer_class = AdverseDrugReactionSerializer
     permission_classes = [IsTenantMember, ReadOnlyOrReportRole]
-    filterset_fields = ("severity", "outcome", "medication", "region")
+    filterset_fields = ("severity", "outcome", "medication", "region", "patient")
     ordering_fields = ("created_at", "severity")
 
     def get_queryset(self):
@@ -209,7 +209,7 @@ class LabResultViewSet(_ReportViewSet):
 
     model = LabResult
     serializer_class = LabResultSerializer
-    filterset_fields = ("flag", "lab_test", "disease", "organism", "region")
+    filterset_fields = ("flag", "lab_test", "disease", "organism", "region", "patient")
 
 
 class ImmunizationViewSet(_ReportViewSet):
@@ -217,7 +217,7 @@ class ImmunizationViewSet(_ReportViewSet):
 
     model = Immunization
     serializer_class = ImmunizationSerializer
-    filterset_fields = ("vaccine", "dose_number", "patient_age_group", "region")
+    filterset_fields = ("vaccine", "dose_number", "patient_age_group", "region", "patient")
 
 
 class VitalEventViewSet(_ReportViewSet):
@@ -225,7 +225,7 @@ class VitalEventViewSet(_ReportViewSet):
 
     model = VitalEvent
     serializer_class = VitalEventSerializer
-    filterset_fields = ("event_type", "maternal_death", "infant_death", "region")
+    filterset_fields = ("event_type", "maternal_death", "infant_death", "region", "patient")
 
 
 class StockReportViewSet(_ReportViewSet):
@@ -241,7 +241,7 @@ class CommunityHealthReportViewSet(_ReportViewSet):
 
     model = CommunityHealthReport
     serializer_class = CommunityHealthReportSerializer
-    filterset_fields = ("report_type", "danger_signs", "referred", "region")
+    filterset_fields = ("report_type", "danger_signs", "referred", "region", "patient")
 
 
 class FacilityMetricViewSet(_ReportViewSet):
@@ -257,7 +257,7 @@ class InsuranceClaimViewSet(_ReportViewSet):
 
     model = InsuranceClaim
     serializer_class = InsuranceClaimSerializer
-    filterset_fields = ("status", "diagnosis", "region")
+    filterset_fields = ("status", "diagnosis", "region", "patient")
 
 
 class AppointmentViewSet(_ReportViewSet):
@@ -265,7 +265,7 @@ class AppointmentViewSet(_ReportViewSet):
 
     model = Appointment
     serializer_class = AppointmentSerializer
-    filterset_fields = ("mode", "status", "region")
+    filterset_fields = ("mode", "status", "region", "patient")
 
 
 class _StatsView(APIView):

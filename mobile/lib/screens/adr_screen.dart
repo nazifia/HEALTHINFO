@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../main.dart';
 import '../nigeria.dart';
+import 'report_scaffold.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/empty_state.dart';
@@ -257,6 +258,8 @@ class _AdrFormState extends State<_AdrForm> {
   String _region = '';
   int? _medicationId;
   List<Map<String, dynamic>> _medications = [];
+  int? _patientId;
+  String? _patientLabel;
   bool _saving = false;
   String? _error;
 
@@ -267,6 +270,8 @@ class _AdrFormState extends State<_AdrForm> {
     super.initState();
     final e = widget.existing;
     if (e != null) {
+      _patientId = e['patient'] as int?;
+      _patientLabel = '${e['patient_name'] ?? ''}';
       _reaction.text = '${e['reaction'] ?? ''}';
       _notes.text = '${e['notes'] ?? ''}';
       _age.text = '${e['patient_age_group'] ?? ''}';
@@ -306,6 +311,7 @@ class _AdrFormState extends State<_AdrForm> {
     });
     try {
       final body = {
+        'patient': _patientId,
         'medication': _medicationId,
         'reaction': _reaction.text.trim(),
         'severity': _sev,
@@ -418,6 +424,12 @@ class _AdrFormState extends State<_AdrForm> {
                 controller: _age,
                 decoration: const InputDecoration(
                     labelText: 'Patient age group (e.g. 0-5, 60+)'),
+              ),
+              const SizedBox(height: 12),
+              PatientPicker(
+                initialId: _patientId,
+                initialLabel: _patientLabel,
+                onChanged: (id) => _patientId = id,
               ),
               const SizedBox(height: 12),
               RegionPicker(
