@@ -8,6 +8,35 @@ import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/responsive.dart';
 import '../shared/widgets/snack.dart';
 
+/// One server-side choice filter offered above a report list.
+///
+/// [param] is the DRF filterset field, so the values must be the ones the API
+/// stores, not their labels. Selecting nothing drops the param entirely.
+class ReportFilter {
+  final String param; // query param, e.g. 'patient_type'
+  final String anyLabel; // shown when no value is picked, e.g. 'Any type'
+  final Map<String, String> options; // wire value -> label
+
+  const ReportFilter({
+    required this.param,
+    required this.anyLabel,
+    required this.options,
+  });
+}
+
+/// Query params for a list request: the picked filters plus the search box.
+///
+/// Null when nothing is set, so an unfiltered list asks for a bare URL. A blank
+/// search is dropped rather than sent as `?search=`, which DRF would treat as a
+/// match-nothing term on some backends.
+Map<String, String>? listQuery(String search, Map<String, String> picked) {
+  final params = {
+    ...picked,
+    if (search.trim().isNotEmpty) 'search': search.trim(),
+  };
+  return params.isEmpty ? null : params;
+}
+
 /// Shared list+FAB shell for a staff-filed report type (lab results, vaccines,
 /// births/deaths, stock). Each screen supplies the list path, a card builder and
 /// a bottom-sheet form builder — the load/refresh/empty/error plumbing lives
@@ -28,6 +57,8 @@ class ReportListScreen extends StatefulWidget {
   // Set to show a search box that re-queries the endpoint with ?search=...
   // (DRF SearchFilter). Null = no search box.
   final String? searchHint;
+  // Server-side choice filters shown as dropdowns above the list. Empty = none.
+  final List<ReportFilter> filters;
   // Optional tap handler on a card (e.g. open a detail page).
   final void Function(Map<String, dynamic> row)? onTap;
 
@@ -43,6 +74,7 @@ class ReportListScreen extends StatefulWidget {
     required this.form,
     this.header,
     this.searchHint,
+    this.filters = const [],
     this.onTap,
   });
 
@@ -54,7 +86,12 @@ class _ReportListScreenState extends State<ReportListScreen>
     with AutomaticKeepAliveClientMixin {
   late Future<List<dynamic>> _future;
   String _query = '';
+  // Picked filter values, keyed by query param. A param is absent when the
+  // user has it on "any", so the request just doesn't carry it.
+  final Map<String, String> _picked = {};
   Timer? _debounce;
+
+  bool get _narrowed => _query.isNotEmpty || _picked.isNotEmpty;
 
   @override
   bool get wantKeepAlive => true;
@@ -71,8 +108,8 @@ class _ReportListScreenState extends State<ReportListScreen>
     super.dispose();
   }
 
-  void _reload() => setState(() => _future = api.getList(
-      widget.path, _query.isEmpty ? null : {'search': _query}));
+  void _reload() => setState(
+      () => _future = api.getList(widget.path, listQuery(_query, _picked)));
 
   // ponytail: 350ms debounce, no in-flight cancellation — a slow earlier
   // response can still land last. Add a request token if that ever shows up.
@@ -124,6 +161,28 @@ class _ReportListScreenState extends State<ReportListScreen>
               ),
             ),
           ),
+        if (widget.filters.isNotEmpty)
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: Row(children: [
+              for (final f in widget.filters) ...[
+                _FilterDropdown(
+                  filter: f,
+                  value: _picked[f.param],
+                  onChanged: (v) {
+                    if (v == null) {
+                      _picked.remove(f.param);
+                    } else {
+                      _picked[f.param] = v;
+                    }
+                    _reload();
+                  },
+                ),
+                const SizedBox(width: 8),
+              ],
+            ]),
+          ),
         Expanded(child: _list()),
       ]),
     );
@@ -155,15 +214,18 @@ class _ReportListScreenState extends State<ReportListScreen>
             }
             final items = (snap.data ?? []).cast<Map<String, dynamic>>();
             if (items.isEmpty) {
-              final searching = _query.isNotEmpty;
+              // "Nothing here" and "nothing matched" are different problems —
+              // only the second one is fixed by clearing the search or filters.
               return ListView(children: [
                 const SizedBox(height: 80),
                 EmptyState(
-                  icon: searching ? Icons.search_off : widget.emptyIcon,
-                  title: searching ? 'No matches' : widget.emptyTitle,
-                  message: searching
-                      ? 'Nothing found for "$_query".'
-                      : widget.emptyMessage,
+                  icon: _narrowed ? Icons.search_off : widget.emptyIcon,
+                  title: _narrowed ? 'No matches' : widget.emptyTitle,
+                  message: !_narrowed
+                      ? widget.emptyMessage
+                      : _query.isEmpty
+                          ? 'Nothing matched the selected filters.'
+                          : 'Nothing found for "$_query".',
                 ),
               ]);
             }
@@ -183,6 +245,55 @@ class _ReportListScreenState extends State<ReportListScreen>
             );
           },
         ));
+  }
+}
+
+/// Compact pill dropdown for one [ReportFilter]. A null value means "any", and
+/// it stays in the list so a picked filter can be cleared without a second
+/// control.
+class _FilterDropdown extends StatelessWidget {
+  final ReportFilter filter;
+  final String? value;
+  final ValueChanged<String?> onChanged;
+
+  const _FilterDropdown({
+    required this.filter,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final active = value != null;
+    final accent = active ? EnhancedTheme.primaryTeal : context.hintColor;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: accent.withValues(alpha: active ? 1 : 0.4)),
+        color: active
+            ? EnhancedTheme.primaryTeal.withValues(alpha: 0.12)
+            : Colors.transparent,
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String?>(
+          value: value,
+          isDense: true,
+          borderRadius: BorderRadius.circular(12),
+          icon: Icon(Icons.arrow_drop_down, size: 20, color: accent),
+          style: TextStyle(
+              color: context.labelColor,
+              fontSize: 13,
+              fontWeight: FontWeight.w600),
+          items: [
+            DropdownMenuItem(value: null, child: Text(filter.anyLabel)),
+            for (final o in filter.options.entries)
+              DropdownMenuItem(value: o.key, child: Text(o.value)),
+          ],
+          onChanged: onChanged,
+        ),
+      ),
+    );
   }
 }
 

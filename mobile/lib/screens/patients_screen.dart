@@ -27,6 +27,16 @@ class PatientsScreen extends StatelessWidget {
       emptyMessage: 'Tap "Register patient" to add the first one.',
       savedMessage: 'Patient saved.',
       searchHint: 'Search name, hospital number or phone',
+      // Server-side, so the counts in the header describe the filtered set.
+      filters: const [
+        ReportFilter(
+            param: 'patient_type', anyLabel: 'Any type', options: patientTypes),
+        ReportFilter(param: 'status', anyLabel: 'Any status', options: {
+          'active': 'Active',
+          'inactive': 'Inactive',
+          'deceased': 'Deceased',
+        }),
+      ],
       header: (items) => _Header(items: items),
       card: (row, reload, edit) => _Card(row: row, edit: edit),
       form: (existing) => _Form(existing: existing),
@@ -46,6 +56,8 @@ class _Header extends StatelessWidget {
     final female = countEq(items, 'sex', 'F');
     final male = countEq(items, 'sex', 'M');
     final byAge = countBy(items, 'age_group');
+    final nhia = countEq(items, 'patient_type', 'nhia');
+    final byType = countBy(items, 'patient_type_display');
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Column(
@@ -72,6 +84,11 @@ class _Header extends StatelessWidget {
                 label: 'Male',
                 value: '$male',
                 color: EnhancedTheme.accentCyan),
+            KpiTile(
+                icon: Icons.verified_user_outlined,
+                label: 'NHIA',
+                value: '$nhia',
+                color: EnhancedTheme.accentPurple),
           ]),
           const SizedBox(height: 10),
           if (byAge.isNotEmpty)
@@ -80,6 +97,14 @@ class _Header extends StatelessWidget {
               heading: 'By age group',
               child: MiniBarChart(rows: byAge),
             ),
+          if (byType.length > 1) ...[
+            const SizedBox(height: 10),
+            StatSection(
+              icon: Icons.account_balance_wallet_outlined,
+              heading: 'By patient type',
+              child: MiniBarChart(rows: byType),
+            ),
+          ],
         ],
       ),
     );
@@ -91,11 +116,47 @@ const _statuses = ['active', 'inactive', 'deceased'];
 const _bloodGroups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 const _genotypes = ['AA', 'AS', 'AC', 'SS', 'SC'];
 
+/// How the patient's care is paid for — value to label, mirroring
+/// `Patient.PatientType` on the backend. The value goes on the wire; the label
+/// is what reception reads.
+const patientTypes = <String, String>{
+  'regular': 'Regular',
+  'nhia': 'NHIA',
+  'private': 'Private Pay',
+  'insurance': 'Private Insurance',
+  'corporate': 'Corporate',
+  'staff': 'Staff',
+  'dependant': 'Dependant',
+  'emergency': 'Emergency',
+  'retainership': 'Retainership',
+};
+
 const _statusColor = {
   'active': EnhancedTheme.successGreen,
   'inactive': Colors.grey,
   'deceased': EnhancedTheme.errorRed,
 };
+
+/// The same rules the API enforces, checked before the round trip so the user
+/// sees them next to the fields. Returns null when the form is submittable.
+///
+/// Kept a plain function rather than a Form/validator: the sheet has no
+/// FormState and these are two cross-field rules, not per-field ones.
+String? patientFormError({
+  required String firstName,
+  required String lastName,
+  required String patientType,
+  required String nhisNumber,
+}) {
+  if (firstName.trim().isEmpty || lastName.trim().isEmpty) {
+    return 'First and last name are required.';
+  }
+  // An NHIA patient is only NHIA if the scheme can be billed.
+  if (patientType == 'nhia' && nhisNumber.trim().isEmpty) {
+    return 'NHIS number is required for NHIA patients.';
+  }
+  return null;
+}
 
 class _Card extends StatelessWidget {
   final Map<String, dynamic> row;
@@ -107,6 +168,7 @@ class _Card extends StatelessWidget {
     final status = '${row['status'] ?? ''}';
     final age = row['age'];
     final sex = '${row['sex'] ?? ''}';
+    final type = '${row['patient_type'] ?? ''}';
     return GlassCard(
       borderRadius: 16,
       padding: const EdgeInsets.all(14),
@@ -122,6 +184,16 @@ class _Card extends StatelessWidget {
                       fontSize: 15)),
             ),
             const SizedBox(width: 8),
+            // Regular is the default and the majority — badging it would just
+            // be noise, so only the exceptions get called out.
+            if (type.isNotEmpty && type != 'regular') ...[
+              ReportBadge(
+                  text: '${row['patient_type_display'] ?? patientTypes[type] ?? type}',
+                  color: row['is_nhia'] == true
+                      ? EnhancedTheme.accentPurple
+                      : EnhancedTheme.accentCyan),
+              const SizedBox(width: 6),
+            ],
             ReportBadge(
                 text: status, color: _statusColor[status] ?? EnhancedTheme.primaryTeal),
             IconButton(
@@ -185,6 +257,7 @@ class _FormState extends State<_Form> {
 
   String _sex = 'F';
   String _status = 'active';
+  String _patientType = 'regular';
   String? _bloodGroup;
   String? _genotype;
   String _region = '';
@@ -202,6 +275,9 @@ class _FormState extends State<_Form> {
     if (e == null) return;
     if (_sexes.contains(e['sex'])) _sex = e['sex'];
     if (_statuses.contains(e['status'])) _status = e['status'];
+    if (patientTypes.containsKey(e['patient_type'])) {
+      _patientType = e['patient_type'];
+    }
     if (_bloodGroups.contains(e['blood_group'])) _bloodGroup = e['blood_group'];
     if (_genotypes.contains(e['genotype'])) _genotype = e['genotype'];
     _first.text = '${e['first_name'] ?? ''}';
@@ -248,8 +324,14 @@ class _FormState extends State<_Form> {
           '${_dob!.day.toString().padLeft(2, '0')}';
 
   Future<void> _submit() async {
-    if (_first.text.trim().isEmpty || _last.text.trim().isEmpty) {
-      setState(() => _error = 'First and last name are required.');
+    final problem = patientFormError(
+      firstName: _first.text,
+      lastName: _last.text,
+      patientType: _patientType,
+      nhisNumber: _nhis.text,
+    );
+    if (problem != null) {
+      setState(() => _error = problem);
       return;
     }
     setState(() {
@@ -262,6 +344,7 @@ class _FormState extends State<_Form> {
         'last_name': _last.text.trim(),
         'other_names': _other.text.trim(),
         'hospital_number': _hospitalNumber.text.trim(),
+        'patient_type': _patientType,
         'sex': _sex,
         'date_of_birth': _dob == null ? null : _dobText,
         'phone': _phone.text.trim(),
@@ -325,8 +408,23 @@ class _FormState extends State<_Form> {
           controller: _hospitalNumber,
           decoration: const InputDecoration(
             labelText: 'Hospital number',
-            helperText: 'Leave blank to generate one',
+            helperText: 'Leave blank to generate one from the patient type',
           ),
+        ),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
+          initialValue: _patientType,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: 'Patient type',
+            helperText: 'Decides the billing route',
+          ),
+          items: [
+            for (final t in patientTypes.entries)
+              DropdownMenuItem(value: t.key, child: Text(t.value)),
+          ],
+          // Rebuilds the NHIS field below, which becomes required for NHIA.
+          onChanged: (v) => setState(() => _patientType = v!),
         ),
         const SizedBox(height: 12),
         Row(children: [
@@ -407,7 +505,13 @@ class _FormState extends State<_Form> {
         const SizedBox(height: 12),
         TextField(
           controller: _nhis,
-          decoration: const InputDecoration(labelText: 'NHIS number'),
+          decoration: InputDecoration(
+            labelText:
+                _patientType == 'nhia' ? 'NHIS number *' : 'NHIS number',
+            helperText: _patientType == 'nhia'
+                ? 'Required — this is what makes the exemption claimable'
+                : null,
+          ),
         ),
         const SizedBox(height: 12),
         TextField(
@@ -579,6 +683,7 @@ class _Details extends StatelessWidget {
   Widget build(BuildContext context) {
     final rows = <(String, String)>[
       ('Hospital number', '${patient['hospital_number'] ?? ''}'),
+      ('Patient type', '${patient['patient_type_display'] ?? ''}'),
       ('Sex', '${patient['sex'] ?? ''}'),
       ('Date of birth', '${patient['date_of_birth'] ?? '—'}'),
       ('Age', patient['age'] == null ? '—' : '${patient['age']}'),
