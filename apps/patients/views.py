@@ -35,7 +35,8 @@ class PatientViewSet(viewsets.ModelViewSet):
 
     serializer_class = PatientSerializer
     permission_classes = [IsTenantMember, IsClinicalStaff]
-    filterset_fields = ("sex", "status", "region", "blood_group", "genotype")
+    filterset_fields = ("sex", "status", "region", "blood_group", "genotype",
+                        "patient_type")
     search_fields = ("hospital_number", "first_name", "last_name", "other_names",
                      "phone", "nhis_number")
     ordering_fields = ("last_name", "created_at", "date_of_birth")

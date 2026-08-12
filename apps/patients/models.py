@@ -6,7 +6,7 @@ centrally, and only an optional FK back to here. A patient row never leaves its
 tenant — the manager is tenant-scoped like the rest of the platform, and the
 API gates reads to clinical staff (see apps.accounts.permissions).
 """
-import uuid
+import secrets
 
 from django.db import models
 
@@ -49,6 +49,29 @@ class Patient(TenantOwnedModel):
         INACTIVE = "inactive"
         DECEASED = "deceased"
 
+    class PatientType(models.TextChoices):
+        """How this patient's care is paid for — the billing route.
+
+        Kept as one flat field rather than a table: the list is fixed by
+        national scheme and facility policy, not by tenant.
+        """
+
+        REGULAR = "regular", "Regular"
+        NHIA = "nhia", "NHIA"
+        PRIVATE = "private", "Private Pay"
+        INSURANCE = "insurance", "Private Insurance"
+        CORPORATE = "corporate", "Corporate"
+        STAFF = "staff", "Staff"
+        DEPENDANT = "dependant", "Dependant"
+        EMERGENCY = "emergency", "Emergency"
+        RETAINERSHIP = "retainership", "Retainership"
+
+    # Leading digit of a generated hospital number, by patient type: the first
+    # digit tells records which billing route a patient is on without a lookup.
+    # Types not listed fall back to DEFAULT_NUMBER_PREFIX.
+    NUMBER_PREFIXES = {PatientType.NHIA: "4", PatientType.RETAINERSHIP: "3"}
+    DEFAULT_NUMBER_PREFIX = "0"
+
     class BloodGroup(models.TextChoices):
         A_POS = "A+"
         A_NEG = "A-"
@@ -67,6 +90,9 @@ class Patient(TenantOwnedModel):
         SC = "SC"
 
     hospital_number = models.CharField(max_length=50, blank=True)
+    patient_type = models.CharField(
+        max_length=15, choices=PatientType.choices, default=PatientType.REGULAR
+    )
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
     other_names = models.CharField(max_length=100, blank=True)
@@ -113,6 +139,7 @@ class Patient(TenantOwnedModel):
             models.Index(fields=["tenant", "last_name"]),
             models.Index(fields=["tenant", "status"]),
             models.Index(fields=["tenant", "phone"]),
+            models.Index(fields=["tenant", "patient_type"]),
         ]
 
     def __str__(self):
@@ -138,12 +165,31 @@ class Patient(TenantOwnedModel):
     def age_group(self):
         return age_band(self.age)
 
+    @property
+    def is_nhia(self):
+        """On the national insurance scheme — drives exemption at billing."""
+        return self.patient_type == self.PatientType.NHIA
+
+    def generate_hospital_number(self):
+        """A free 10-digit number whose leading digit encodes the patient type.
+
+        Checked for collisions across all tenants, not just this one: the
+        uniqueness constraint is per-tenant, but a globally free number
+        satisfies it and needs no tenant bound at generation time.
+        """
+        prefix = self.NUMBER_PREFIXES.get(self.patient_type,
+                                          self.DEFAULT_NUMBER_PREFIX)
+        for _ in range(10):
+            candidate = f"{prefix}{secrets.randbelow(10 ** 9):09d}"
+            if not Patient.all_objects.filter(hospital_number=candidate).exists():
+                return candidate
+        # ponytail: 10 tries over a 1e9 space — losing all ten means the space
+        # is full, not unlucky. Widen the number before adding retries.
+        raise ValueError("Could not generate a free hospital number")
+
     def save(self, *args, **kwargs):
         if not self.hospital_number:
-            # ponytail: random suffix, not a per-tenant counter — no SELECT MAX
-            # race to lose. Swap for a sequence only if facilities need
-            # gap-free numbering.
-            self.hospital_number = f"P-{uuid.uuid4().hex[:8].upper()}"
+            self.hospital_number = self.generate_hospital_number()
         super().save(*args, **kwargs)
 
 

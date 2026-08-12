@@ -5,9 +5,10 @@ from .models import Patient, PatientAccessLog
 
 @admin.register(Patient)
 class PatientAdmin(admin.ModelAdmin):
-    list_display = ("hospital_number", "full_name", "sex", "date_of_birth",
-                    "status", "tenant", "created_at")
-    list_filter = ("tenant", "sex", "status", "blood_group", "genotype")
+    list_display = ("hospital_number", "full_name", "patient_type", "sex",
+                    "date_of_birth", "status", "tenant", "created_at")
+    list_filter = ("tenant", "patient_type", "sex", "status", "blood_group",
+                   "genotype")
     search_fields = ("hospital_number", "first_name", "last_name", "phone",
                      "nhis_number")
     raw_id_fields = ("chronic_conditions", "registered_by")

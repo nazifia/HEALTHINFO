@@ -48,10 +48,39 @@ def test_age_and_group_from_dob(db_clean):
     assert p.age_group == "19-40"
 
 
-def test_hospital_number_generated(db_clean):
+@pytest.mark.parametrize(
+    "patient_type,prefix",
+    [("regular", "0"), ("nhia", "4"), ("retainership", "3"), ("staff", "0")],
+)
+def test_hospital_number_encodes_patient_type(db_clean, patient_type, prefix):
     t = Tenant.objects.create(name="Clinic", slug="clinic")
-    p = Patient.objects.create(tenant=t, first_name="Ada", last_name="Obi")
-    assert p.hospital_number.startswith("P-")
+    p = Patient.objects.create(tenant=t, first_name="Ada", last_name="Obi",
+                               patient_type=patient_type)
+    assert p.hospital_number.startswith(prefix)
+    assert len(p.hospital_number) == 10 and p.hospital_number.isdigit()
+    assert p.is_nhia is (patient_type == "nhia")
+
+
+def test_supplied_hospital_number_is_kept(db_clean):
+    t = Tenant.objects.create(name="Clinic", slug="clinic")
+    p = Patient.objects.create(tenant=t, first_name="Ada", last_name="Obi",
+                               patient_type="nhia", hospital_number="MRN-9")
+    assert p.hospital_number == "MRN-9"
+
+
+def test_patients_filter_by_type(db_clean):
+    a = Tenant.objects.create(name="A", slug="a")
+    Patient.objects.create(tenant=a, first_name="Ada", last_name="A",
+                           patient_type="nhia")
+    Patient.objects.create(tenant=a, first_name="Bola", last_name="B")
+    doctor = User.objects.create_user(phone="08030000011", password="x",
+                                      tenant=a, role=Role.DOCTOR)
+
+    r = _client(doctor, a).get("/api/patients/", {"patient_type": "nhia"})
+    assert r.status_code == 200
+    rows = r.json()["results"]
+    assert [row["first_name"] for row in rows] == ["Ada"]
+    assert rows[0]["patient_type_display"] == "NHIA" and rows[0]["is_nhia"] is True
 
 
 def test_case_report_inherits_patient_demographics(db_clean):
@@ -113,6 +142,47 @@ def test_duplicate_hospital_number_rejected(db_clean):
     r = _client(doctor, a).post("/api/patients/", {
         "first_name": "Bola", "last_name": "B", "hospital_number": "MRN-1",
     }, format="json")
+    assert r.status_code == 400
+
+
+def test_nhia_patient_requires_nhis_number(db_clean):
+    a = Tenant.objects.create(name="A", slug="a")
+    doctor = User.objects.create_user(phone="08030000012", password="x",
+                                      tenant=a, role=Role.DOCTOR)
+    c = _client(doctor, a)
+    body = {"first_name": "Ada", "last_name": "Obi", "patient_type": "nhia"}
+
+    r = c.post("/api/patients/", body, format="json")
+    assert r.status_code == 400 and "nhis_number" in r.json()["errors"]
+
+    # Blank/whitespace doesn't count as supplying one.
+    r = c.post("/api/patients/", {**body, "nhis_number": "  "}, format="json")
+    assert r.status_code == 400
+
+    r = c.post("/api/patients/", {**body, "nhis_number": "NHIS-1"}, format="json")
+    assert r.status_code == 201, r.content
+
+    # Non-NHIA types are unaffected.
+    r = c.post("/api/patients/", {**body, "patient_type": "staff"}, format="json")
+    assert r.status_code == 201, r.content
+
+
+def test_switching_a_patient_to_nhia_needs_the_number(db_clean):
+    a = Tenant.objects.create(name="A", slug="a")
+    p = Patient.objects.create(tenant=a, first_name="Ada", last_name="A")
+    doctor = User.objects.create_user(phone="08030000013", password="x",
+                                      tenant=a, role=Role.DOCTOR)
+    c = _client(doctor, a)
+
+    r = c.patch(f"/api/patients/{p.pk}/", {"patient_type": "nhia"}, format="json")
+    assert r.status_code == 400 and "nhis_number" in r.json()["errors"]
+
+    r = c.patch(f"/api/patients/{p.pk}/",
+                {"patient_type": "nhia", "nhis_number": "NHIS-2"}, format="json")
+    assert r.status_code == 200, r.content
+
+    # Already NHIA on file: clearing the number is rejected too.
+    r = c.patch(f"/api/patients/{p.pk}/", {"nhis_number": ""}, format="json")
     assert r.status_code == 400
 
 

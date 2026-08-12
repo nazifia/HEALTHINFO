@@ -10,6 +10,10 @@ class PatientSerializer(serializers.ModelSerializer):
     full_name = serializers.CharField(read_only=True)
     age = serializers.IntegerField(read_only=True)
     age_group = serializers.CharField(read_only=True)
+    patient_type_display = serializers.CharField(
+        source="get_patient_type_display", read_only=True
+    )
+    is_nhia = serializers.BooleanField(read_only=True)
     registered_by_name = serializers.CharField(
         source="registered_by.username", read_only=True
     )
@@ -50,12 +54,29 @@ class PatientSerializer(serializers.ModelSerializer):
             )
         return value
 
+    def _current(self, attrs, field):
+        """Value after this write — the submitted one, else what's on file.
+
+        Needed because a PATCH may change either half of a cross-field rule
+        while the other half stays on the instance.
+        """
+        if field in attrs:
+            return attrs[field]
+        return getattr(self.instance, field, None)
+
     def validate(self, attrs):
         dob = attrs.get("date_of_birth")
         if dob and dob > timezone.localdate():
             raise serializers.ValidationError(
                 {"date_of_birth": "Date of birth cannot be in the future."}
             )
+        # An NHIA patient is only NHIA if the scheme can be billed — the
+        # enrolment number is what makes the exemption claimable.
+        if self._current(attrs, "patient_type") == Patient.PatientType.NHIA:
+            if not (self._current(attrs, "nhis_number") or "").strip():
+                raise serializers.ValidationError(
+                    {"nhis_number": "Required for NHIA patients."}
+                )
         return attrs
 
     def _stamp_consent(self, validated_data, instance=None):
