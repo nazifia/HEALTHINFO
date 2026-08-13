@@ -6,6 +6,7 @@ import 'report_scaffold.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/empty_state.dart';
+import '../shared/widgets/searchable_dropdown.dart';
 import '../shared/widgets/snack.dart';
 
 /// Case reports — GET/POST /api/case-reports/.
@@ -354,7 +355,7 @@ class _ReportFormState extends State<_ReportForm> {
                       fontSize: 18,
                       fontWeight: FontWeight.w800)),
               const SizedBox(height: 16),
-              DropdownButtonFormField<int?>(
+              SearchableDropdown<int?>(
                 initialValue: _diseaseId,
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Disease (optional)'),
@@ -370,7 +371,7 @@ class _ReportFormState extends State<_ReportForm> {
               Row(
                 children: [
                   Expanded(
-                    child: DropdownButtonFormField<String>(
+                    child: SearchableDropdown<String>(
                       initialValue: _sev,
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Severity'),
@@ -383,7 +384,7 @@ class _ReportFormState extends State<_ReportForm> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: DropdownButtonFormField<String>(
+                    child: SearchableDropdown<String>(
                       initialValue: _out,
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Outcome'),

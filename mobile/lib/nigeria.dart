@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'main.dart';
+import 'shared/widgets/searchable_dropdown.dart';
 import 'shared/widgets/snack.dart';
 
 /// Nigeria states → their Local Government Areas (LGAs). Source for the
@@ -162,7 +163,7 @@ class _RegionPickerState extends State<RegionPicker> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        DropdownButtonFormField<String>(
+        SearchableDropdown<String>(
           initialValue: _state,
           isExpanded: true,
           decoration: const InputDecoration(labelText: 'State'),
@@ -177,7 +178,7 @@ class _RegionPickerState extends State<RegionPicker> {
           }),
         ),
         const SizedBox(height: 12),
-        DropdownButtonFormField<String>(
+        SearchableDropdown<String>(
           initialValue: _lga,
           isExpanded: true,
           decoration: const InputDecoration(labelText: 'LGA'),

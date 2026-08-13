@@ -6,6 +6,7 @@ import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/stats_kit.dart';
 import '../shared/widgets/bar_chart.dart';
+import '../shared/widgets/searchable_dropdown.dart';
 import 'report_scaffold.dart';
 
 /// Appointments / telemedicine — GET/POST /api/appointments/.
@@ -238,7 +239,7 @@ class _FormState extends State<_Form> {
       children: [
         Row(children: [
           Expanded(
-            child: DropdownButtonFormField<String>(
+            child: SearchableDropdown<String>(
               initialValue: _mode,
               isExpanded: true,
               decoration: const InputDecoration(labelText: 'Mode'),
@@ -251,7 +252,7 @@ class _FormState extends State<_Form> {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: DropdownButtonFormField<String>(
+            child: SearchableDropdown<String>(
               initialValue: _status,
               isExpanded: true,
               decoration: const InputDecoration(labelText: 'Status'),

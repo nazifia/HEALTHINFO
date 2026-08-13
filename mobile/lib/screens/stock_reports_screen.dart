@@ -6,6 +6,7 @@ import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/stats_kit.dart';
 import '../shared/widgets/bar_chart.dart';
+import '../shared/widgets/searchable_dropdown.dart';
 import 'report_scaffold.dart';
 
 /// Pharmacy stock & usage — GET/POST /api/stock-reports/.
@@ -251,7 +252,7 @@ class _FormState extends State<_Form> {
       submitLabel: _isEdit ? 'Save changes' : 'Submit snapshot',
       onSubmit: _submit,
       children: [
-        DropdownButtonFormField<int?>(
+        SearchableDropdown<int?>(
           initialValue: _medicationId,
           isExpanded: true,
           decoration: const InputDecoration(labelText: 'Medication'),

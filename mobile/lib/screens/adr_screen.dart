@@ -6,6 +6,7 @@ import 'report_scaffold.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/empty_state.dart';
+import '../shared/widgets/searchable_dropdown.dart';
 import '../shared/widgets/snack.dart';
 
 /// Adverse drug reactions — GET/POST /api/adverse-reactions/.
@@ -368,7 +369,7 @@ class _AdrFormState extends State<_AdrForm> {
                       fontSize: 18,
                       fontWeight: FontWeight.w800)),
               const SizedBox(height: 16),
-              DropdownButtonFormField<int?>(
+              SearchableDropdown<int?>(
                 initialValue: _medicationId,
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Medication'),
@@ -391,7 +392,7 @@ class _AdrFormState extends State<_AdrForm> {
               Row(
                 children: [
                   Expanded(
-                    child: DropdownButtonFormField<String>(
+                    child: SearchableDropdown<String>(
                       initialValue: _sev,
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Severity'),
@@ -405,7 +406,7 @@ class _AdrFormState extends State<_AdrForm> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: DropdownButtonFormField<String>(
+                    child: SearchableDropdown<String>(
                       initialValue: _out,
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Outcome'),

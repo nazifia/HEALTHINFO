@@ -4,6 +4,7 @@ import '../main.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/glass_card.dart';
+import '../shared/widgets/searchable_dropdown.dart';
 import '../shared/widgets/skeleton_cards.dart';
 import '../shared/widgets/snack.dart';
 
@@ -272,7 +273,7 @@ class _UserFormState extends State<_UserForm> {
                   validator: (v) =>
                       (v == null || v.length < 8) ? 'Min 8 characters' : null,
                 ),
-                DropdownButtonFormField<int>(
+                SearchableDropdown<int>(
                   initialValue: _tenantId,
                   decoration: const InputDecoration(labelText: 'Tenant'),
                   items: [
@@ -284,7 +285,7 @@ class _UserFormState extends State<_UserForm> {
                   onChanged: (v) => setState(() => _tenantId = v),
                 ),
               ],
-              DropdownButtonFormField<String>(
+              SearchableDropdown<String>(
                 initialValue: _roles.contains(_role) ? _role : 'public',
                 decoration: const InputDecoration(labelText: 'Role'),
                 items: [
