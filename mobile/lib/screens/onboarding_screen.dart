@@ -5,6 +5,7 @@ import '../main.dart';
 import '../config.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
+import '../shared/widgets/searchable_dropdown.dart';
 import '../shared/widgets/snack.dart';
 
 /// Self-serve organization signup. POSTs /api/auth/onboarding/ to create a
@@ -125,7 +126,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }) {
     return Padding(
       padding: const EdgeInsets.only(top: 12),
-      child: DropdownButtonFormField<int>(
+      child: SearchableDropdown<int>(
         value: value,
         isExpanded: true,
         decoration: InputDecoration(

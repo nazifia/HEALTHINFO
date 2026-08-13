@@ -6,6 +6,7 @@ import '../main.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/responsive.dart';
+import '../shared/widgets/searchable_dropdown.dart';
 import '../shared/widgets/snack.dart';
 
 /// One server-side choice filter offered above a report list.
@@ -266,31 +267,44 @@ class _FilterDropdown extends StatelessWidget {
   Widget build(BuildContext context) {
     final active = value != null;
     final accent = active ? EnhancedTheme.primaryTeal : context.hintColor;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: accent.withValues(alpha: active ? 1 : 0.4)),
-        color: active
-            ? EnhancedTheme.primaryTeal.withValues(alpha: 0.12)
-            : Colors.transparent,
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String?>(
-          value: value,
-          isDense: true,
-          borderRadius: BorderRadius.circular(12),
-          icon: Icon(Icons.arrow_drop_down, size: 20, color: accent),
-          style: TextStyle(
-              color: context.labelColor,
-              fontSize: 13,
-              fontWeight: FontWeight.w600),
-          items: [
-            DropdownMenuItem(value: null, child: Text(filter.anyLabel)),
-            for (final o in filter.options.entries)
-              DropdownMenuItem(value: o.key, child: Text(o.value)),
+    final items = <DropdownMenuItem<String?>>[
+      DropdownMenuItem(value: null, child: Text(filter.anyLabel)),
+      for (final o in filter.options.entries)
+        DropdownMenuItem(value: o.key, child: Text(o.value)),
+    ];
+    final label = active ? filter.options[value] ?? value! : filter.anyLabel;
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: () async {
+        final picked = await showSearchablePicker<String?>(
+          context: context,
+          items: items,
+          selected: value,
+          title: filter.anyLabel,
+        );
+        if (picked != null) onChanged(picked.value);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: accent.withValues(alpha: active ? 1 : 0.4)),
+          color: active
+              ? EnhancedTheme.primaryTeal.withValues(alpha: 0.12)
+              : Colors.transparent,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                  color: context.labelColor,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600),
+            ),
+            Icon(Icons.arrow_drop_down, size: 20, color: accent),
           ],
-          onChanged: onChanged,
         ),
       ),
     );

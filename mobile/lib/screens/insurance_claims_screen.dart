@@ -6,6 +6,7 @@ import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/stats_kit.dart';
 import '../shared/widgets/bar_chart.dart';
+import '../shared/widgets/searchable_dropdown.dart';
 import 'report_scaffold.dart';
 
 /// Health-insurance claims — GET/POST /api/insurance-claims/.
@@ -262,7 +263,7 @@ class _FormState extends State<_Form> {
           decoration: const InputDecoration(labelText: 'Amount (₦)'),
         ),
         const SizedBox(height: 12),
-        DropdownButtonFormField<String>(
+        SearchableDropdown<String>(
           initialValue: _status,
           isExpanded: true,
           decoration: const InputDecoration(labelText: 'Status'),
@@ -270,7 +271,7 @@ class _FormState extends State<_Form> {
           onChanged: (v) => setState(() => _status = v!),
         ),
         const SizedBox(height: 12),
-        DropdownButtonFormField<int?>(
+        SearchableDropdown<int?>(
           initialValue: _diagnosisId,
           isExpanded: true,
           decoration: const InputDecoration(labelText: 'Diagnosis (optional)'),

@@ -6,6 +6,7 @@ import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/stats_kit.dart';
 import '../shared/widgets/bar_chart.dart';
+import '../shared/widgets/searchable_dropdown.dart';
 import 'report_scaffold.dart';
 
 /// Laboratory results — GET/POST /api/lab-results/.
@@ -295,7 +296,7 @@ class _FormState extends State<_Form> {
       submitLabel: _isEdit ? 'Save changes' : 'Submit result',
       onSubmit: _submit,
       children: [
-        DropdownButtonFormField<int?>(
+        SearchableDropdown<int?>(
           initialValue: _labTestId,
           isExpanded: true,
           decoration: const InputDecoration(labelText: 'Lab test (optional)'),
@@ -312,7 +313,7 @@ class _FormState extends State<_Form> {
           decoration: const InputDecoration(labelText: 'Result value (e.g. 12.3 g/dL)'),
         ),
         const SizedBox(height: 12),
-        DropdownButtonFormField<String>(
+        SearchableDropdown<String>(
           initialValue: _flag,
           isExpanded: true,
           decoration: const InputDecoration(labelText: 'Flag'),
@@ -320,7 +321,7 @@ class _FormState extends State<_Form> {
           onChanged: (v) => setState(() => _flag = v!),
         ),
         const SizedBox(height: 12),
-        DropdownButtonFormField<int?>(
+        SearchableDropdown<int?>(
           initialValue: _diseaseId,
           isExpanded: true,
           decoration: const InputDecoration(labelText: 'Suspected disease (optional)'),
@@ -351,7 +352,7 @@ class _FormState extends State<_Form> {
           ),
         ]),
         const SizedBox(height: 12),
-        DropdownButtonFormField<String>(
+        SearchableDropdown<String>(
           initialValue: _sus,
           isExpanded: true,
           decoration: const InputDecoration(labelText: 'Susceptibility'),

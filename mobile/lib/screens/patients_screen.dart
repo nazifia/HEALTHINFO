@@ -7,6 +7,7 @@ import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/stats_kit.dart';
 import '../shared/widgets/bar_chart.dart';
+import '../shared/widgets/searchable_dropdown.dart';
 import 'report_scaffold.dart';
 import 'patient_access_log_screen.dart';
 
@@ -434,7 +435,7 @@ class _FormState extends State<_Form> {
           ),
         ),
         const SizedBox(height: 12),
-        DropdownButtonFormField<String>(
+        SearchableDropdown<String>(
           initialValue: _patientType,
           isExpanded: true,
           decoration: const InputDecoration(
@@ -451,7 +452,7 @@ class _FormState extends State<_Form> {
         const SizedBox(height: 12),
         Row(children: [
           Expanded(
-            child: DropdownButtonFormField<String>(
+            child: SearchableDropdown<String>(
               initialValue: _sex,
               isExpanded: true,
               decoration: const InputDecoration(labelText: 'Sex'),
@@ -484,7 +485,7 @@ class _FormState extends State<_Form> {
         const SizedBox(height: 12),
         Row(children: [
           Expanded(
-            child: DropdownButtonFormField<String>(
+            child: SearchableDropdown<String>(
               initialValue: _bloodGroup,
               isExpanded: true,
               decoration: const InputDecoration(labelText: 'Blood group'),
@@ -497,7 +498,7 @@ class _FormState extends State<_Form> {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: DropdownButtonFormField<String>(
+            child: SearchableDropdown<String>(
               initialValue: _genotype,
               isExpanded: true,
               decoration: const InputDecoration(labelText: 'Genotype'),
@@ -558,7 +559,7 @@ class _FormState extends State<_Form> {
           ),
         ]),
         const SizedBox(height: 12),
-        DropdownButtonFormField<String>(
+        SearchableDropdown<String>(
           initialValue: _status,
           isExpanded: true,
           decoration: const InputDecoration(labelText: 'Status'),

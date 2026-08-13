@@ -6,6 +6,7 @@ import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/stats_kit.dart';
 import '../shared/widgets/bar_chart.dart';
+import '../shared/widgets/searchable_dropdown.dart';
 import 'report_scaffold.dart';
 
 /// Vital registration — GET/POST /api/vital-events/.
@@ -257,7 +258,7 @@ class _FormState extends State<_Form> {
       submitLabel: _isEdit ? 'Save changes' : 'Submit event',
       onSubmit: _submit,
       children: [
-        DropdownButtonFormField<String>(
+        SearchableDropdown<String>(
           initialValue: _kind,
           isExpanded: true,
           decoration: const InputDecoration(labelText: 'Event type'),
@@ -266,7 +267,7 @@ class _FormState extends State<_Form> {
         ),
         if (_isDeath) ...[
           const SizedBox(height: 12),
-          DropdownButtonFormField<int?>(
+          SearchableDropdown<int?>(
             initialValue: _causeId,
             isExpanded: true,
             decoration: const InputDecoration(labelText: 'Cause of death (optional)'),

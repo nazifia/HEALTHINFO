@@ -6,6 +6,7 @@ import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/stats_kit.dart';
 import '../shared/widgets/bar_chart.dart';
+import '../shared/widgets/searchable_dropdown.dart';
 import 'report_scaffold.dart';
 
 /// Community health worker reports — GET/POST /api/chw-reports/.
@@ -233,7 +234,7 @@ class _FormState extends State<_Form> {
       submitLabel: _isEdit ? 'Save changes' : 'Submit report',
       onSubmit: _submit,
       children: [
-        DropdownButtonFormField<String>(
+        SearchableDropdown<String>(
           initialValue: _type,
           isExpanded: true,
           decoration: const InputDecoration(labelText: 'Report type'),
