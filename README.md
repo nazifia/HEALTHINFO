@@ -91,13 +91,29 @@ All dashboards accept `?from=YYYY-MM-DD&to=YYYY-MM-DD` to window the rollup.
   (catalog diseases), NHIS number, next of kin, consent. `?search=` matches
   name, hospital number, phone or NHIS number; filter by sex, status, region,
   blood group, genotype. The hospital number is generated when left blank and
-  is unique per tenant.
+  is unique per tenant. Registering someone whose names **and** date of birth
+  already match a patient on file is rejected — resend with
+  `allow_duplicate: true` for a genuine namesake. A `date_of_death` freezes the
+  patient's age, forces status `deceased`, and is set automatically when a
+  death vital event is filed against them. Phone numbers are stored in one
+  shape (`+234…`, spaces and dashes all fold to `0XXXXXXXXXX`) so search and
+  duplicate-spotting see the same string reception typed. Deleting a patient
+  who has clinical records is refused — the reports would survive and silently
+  lose the link; retire the record (status `inactive`) or merge it.
+- `POST /api/patients/{id}/merge/` `{"source": <id>}` — same person registered
+  twice: the record in the URL survives, the duplicate's clinical rows move to
+  it, and fields still blank on it are filled from the duplicate. The duplicate
+  is kept as a tombstone (status `merged`, `merged_into` set) so its hospital
+  number still resolves, and it drops out of lists unless you ask for
+  `?status=merged`. **Tenant admins only.**
 - `GET  /api/patients/{id}/history/` — everything filed against that patient
   across the clinical modules (cases, ADRs, labs, immunizations, vital events,
   CHW reports, claims, appointments) plus per-type counts.
 - `GET  /api/patients/access-log/` — who read patient data, newest first:
-  user, action (list/retrieve/history), the `?search=` used and how many rows
-  came back. `?patient=<id>` narrows it to one record's trail, `?action=` to
+  user, action (list/retrieve/history/delete/merge), the `?search=` used and how
+  many rows came back. A delete is logged before the row goes, with the hospital
+  number and name in `query` — nothing else survives to say who it was; a merge
+  records both hospital numbers. `?patient=<id>` narrows it to one record's trail, `?action=` to
   one kind of read. **Tenant admins only** — clinical staff generate this log,
   so they don't get to audit it. In the app it's a nav section for admins, and
   a shortcut in each patient's app bar.

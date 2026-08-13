@@ -135,6 +135,7 @@ const _statusColor = {
   'active': EnhancedTheme.successGreen,
   'inactive': Colors.grey,
   'deceased': EnhancedTheme.errorRed,
+  'merged': Colors.blueGrey,
 };
 
 /// The same rules the API enforces, checked before the round trip so the user
@@ -262,6 +263,7 @@ class _FormState extends State<_Form> {
   String? _genotype;
   String _region = '';
   DateTime? _dob;
+  DateTime? _dod;
   bool _consent = false;
   bool _saving = false;
   String? _error;
@@ -274,7 +276,9 @@ class _FormState extends State<_Form> {
     final e = widget.existing;
     if (e == null) return;
     if (_sexes.contains(e['sex'])) _sex = e['sex'];
-    if (_statuses.contains(e['status'])) _status = e['status'];
+    // Takes the status as-is, even one the dropdown doesn't offer ('merged'),
+    // so editing a record can never silently change what it is.
+    _status = '${e['status'] ?? _status}';
     if (patientTypes.containsKey(e['patient_type'])) {
       _patientType = e['patient_type'];
     }
@@ -295,6 +299,7 @@ class _FormState extends State<_Form> {
     _region = '${e['region'] ?? ''}';
     _consent = e['consent_given'] == true;
     _dob = DateTime.tryParse('${e['date_of_birth'] ?? ''}');
+    _dod = DateTime.tryParse('${e['date_of_death'] ?? ''}');
   }
 
   @override
@@ -318,10 +323,23 @@ class _FormState extends State<_Form> {
     if (picked != null) setState(() => _dob = picked);
   }
 
-  String get _dobText => _dob == null
+  Future<void> _pickDod() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _dod ?? now,
+      firstDate: _dob ?? DateTime(now.year - 120),
+      lastDate: now,
+    );
+    if (picked != null) setState(() => _dod = picked);
+  }
+
+  String _dateText(DateTime? d) => d == null
       ? 'Not set'
-      : '${_dob!.year}-${_dob!.month.toString().padLeft(2, '0')}-'
-          '${_dob!.day.toString().padLeft(2, '0')}';
+      : '${d.year}-${d.month.toString().padLeft(2, '0')}-'
+          '${d.day.toString().padLeft(2, '0')}';
+
+  String get _dobText => _dateText(_dob);
 
   Future<void> _submit() async {
     final problem = patientFormError(
@@ -358,6 +376,10 @@ class _FormState extends State<_Form> {
         'next_of_kin_phone': _kinPhone.text.trim(),
         'next_of_kin_relationship': _kinRelationship.text.trim(),
         'status': _status,
+        // Only a deceased patient carries one; anything else clears it, which
+        // is how the backend lets a wrongly-marked patient come back.
+        'date_of_death':
+            _status == 'deceased' && _dod != null ? _dateText(_dod) : null,
         'consent_given': _consent,
         'notes': _notes.text.trim(),
       };
@@ -541,10 +563,23 @@ class _FormState extends State<_Form> {
           isExpanded: true,
           decoration: const InputDecoration(labelText: 'Status'),
           items: [
-            for (final s in _statuses) DropdownMenuItem(value: s, child: Text(s)),
+            for (final s in {..._statuses, _status})
+              DropdownMenuItem(value: s, child: Text(s)),
           ],
           onChanged: (v) => setState(() => _status = v!),
         ),
+        if (_status == 'deceased') ...[
+          const SizedBox(height: 12),
+          InkWell(
+            onTap: _pickDod,
+            child: InputDecorator(
+              decoration: const InputDecoration(labelText: 'Date of death'),
+              child: Text(_dateText(_dod),
+                  style: TextStyle(
+                      color: _dod == null ? context.hintColor : context.labelColor)),
+            ),
+          ),
+        ],
         const SizedBox(height: 4),
         CheckboxListTile(
           contentPadding: EdgeInsets.zero,
@@ -597,6 +632,63 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
     _future = api.get('/api/patients/${widget.patient['id']}/history/');
   }
 
+  void _say(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Absorb a duplicate record into this one — the same person registered
+  /// twice. The duplicate is found by the hospital number reception has in
+  /// front of them; the API does the moving and keeps it as a pointer here.
+  Future<void> _mergeDuplicate() async {
+    final number = TextEditingController();
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Merge a duplicate'),
+        content: TextField(
+          controller: number,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Duplicate hospital number',
+            helperText: 'Its records move to this one. Cannot be undone.',
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Merge')),
+        ],
+      ),
+    );
+    final wanted = number.text.trim();
+    if (go != true || wanted.isEmpty) return;
+    final id = widget.patient['id'];
+    try {
+      final rows = await api.getList('/api/patients/', {'search': wanted});
+      final match = rows.cast<Map<String, dynamic>?>().firstWhere(
+            (r) => '${r?['hospital_number']}' == wanted && r?['id'] != id,
+            orElse: () => null,
+          );
+      if (match == null) {
+        _say('No other patient with hospital number $wanted');
+        return;
+      }
+      final result = await api.post('/api/patients/$id/merge/',
+          {'source': match['id']});
+      final moved = (result['moved'] as Map).values
+          .fold<int>(0, (sum, n) => sum + (n as int));
+      _say('Merged $wanted — $moved record(s) moved here');
+      setState(() => _future = api.get('/api/patients/$id/history/'));
+    } catch (e) {
+      _say('$e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = widget.patient;
@@ -604,23 +696,30 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
       appBar: AppBar(
         title: Text('${p['full_name'] ?? 'Patient'}'),
         actions: [
-          // Admins can jump straight to this record's read trail; the endpoint
-          // 403s everyone else, so don't offer them the button.
+          // The read trail and merging are both admin-only on the API, so
+          // don't offer either button to anyone who'd just get a 403.
           FutureBuilder<String?>(
             future: api.myRole(),
             builder: (context, snap) {
               const admins = {'tenant_admin', 'super_admin'};
               if (!admins.contains(snap.data)) return const SizedBox.shrink();
-              return IconButton(
-                tooltip: 'Who accessed this record',
-                icon: const Icon(Icons.privacy_tip_outlined),
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        PatientAccessLogScreen(patientId: p['id'] as int?),
+              return Row(mainAxisSize: MainAxisSize.min, children: [
+                IconButton(
+                  tooltip: 'Merge a duplicate into this record',
+                  icon: const Icon(Icons.merge_outlined),
+                  onPressed: _mergeDuplicate,
+                ),
+                IconButton(
+                  tooltip: 'Who accessed this record',
+                  icon: const Icon(Icons.privacy_tip_outlined),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          PatientAccessLogScreen(patientId: p['id'] as int?),
+                    ),
                   ),
                 ),
-              );
+              ]);
             },
           ),
         ],
@@ -686,6 +785,7 @@ class _Details extends StatelessWidget {
       ('Patient type', '${patient['patient_type_display'] ?? ''}'),
       ('Sex', '${patient['sex'] ?? ''}'),
       ('Date of birth', '${patient['date_of_birth'] ?? '—'}'),
+      ('Date of death', '${patient['date_of_death'] ?? ''}'),
       ('Age', patient['age'] == null ? '—' : '${patient['age']}'),
       ('Phone', '${patient['phone'] ?? ''}'),
       ('Region', '${patient['region'] ?? ''}'),
@@ -696,6 +796,8 @@ class _Details extends StatelessWidget {
       ('Next of kin',
           '${patient['next_of_kin_name'] ?? ''} ${patient['next_of_kin_phone'] ?? ''}'),
       ('Consent', patient['consent_given'] == true ? 'Given' : 'Not recorded'),
+      // Only set on a duplicate that was absorbed — says where its records went.
+      ('Merged into', '${patient['merged_into_number'] ?? ''}'),
     ];
     return GlassCard(
       borderRadius: 16,
