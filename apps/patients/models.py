@@ -8,7 +8,7 @@ API gates reads to clinical staff (see apps.accounts.permissions).
 """
 import secrets
 
-from django.db import models
+from django.db import models, transaction
 
 from apps.accounts.models import phone_validator
 from apps.tenants.models import TenantOwnedModel
@@ -48,6 +48,9 @@ class Patient(TenantOwnedModel):
         ACTIVE = "active"
         INACTIVE = "inactive"
         DECEASED = "deceased"
+        # Not a person's state — a record's. Set by merge_from on the duplicate
+        # that was absorbed; the row stays so its hospital number still resolves.
+        MERGED = "merged"
 
     class PatientType(models.TextChoices):
         """How this patient's care is paid for — the billing route.
@@ -98,6 +101,9 @@ class Patient(TenantOwnedModel):
     other_names = models.CharField(max_length=100, blank=True)
     sex = models.CharField(max_length=10, choices=Sex.choices, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
+    # Set means the patient is dead: it freezes `age` and forces the status
+    # (see save). A deceased patient with no known date keeps this null.
+    date_of_death = models.DateField(null=True, blank=True)
     phone = models.CharField(
         max_length=20, blank=True, validators=[phone_validator]
     )
@@ -126,6 +132,11 @@ class Patient(TenantOwnedModel):
     consent_given = models.BooleanField(default=False)
     consent_at = models.DateTimeField(null=True, blank=True)
 
+    # Set on the duplicate when two records turn out to be one person.
+    merged_into = models.ForeignKey(
+        "self", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="merged_from",
+    )
     registered_by = models.ForeignKey(
         "accounts.User", null=True, blank=True, on_delete=models.SET_NULL,
         related_name="registered_patients",
@@ -152,14 +163,19 @@ class Patient(TenantOwnedModel):
 
     @property
     def age(self):
-        """Age in whole years, or None when no date of birth is on file."""
+        """Age in whole years, or None when no date of birth is on file.
+
+        Counted to the date of death when there is one — a dead patient does
+        not keep getting older, and their age band anchors every report they
+        are linked to.
+        """
         if not self.date_of_birth:
             return None
         from django.utils import timezone
 
-        today = timezone.localdate()
+        on = self.date_of_death or timezone.localdate()
         dob = self.date_of_birth
-        return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+        return on.year - dob.year - ((on.month, on.day) < (dob.month, dob.day))
 
     @property
     def age_group(self):
@@ -187,25 +203,92 @@ class Patient(TenantOwnedModel):
         # is full, not unlucky. Widen the number before adding retries.
         raise ValueError("Could not generate a free hospital number")
 
+    # Reverse relations that must NOT follow a merge: the audit trail belongs to
+    # the record that was read, and the tombstone chain is what merging builds.
+    KEEP_ON_MERGE = ("access_log", "merged_from")
+
+    def _clinical_relations(self):
+        """Reverse FKs holding this patient's clinical records, audit aside."""
+        return [
+            rel for rel in self._meta.related_objects
+            if rel.one_to_many and rel.get_accessor_name() not in self.KEEP_ON_MERGE
+        ]
+
+    def clinical_record_counts(self):
+        """{relation name: row count} for everything filed against this patient."""
+        counts = {}
+        for rel in self._clinical_relations():
+            n = rel.related_model._base_manager.filter(**{rel.field.name: self}).count()
+            if n:
+                counts[rel.get_accessor_name()] = n
+        return counts
+
+    def merge_from(self, source):
+        """Absorb a duplicate record into this one. Returns {relation: rows moved}.
+
+        Clinical rows are repointed here, fields still blank here are filled
+        from the duplicate, and the duplicate is kept as a tombstone (status
+        MERGED, ``merged_into`` set) rather than deleted — its hospital number
+        is on paper somewhere and still has to resolve to the surviving record.
+        """
+        if source.pk == self.pk:
+            raise ValueError("A patient cannot be merged into itself")
+        # Fields the surviving record keeps whatever the duplicate says: its own
+        # identity, its own record state, its own audit stamps.
+        keep = {"id", "tenant", "hospital_number", "status", "merged_into",
+                "created_at", "updated_at"}
+        moved = {}
+        with transaction.atomic():
+            for rel in self._clinical_relations():
+                rows = rel.related_model._base_manager.filter(
+                    **{rel.field.name: source}
+                )
+                count = rows.update(**{rel.field.name: self})
+                if count:
+                    moved[rel.get_accessor_name()] = count
+            for field in self._meta.concrete_fields:
+                if field.name in keep:
+                    continue
+                if not getattr(self, field.name) and getattr(source, field.name):
+                    setattr(self, field.name, getattr(source, field.name))
+            self.chronic_conditions.add(*source.chronic_conditions.all())
+            self.save()
+            source.status = self.Status.MERGED
+            source.merged_into = self
+            source.save(update_fields=["status", "merged_into", "updated_at"])
+        return moved
+
     def save(self, *args, **kwargs):
         if not self.hospital_number:
             self.hospital_number = self.generate_hospital_number()
+        # A date of death outranks whatever status was sent: it is the harder
+        # fact of the two. Bringing a patient back means clearing the date.
+        # MERGED is exempt — that one describes the record, not the person.
+        if self.date_of_death and self.status not in (self.Status.DECEASED,
+                                                      self.Status.MERGED):
+            self.status = self.Status.DECEASED
+            fields = kwargs.get("update_fields")
+            if fields is not None and "status" not in fields:
+                kwargs["update_fields"] = list(fields) + ["status"]
         super().save(*args, **kwargs)
 
 
 class PatientAccessLog(TenantOwnedModel):
-    """Append-only record of who read identifying patient data.
+    """Append-only record of who read — or erased — identifying patient data.
 
     Writes are already reconstructible (``registered_by``, ``updated_at``);
     reads leave no other trace, and "who looked at this record" is exactly what
-    a data-protection regulator asks. One row per read through the API — the
-    Django admin is not covered.
+    a data-protection regulator asks. A delete leaves even less: the row is
+    gone, so the log entry is the only thing left saying it existed. One row per
+    read/delete through the API — the Django admin is not covered.
     """
 
     class Action(models.TextChoices):
         LIST = "list"
         RETRIEVE = "retrieve"
         HISTORY = "history"
+        DELETE = "delete"
+        MERGE = "merge"
 
     user = models.ForeignKey(
         "accounts.User", null=True, blank=True, on_delete=models.SET_NULL,

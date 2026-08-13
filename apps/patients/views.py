@@ -1,5 +1,6 @@
 from rest_framework import viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
 from apps.accounts.permissions import IsClinicalStaff, IsTenantAdmin, IsTenantMember
@@ -43,7 +44,12 @@ class PatientViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         # Re-run the tenant-scoped manager per request (frozen-queryset gotcha).
-        return Patient.objects.all().prefetch_related("chronic_conditions")
+        qs = Patient.objects.all().prefetch_related("chronic_conditions")
+        # Merged duplicates are tombstones: still reachable by id or by asking
+        # for ?status=merged, but out of the way of everyday lists and searches.
+        if self.action == "list" and "status" not in self.request.query_params:
+            qs = qs.exclude(status=Patient.Status.MERGED)
+        return qs
 
     def perform_create(self, serializer):
         serializer.save(registered_by=self.request.user)
@@ -52,12 +58,13 @@ class PatientViewSet(viewsets.ModelViewSet):
     # Every read of identifying data is recorded. Deliberately fail-closed: if
     # the log write fails the read fails with it, so there is no way to read a
     # patient record without leaving a trace.
-    def _log(self, action_name, patient=None, count=0):
+    def _log(self, action_name, patient=None, count=0, query=None):
         PatientAccessLog.objects.create(
             user=self.request.user if self.request.user.is_authenticated else None,
             patient=patient,
             action=action_name,
-            query=self.request.query_params.get("search", "")[:255],
+            query=(query if query is not None
+                   else self.request.query_params.get("search", ""))[:255],
             result_count=count,
         )
 
@@ -73,6 +80,52 @@ class PatientViewSet(viewsets.ModelViewSet):
         self._log(PatientAccessLog.Action.RETRIEVE, patient=self.get_object(),
                   count=1)
         return response
+
+    def destroy(self, request, *args, **kwargs):
+        patient = self.get_object()
+        # A patient with clinical records can't be deleted: the reports survive
+        # (SET_NULL) but silently lose the link, which quietly corrupts every
+        # history and rollup that used it. Retire or merge the record instead.
+        counts = patient.clinical_record_counts()
+        if counts:
+            raise ValidationError({
+                "detail": "This patient has clinical records on file. Set the "
+                          "status to inactive, or merge into the record that "
+                          "should survive.",
+                "clinical_records": counts,
+            })
+        # Logged before the row goes, and the identity goes in `query`: the FK
+        # is SET_NULL, so afterwards nothing else says which patient this was.
+        self._log(PatientAccessLog.Action.DELETE, patient=patient, count=1,
+                  query=f"{patient.hospital_number} {patient.full_name}")
+        return super().destroy(request, *args, **kwargs)
+
+    @action(detail=True, methods=["post"],
+            permission_classes=[IsTenantMember, IsTenantAdmin])
+    def merge(self, request, pk=None):
+        """Absorb a duplicate into this record: ``{"source": <patient id>}``.
+
+        This record survives; the duplicate becomes a tombstone pointing here.
+        Tenant admins only — it rewrites clinical history, and the staff who
+        create duplicates shouldn't be the ones resolving them unreviewed.
+        """
+        target = self.get_object()
+        source_id = request.data.get("source")
+        source = Patient.objects.filter(pk=source_id).first() if source_id else None
+        if source is None:
+            raise ValidationError({"source": "No such patient in this tenant."})
+        if source.pk == target.pk:
+            raise ValidationError({"source": "A patient can't merge into itself."})
+        moved = target.merge_from(source)
+        self._log(PatientAccessLog.Action.MERGE, patient=target,
+                  count=sum(moved.values()),
+                  query=f"merged {source.hospital_number} into "
+                        f"{target.hospital_number}")
+        return Response({
+            "patient": PatientSerializer(target).data,
+            "merged": PatientSerializer(source).data,
+            "moved": moved,
+        })
 
     @action(detail=False, url_path="access-log",
             permission_classes=[IsTenantMember, IsTenantAdmin])

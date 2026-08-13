@@ -266,3 +266,206 @@ def test_reports_filter_by_patient(db_clean):
     assert r.status_code == 200
     rows = r.json()["results"]
     assert [row["notes"] for row in rows] == ["linked"]
+
+
+def test_age_stops_at_date_of_death(db_clean):
+    t = Tenant.objects.create(name="Clinic", slug="clinic")
+    p = Patient.objects.create(tenant=t, first_name="Ada", last_name="Obi",
+                               date_of_birth=datetime.date(1950, 6, 1),
+                               date_of_death=datetime.date(2000, 5, 31))
+    assert p.age == 49  # birthday hadn't landed yet that year
+    assert p.age_group == "41-60"
+    # The date is the harder fact: it sets the status whatever was sent.
+    assert p.status == Patient.Status.DECEASED
+
+
+def test_death_date_is_validated(db_clean):
+    a = Tenant.objects.create(name="A", slug="a")
+    doctor = User.objects.create_user(phone="08030000012", password="x",
+                                      tenant=a, role=Role.DOCTOR)
+    c = _client(doctor, a)
+    body = {"first_name": "Ada", "last_name": "Obi",
+            "date_of_birth": "1990-01-01", "date_of_death": "1989-12-31"}
+    r = c.post("/api/patients/", body, format="json")
+    assert r.status_code == 400 and "date_of_death" in r.json()["errors"]
+
+    future = datetime.date.today() + datetime.timedelta(days=1)
+    body["date_of_death"] = future.isoformat()
+    assert c.post("/api/patients/", body, format="json").status_code == 400
+
+
+def test_duplicate_registration_needs_an_override(db_clean):
+    a = Tenant.objects.create(name="A", slug="a")
+    Patient.objects.create(tenant=a, first_name="Ada", last_name="Obi",
+                           date_of_birth=datetime.date(1990, 1, 1),
+                           hospital_number="MRN-7")
+    doctor = User.objects.create_user(phone="08030000013", password="x",
+                                      tenant=a, role=Role.DOCTOR)
+    c = _client(doctor, a)
+    body = {"first_name": "ada", "last_name": "OBI",  # case doesn't launder it
+            "date_of_birth": "1990-01-01"}
+
+    r = c.post("/api/patients/", body, format="json")
+    assert r.status_code == 400
+    assert "MRN-7" in str(r.json()["errors"]["allow_duplicate"])
+
+    # Same names, different birthday — a different person, goes through.
+    r = c.post("/api/patients/", {**body, "date_of_birth": "1991-01-01"},
+               format="json")
+    assert r.status_code == 201, r.content
+
+    # Real twin/namesake: the registrar overrides and it's accepted.
+    r = c.post("/api/patients/", {**body, "allow_duplicate": True}, format="json")
+    assert r.status_code == 201, r.content
+    assert Patient.all_objects.filter(date_of_birth="1990-01-01").count() == 2
+
+
+def test_registered_death_marks_the_patient_deceased(db_clean):
+    from apps.analytics.models import VitalEvent
+
+    a = Tenant.objects.create(name="A", slug="a")
+    p = Patient.objects.create(tenant=a, first_name="Ada", last_name="A",
+                               date_of_birth=datetime.date(1990, 1, 1))
+    VitalEvent.objects.create(tenant=a, patient=p, event_type="death")
+    p.refresh_from_db()
+    assert p.status == Patient.Status.DECEASED and p.date_of_death is not None
+
+    # A birth leaves the registry alone.
+    q = Patient.objects.create(tenant=a, first_name="Bola", last_name="B")
+    VitalEvent.objects.create(tenant=a, patient=q, event_type="birth")
+    q.refresh_from_db()
+    assert q.status == Patient.Status.ACTIVE and q.date_of_death is None
+
+
+def test_deletion_is_logged_with_the_identity(db_clean):
+    a = Tenant.objects.create(name="A", slug="a")
+    p = Patient.objects.create(tenant=a, first_name="Ada", last_name="A",
+                               hospital_number="MRN-8")
+    doctor = User.objects.create_user(phone="08030000014", password="x",
+                                      tenant=a, role=Role.DOCTOR)
+
+    assert _client(doctor, a).delete(f"/api/patients/{p.pk}/").status_code == 204
+    assert not Patient.all_objects.filter(pk=p.pk).exists()
+
+    row = PatientAccessLog.all_objects.get()
+    # The FK is gone with the row, so the log has to carry who it was.
+    assert row.action == "delete" and row.patient_id is None
+    assert "MRN-8" in row.query and "Ada" in row.query
+
+
+def test_reports_cannot_link_another_tenants_patient(db_clean):
+    a = Tenant.objects.create(name="A", slug="a")
+    b = Tenant.objects.create(name="B", slug="b")
+    theirs = Patient.objects.create(tenant=b, first_name="Bola", last_name="B")
+    doctor = User.objects.create_user(phone="08030000015", password="x",
+                                      tenant=a, role=Role.DOCTOR)
+
+    r = _client(doctor, a).post("/api/case-reports/", {"patient": theirs.pk},
+                                format="json")
+    assert r.status_code == 400 and "patient" in r.json()["errors"]
+
+
+@pytest.mark.parametrize(
+    "typed,stored",
+    [("+2348031234567", "08031234567"), ("0803 123 4567", "08031234567"),
+     ("0803-123-4567", "08031234567"), ("2348031234567", "08031234567"),
+     ("08031234567", "08031234567")],
+)
+def test_phone_is_stored_in_one_shape(db_clean, typed, stored):
+    a = Tenant.objects.create(name="A", slug="a")
+    doctor = User.objects.create_user(phone="08030000016", password="x",
+                                      tenant=a, role=Role.DOCTOR)
+    c = _client(doctor, a)
+    r = c.post("/api/patients/", {"first_name": "Ada", "last_name": "Obi",
+                                  "phone": typed,
+                                  "next_of_kin_phone": typed}, format="json")
+    assert r.status_code == 201, r.content
+    p = Patient.all_objects.get(pk=r.json()["id"])
+    assert p.phone == stored and p.next_of_kin_phone == stored
+    # And the number is findable however the searcher types it.
+    assert c.get("/api/patients/", {"search": "8031234567"}).json()["count"] == 1
+
+
+def test_patient_with_records_cannot_be_deleted(db_clean):
+    a = Tenant.objects.create(name="A", slug="a")
+    p = Patient.objects.create(tenant=a, first_name="Ada", last_name="A")
+    CaseReport.objects.create(tenant=a, patient=p)
+    doctor = User.objects.create_user(phone="08030000017", password="x",
+                                      tenant=a, role=Role.DOCTOR)
+
+    r = _client(doctor, a).delete(f"/api/patients/{p.pk}/")
+    assert r.status_code == 400
+    # DRF stringifies the detail; the shape is what matters.
+    assert r.json()["errors"]["clinical_records"] == {"casereports": "1"}
+    assert Patient.all_objects.filter(pk=p.pk).exists()
+    # Nothing was deleted, so nothing is logged as deleted either.
+    assert not PatientAccessLog.all_objects.filter(action="delete").exists()
+
+
+def test_merge_moves_records_and_leaves_a_tombstone(db_clean):
+    a = Tenant.objects.create(name="A", slug="a")
+    keep = Patient.objects.create(tenant=a, first_name="Ada", last_name="Obi",
+                                  hospital_number="MRN-A")
+    dupe = Patient.objects.create(tenant=a, first_name="Ada", last_name="Obi",
+                                  hospital_number="MRN-B", phone="08031234567",
+                                  date_of_birth=datetime.date(1990, 1, 1))
+    CaseReport.objects.create(tenant=a, patient=dupe, notes="on the duplicate")
+    admin = User.objects.create_user(phone="08030000018", password="x",
+                                     tenant=a, role=Role.TENANT_ADMIN)
+
+    r = _client(admin, a).post(f"/api/patients/{keep.pk}/merge/",
+                               {"source": dupe.pk}, format="json")
+    assert r.status_code == 200, r.content
+    assert r.json()["moved"] == {"casereports": 1}
+
+    keep.refresh_from_db()
+    dupe.refresh_from_db()
+    # Records follow the survivor; blanks on it are filled from the duplicate.
+    assert CaseReport.all_objects.get().patient_id == keep.pk
+    assert keep.phone == "08031234567"
+    assert keep.date_of_birth == datetime.date(1990, 1, 1)
+    assert keep.hospital_number == "MRN-A"  # its own identity is never taken
+    # The duplicate stays reachable and points at the survivor.
+    assert dupe.status == "merged" and dupe.merged_into_id == keep.pk
+    assert _client(admin, a).get(f"/api/patients/{dupe.pk}/").status_code == 200
+
+    # ...but is out of the way of everyday lists unless asked for by status.
+    rows = _client(admin, a).get("/api/patients/").json()["results"]
+    assert [row["hospital_number"] for row in rows] == ["MRN-A"]
+    rows = _client(admin, a).get("/api/patients/", {"status": "merged"}).json()
+    assert [row["hospital_number"] for row in rows["results"]] == ["MRN-B"]
+
+    row = PatientAccessLog.all_objects.filter(action="merge").get()
+    assert "MRN-B" in row.query and "MRN-A" in row.query
+
+
+def test_merge_is_admin_only_and_rejects_nonsense(db_clean):
+    a = Tenant.objects.create(name="A", slug="a")
+    b = Tenant.objects.create(name="B", slug="b")
+    keep = Patient.objects.create(tenant=a, first_name="Ada", last_name="A")
+    theirs = Patient.objects.create(tenant=b, first_name="Bola", last_name="B")
+    doctor = User.objects.create_user(phone="08030000019", password="x",
+                                      tenant=a, role=Role.DOCTOR)
+    admin = User.objects.create_user(phone="08030000020", password="x",
+                                     tenant=a, role=Role.TENANT_ADMIN)
+
+    url = f"/api/patients/{keep.pk}/merge/"
+    assert _client(doctor, a).post(url, {"source": keep.pk},
+                                   format="json").status_code == 403
+    c = _client(admin, a)
+    assert c.post(url, {"source": keep.pk}, format="json").status_code == 400
+    # Another tenant's patient isn't even visible, let alone mergeable.
+    assert c.post(url, {"source": theirs.pk}, format="json").status_code == 400
+    assert c.post(url, {}, format="json").status_code == 400
+
+
+def test_merged_status_cannot_be_set_by_hand(db_clean):
+    a = Tenant.objects.create(name="A", slug="a")
+    p = Patient.objects.create(tenant=a, first_name="Ada", last_name="A")
+    doctor = User.objects.create_user(phone="08030000021", password="x",
+                                      tenant=a, role=Role.DOCTOR)
+
+    # Otherwise anyone could hide a record from every list by relabelling it.
+    r = _client(doctor, a).patch(f"/api/patients/{p.pk}/", {"status": "merged"},
+                                 format="json")
+    assert r.status_code == 400 and "status" in r.json()["errors"]

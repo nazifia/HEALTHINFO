@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 
 from apps.tenants.models import TenantOwnedModel
 
@@ -295,6 +296,20 @@ class VitalEvent(PatientLinkedModel, TenantOwnedModel):
 
     def __str__(self):
         return f"{self.event_type} #{self.pk}"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # A registered death closes the patient's record too — the registry and
+        # vital registration must not disagree about who is alive. Only ever
+        # fills a blank date; a date already on file was entered deliberately.
+        if self.event_type == self.Kind.DEATH and self.patient_id:
+            patient = self.patient
+            if patient.status != patient.Status.DECEASED:
+                patient.date_of_death = (
+                    patient.date_of_death or timezone.localdate()
+                )
+                patient.status = patient.Status.DECEASED
+                patient.save(update_fields=["date_of_death", "status", "updated_at"])
 
 
 class StockReport(TenantOwnedModel):

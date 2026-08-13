@@ -1,3 +1,5 @@
+import re
+
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.core.validators import RegexValidator
 from django.db import models
@@ -21,6 +23,21 @@ phone_validator = RegexValidator(
     regex=r"^(?:\+234|0)[789]\d{9}$",
     message="Enter a valid Nigerian phone number (e.g. 08031234567 or +2348031234567).",
 )
+
+
+def normalize_phone(value):
+    """One shape for a Nigerian number: local ``0XXXXXXXXXX``.
+
+    Drops spaces, dashes and brackets and folds ``+234``/``234`` onto the
+    leading 0, so "+234 803 123 4567" and "0803-123-4567" stop being two
+    different patients. Anything that isn't a Nigerian mobile comes back
+    stripped but otherwise untouched, for the validator to reject.
+    """
+    digits = re.sub(r"[^\d+]", "", value or "")
+    for prefix in ("+234", "234"):
+        if digits.startswith(prefix):
+            return "0" + digits[len(prefix):]
+    return digits
 
 
 class UserManager(BaseUserManager):
