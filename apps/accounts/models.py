@@ -13,7 +13,15 @@ class Role(models.TextChoices):
     DOCTOR = "doctor"
     PHARMACIST = "pharmacist"
     NURSE = "nurse"
+    MIDWIFE = "midwife"
+    CHEW = "chew", "Community Health Extension Worker"
     PUBLIC = "public"
+
+
+# Clinical cadres that hold a practising licence. They sign in with that licence
+# number instead of a phone number — the licence is the credential their
+# regulator issues and the one they can be verified against.
+LICENSED_ROLES = frozenset({Role.DOCTOR, Role.NURSE, Role.MIDWIFE, Role.CHEW})
 
 
 # Nigerian mobile: local 0XXXXXXXXXX (11 digits) or international +234XXXXXXXXXX,
@@ -38,6 +46,13 @@ def normalize_phone(value):
         if digits.startswith(prefix):
             return "0" + digits[len(prefix):]
     return digits
+
+
+# Licence numbers come from several registers (MDCN, NMCN, CHPRBN) with no one
+# shared format, so we only normalize shape: strip separators, fold to upper.
+# ponytail: no per-register format check; add one when a register's rule is fixed.
+def normalize_license(value):
+    return re.sub(r"[\s/\-]+", "", (value or "").strip()).upper() or None
 
 
 class UserManager(BaseUserManager):
@@ -73,6 +88,12 @@ class User(AbstractUser):
     username = models.CharField(max_length=150, null=True, blank=True)
     phone = models.CharField(max_length=20, unique=True, validators=[phone_validator])
 
+    # Login identifier for LICENSED_ROLES; NULL for everyone else. Unique, but
+    # NULLs don't collide in SQL so unlicensed users all sit at NULL happily.
+    license_number = models.CharField(
+        max_length=50, null=True, blank=True, unique=True
+    )
+
     # Super-admins have no tenant (platform-wide). Everyone else is scoped.
     tenant = models.ForeignKey(
         Tenant, null=True, blank=True, on_delete=models.CASCADE, related_name="users"
@@ -85,6 +106,11 @@ class User(AbstractUser):
     REQUIRED_FIELDS = []
 
     objects = UserManager()
+
+    @property
+    def requires_license(self):
+        """True when this user signs in with a licence number, not a phone."""
+        return self.role in LICENSED_ROLES
 
     @property
     def is_super_admin(self):

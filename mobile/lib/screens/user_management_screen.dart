@@ -8,12 +8,18 @@ import '../shared/widgets/searchable_dropdown.dart';
 import '../shared/widgets/skeleton_cards.dart';
 import '../shared/widgets/snack.dart';
 
+// Cadres that sign in with a practising licence instead of a phone number
+// (mirrors LICENSED_ROLES on the backend).
+const _licensedRoles = {'doctor', 'nurse', 'midwife', 'chew'};
+
 const _roles = [
   'super_admin',
   'tenant_admin',
   'doctor',
   'pharmacist',
   'nurse',
+  'midwife',
+  'chew',
   'public',
 ];
 
@@ -197,6 +203,8 @@ class _UserFormState extends State<_UserForm> {
   late final TextEditingController _phone =
       TextEditingController(text: '${widget.user?['phone'] ?? ''}');
   final TextEditingController _password = TextEditingController();
+  late final TextEditingController _license =
+      TextEditingController(text: '${widget.user?['license_number'] ?? ''}');
   late String _role = '${widget.user?['role'] ?? 'public'}';
   late bool _active = widget.user?['is_active'] != false;
   int? _tenantId;
@@ -213,6 +221,7 @@ class _UserFormState extends State<_UserForm> {
           'username': _username.text.trim(),
           'role': _role,
           'is_active': _active,
+          'license_number': _license.text.trim(),
         });
       } else {
         await api.post('/api/users/', {
@@ -222,6 +231,7 @@ class _UserFormState extends State<_UserForm> {
           'role': _role,
           'is_active': _active,
           if (_tenantId != null) 'tenant': _tenantId,
+          'license_number': _license.text.trim(),
         });
       }
       if (!mounted) return;
@@ -240,6 +250,7 @@ class _UserFormState extends State<_UserForm> {
     _username.dispose();
     _phone.dispose();
     _password.dispose();
+    _license.dispose();
     super.dispose();
   }
 
@@ -294,6 +305,18 @@ class _UserFormState extends State<_UserForm> {
                 ],
                 onChanged: (v) => setState(() => _role = v ?? _role),
               ),
+              if (_licensedRoles.contains(_role))
+                TextFormField(
+                  controller: _license,
+                  decoration: const InputDecoration(
+                    labelText: 'License number',
+                    helperText: 'This cadre signs in with it instead of a phone',
+                  ),
+                  textCapitalization: TextCapitalization.characters,
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Required for this role'
+                      : null,
+                ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Active'),

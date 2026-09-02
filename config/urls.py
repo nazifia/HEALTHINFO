@@ -3,7 +3,9 @@ from django.http import HttpResponse, JsonResponse
 from django.urls import include, path
 from django.views.generic import RedirectView
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenRefreshView
+
+from apps.accounts.views import LoginView
 
 
 def _empty_sw(request):
@@ -63,7 +65,7 @@ urlpatterns = [
     path("api/health/", _health, name="health"),
     path("", RedirectView.as_view(pattern_name="swagger-ui", permanent=False)),
     path("admin/", admin.site.urls),
-    path("api/auth/token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
+    path("api/auth/token/", LoginView.as_view(), name="token_obtain_pair"),
     path("api/auth/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("api/", _api_index),
     path("api/", include("apps.accounts.urls")),

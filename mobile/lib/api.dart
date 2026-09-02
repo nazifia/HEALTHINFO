@@ -86,12 +86,23 @@ class Api {
   Uri _uri(String path, [Map<String, String>? query]) =>
       Uri.parse('$apiBase$path').replace(queryParameters: query);
 
+  /// Nigerian mobile numbers, or the last-6-digit pharmacy short login;
+  /// anything else is treated as a licence number.
+  static final _phonePattern = RegExp(r'^(?:(?:\+234|0)[789]\d{9}|\d{6})$');
+
   /// POST /api/auth/token/ — obtain JWT pair.
-  Future<void> login(String phone, String password) async {
+  ///
+  /// [identifier] is a phone number (pharmacy staff: its last 6 digits), or a
+  /// licence number for the clinical cadres (doctor, nurse, midwife, CHEW) who
+  /// sign in with theirs instead.
+  Future<void> login(String identifier, String password) async {
+    final field = _phonePattern.hasMatch(identifier.replaceAll(' ', ''))
+        ? 'phone'
+        : 'license_number';
     final r = await http.post(
       _uri('/api/auth/token/'),
       headers: _headers(auth: false, json: true),
-      body: jsonEncode({'phone': phone, 'password': password}),
+      body: jsonEncode({field: identifier, 'password': password}),
     );
     if (r.statusCode != 200) {
       throw ApiException('Login failed (${r.statusCode})', r.body);

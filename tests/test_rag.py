@@ -9,7 +9,9 @@ from apps.tenants.current import clear_current_tenant, set_current_tenant
 from apps.tenants.models import Tenant
 
 
-def test_fake_embedding_is_deterministic_unit_vector(settings):
+# db: embed() resolves the provider through current_mode(), whose 30s cache
+# expires on a long suite and falls back to a RuntimeConfig query.
+def test_fake_embedding_is_deterministic_unit_vector(settings, db):
     settings.AI_EMBED_PROVIDER = "fake"
     a = embed("headache and fever")
     b = embed("headache and fever")

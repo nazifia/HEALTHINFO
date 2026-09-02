@@ -26,13 +26,15 @@ class CustomUserAdmin(UserAdmin):
     form = UserChangeFormPhone
     add_form = UserCreationFormPhone
     ordering = ("phone",)
-    list_display = ("phone", "username", "email", "role", "tenant", "is_staff")
+    list_display = (
+        "phone", "username", "email", "role", "license_number", "tenant", "is_staff",
+    )
     list_filter = ("role", "is_staff", "is_superuser", "is_active")
-    search_fields = ("phone", "username", "email")
+    search_fields = ("phone", "username", "email", "license_number")
     fieldsets = (
         (None, {"fields": ("phone", "password")}),
         ("Personal info", {"fields": ("username", "first_name", "last_name", "email")}),
-        ("Tenant", {"fields": ("tenant", "role")}),
+        ("Tenant", {"fields": ("tenant", "role", "license_number")}),
         ("Permissions", {"fields": (
             "is_active", "is_staff", "is_superuser", "groups", "user_permissions",
         )}),

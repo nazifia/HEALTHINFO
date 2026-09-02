@@ -13,7 +13,7 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from apps.accounts.models import Role
+from apps.accounts.models import LICENSED_ROLES, Role
 from apps.catalog.models import (
     Article, Disease, DrugInteraction, LabTest, Medication, Procedure,
     Specialty, Status, Symptom,
@@ -53,13 +53,17 @@ class Command(BaseCommand):
             },
         )[0].set_password(PASSWORD)  # noqa: ensure pw set below
         for i, role in enumerate([Role.TENANT_ADMIN, Role.DOCTOR, Role.PHARMACIST,
-                                  Role.NURSE, Role.PUBLIC], start=1):
+                                  Role.NURSE, Role.MIDWIFE, Role.CHEW,
+                                  Role.PUBLIC], start=1):
             u, _ = User.objects.get_or_create(
                 username=role.value,
-                defaults={"phone": f"+234800000000{i}", "role": role,
+                defaults={"phone": f"+23480000000{i:02d}", "role": role,
                           "tenant": tenant,
                           "email": f"{role.value}@demo.localhost"},
             )
+            # Licensed cadres sign in with the licence, not the phone.
+            if role in LICENSED_ROLES and not u.license_number:
+                u.license_number = f"DEMO-{role.value.upper()}-{i:03d}"
             u.set_password(PASSWORD)
             u.save()
         # Reset super-admin pw too (get_or_create above didn't save the hash).

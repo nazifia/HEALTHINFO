@@ -147,13 +147,28 @@ class _LoginScreenState extends State<LoginScreen> {
                                         setState(() => _registerMode = s.first),
                               ),
                               const SizedBox(height: 20),
+                              // Registration always creates a public account,
+                              // so it stays phone-only. Signing in also accepts
+                              // a licence number (doctors, nurses, midwives,
+                              // CHEWs) or, for pharmacy staff, the last 6
+                              // digits of their phone.
                               TextField(
                                 controller: _phone,
-                                decoration: const InputDecoration(
-                                  labelText: 'Phone number',
-                                  prefixIcon: Icon(Icons.phone_outlined),
+                                decoration: InputDecoration(
+                                  labelText: _registerMode
+                                      ? 'Phone number'
+                                      : 'Phone or license number',
+                                  helperText: _registerMode
+                                      ? null
+                                      : 'Clinicians: license number · Pharmacy: '
+                                          'last 6 digits of your phone',
+                                  prefixIcon: Icon(_registerMode
+                                      ? Icons.phone_outlined
+                                      : Icons.badge_outlined),
                                 ),
-                                keyboardType: TextInputType.phone,
+                                keyboardType: _registerMode
+                                    ? TextInputType.phone
+                                    : TextInputType.text,
                                 autocorrect: false,
                               ),
                               if (_registerMode) ...[
