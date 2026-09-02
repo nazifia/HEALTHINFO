@@ -19,7 +19,11 @@ const Api = (() => {
 
   // Mirrors backend WRITE_ROLES / REPORT_ROLES.
   const WRITE_ROLES = new Set(['super_admin', 'tenant_admin', 'doctor', 'pharmacist']);
-  const REPORT_ROLES = new Set([...WRITE_ROLES, 'nurse']);
+  const REPORT_ROLES = new Set([...WRITE_ROLES, 'nurse', 'midwife', 'chew']);
+
+  // Nigerian mobile numbers, or the last-6-digit pharmacy short login;
+  // anything else is taken to be a licence number.
+  const PHONE_RE = /^(?:(?:\+234|0)[789]\d{9}|\d{6})$/;
 
   class ApiError extends Error {
     constructor(message, status, errors) {
@@ -129,9 +133,13 @@ const Api = (() => {
       URL.revokeObjectURL(a.href);
     },
 
-    async login(phone, password) {
+    /* `identifier` is a phone number (pharmacy staff: its last 6 digits), or
+       a licence number for the clinical cadres (doctor, nurse, midwife, CHEW)
+       who sign in with theirs instead. */
+    async login(identifier, password) {
+      const field = PHONE_RE.test(identifier.replace(/\s/g, '')) ? 'phone' : 'license_number';
       const data = await request('POST', '/api/auth/token/', {
-        body: { phone, password }, auth: false,
+        body: { [field]: identifier, password }, auth: false,
       });
       access = data.access;
       refresh = data.refresh;

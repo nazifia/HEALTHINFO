@@ -6,9 +6,10 @@ from .models import Role
 # nurse contribution would go through the (future) draft workflow, not direct write.
 WRITE_ROLES = {Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.DOCTOR, Role.PHARMACIST}
 
-# Roles allowed to file case reports. Includes nurses — reporting cases is core
-# clinical work — unlike catalog authoring which stays in WRITE_ROLES.
-REPORT_ROLES = WRITE_ROLES | {Role.NURSE}
+# Roles allowed to file case reports. Includes the nursing cadres (nurse,
+# midwife, CHEW) — reporting cases is core clinical work — unlike catalog
+# authoring which stays in WRITE_ROLES.
+REPORT_ROLES = WRITE_ROLES | {Role.NURSE, Role.MIDWIFE, Role.CHEW}
 
 
 class IsTenantMember(BasePermission):

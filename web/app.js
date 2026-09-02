@@ -516,7 +516,11 @@ function viewLogin() {
   authChrome();
   render(authShell('Welcome back', 'Sign in to continue', `
     <form id="f">
-      <label>Phone<input name="phone" placeholder="08031234567" required></label>
+      <label>Phone or license number
+        <input name="identifier" placeholder="08031234567" required>
+        <small class="muted">Doctors, nurses, midwives and CHEWs: use your license number.
+          Pharmacy staff: the last 6 digits of your phone.</small>
+      </label>
       <label>Password<input name="password" type="password" required></label>
       <button type="submit">Sign in</button>
     </form>`, `
@@ -526,7 +530,7 @@ function viewLogin() {
     e.preventDefault();
     const fd = new FormData(e.target);
     try {
-      await Api.login(fd.get('phone'), fd.get('password'));
+      await Api.login(fd.get('identifier'), fd.get('password'));
       ME = null;
       location.hash = '#/';
     } catch (err) { toast(err.message, true); }

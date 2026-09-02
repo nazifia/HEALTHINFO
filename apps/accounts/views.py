@@ -5,6 +5,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 from config.responses import success
 
@@ -12,7 +13,15 @@ from apps.tenants.models import Jurisdiction
 
 from .models import Role, User
 from .permissions import IsTenantMember
-from .serializers import OnboardingSerializer, RegisterSerializer, UserSerializer
+from .serializers import (
+    LoginSerializer, OnboardingSerializer, RegisterSerializer, UserSerializer,
+)
+
+
+class LoginView(TokenObtainPairView):
+    """Token endpoint that also accepts a license number (see LoginSerializer)."""
+
+    serializer_class = LoginSerializer
 
 
 class RegisterViewSet(viewsets.ViewSet):

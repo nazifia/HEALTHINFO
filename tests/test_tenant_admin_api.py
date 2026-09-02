@@ -85,6 +85,7 @@ def test_super_admin_creates_user_into_tenant(db, client):
             "phone": "08031112222",
             "password": "Sup3r$ecret!",
             "role": Role.DOCTOR,
+            "license_number": "MDCN/54321",  # licensed cadres must carry one
             "tenant": t.id,
         },
         format="json",

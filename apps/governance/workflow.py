@@ -19,7 +19,8 @@ TRANSITIONS = {
     "archived": {"draft"},                # revive
 }
 
-_AUTHOR = {Role.DOCTOR, Role.PHARMACIST, Role.NURSE, Role.TENANT_ADMIN, Role.SUPER_ADMIN}
+_AUTHOR = {Role.DOCTOR, Role.PHARMACIST, Role.NURSE, Role.MIDWIFE, Role.CHEW,
+           Role.TENANT_ADMIN, Role.SUPER_ADMIN}
 _REVIEWER = {Role.DOCTOR, Role.PHARMACIST, Role.TENANT_ADMIN, Role.SUPER_ADMIN}
 _EDITOR = {Role.TENANT_ADMIN, Role.SUPER_ADMIN}
 
