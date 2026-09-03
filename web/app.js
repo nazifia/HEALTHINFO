@@ -1267,7 +1267,9 @@ const PHARMACY_STAFF_ROLES = new Set([...PHARMACY_ADMIN_ROLES, 'pharmacist']);
 const isPharmacyAdmin = () => PHARMACY_ADMIN_ROLES.has(ME?.role);
 const isPharmacyStaff = () => PHARMACY_STAFF_ROLES.has(ME?.role);
 
-const money = (v) => Number(v || 0).toLocaleString(undefined, {
+// Naira, two decimals. Prefixed, because a bare "14,115.00" on a till screen
+// is a number without a unit — the mobile client formats it the same way.
+const money = (v) => '₦' + Number(v || 0).toLocaleString(undefined, {
   minimumFractionDigits: 2, maximumFractionDigits: 2,
 });
 
@@ -1314,7 +1316,7 @@ async function viewPharmacy() {
       <div class="card"><h3>Reorder (${low.length})</h3>
         ${low.length ? tableHtml(low.map((r) => ({
           id: r.id, item: r.name, on_hand: r.quantity_on_hand,
-          reorder_level: r.reorder_level, unit_price: r.unit_price,
+          reorder_level: r.reorder_level, unit_price: money(r.unit_price),
         })), (r) => `#/r/pharmacy-items/${r.id}`) : '<p class="muted">Nothing to reorder.</p>'}
       </div>
       <div class="card"><h3>Expiring within 60 days (${expiring.length})</h3>
