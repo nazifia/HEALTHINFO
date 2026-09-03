@@ -11,6 +11,7 @@ from .models import (
     Immunization,
     InsuranceClaim,
     LabResult,
+    Prescription,
     StockReport,
     VitalEvent,
 )
@@ -107,3 +108,11 @@ class AppointmentAdmin(admin.ModelAdmin):
     list_filter = ("tenant", "mode", "status")
     search_fields = ("reason", "notes")
     raw_id_fields = ("reporter",)
+
+
+@admin.register(Prescription)
+class PrescriptionAdmin(admin.ModelAdmin):
+    list_display = ("id", "tenant", "reporter", "medication", "dose", "frequency", "duration_days", "status", "dispensed_at", "created_at")
+    list_filter = ("tenant", "status")
+    search_fields = ("dose", "frequency", "notes")
+    raw_id_fields = ("medication", "case_report", "reporter")

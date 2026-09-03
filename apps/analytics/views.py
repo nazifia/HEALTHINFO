@@ -24,6 +24,7 @@ from .models import (
     Immunization,
     InsuranceClaim,
     LabResult,
+    Prescription,
     StockReport,
     VitalEvent,
 )
@@ -36,6 +37,7 @@ from .serializers import (
     ImmunizationSerializer,
     InsuranceClaimSerializer,
     LabResultSerializer,
+    PrescriptionSerializer,
     StockReportSerializer,
     VitalEventSerializer,
 )
@@ -53,6 +55,7 @@ from .stats import (
     lab_stats,
     platform_case_report_stats,
     platform_stats,
+    prescription_stats,
     report_sources,
     retention_stats,
     stock_stats,
@@ -268,6 +271,14 @@ class AppointmentViewSet(_ReportViewSet):
     filterset_fields = ("mode", "status", "region", "patient")
 
 
+class PrescriptionViewSet(_ReportViewSet):
+    """Staff write/list drug orders and mark them dispensed, tenant-scoped."""
+
+    model = Prescription
+    serializer_class = PrescriptionSerializer
+    filterset_fields = ("status", "medication", "case_report", "region", "patient")
+
+
 class _StatsView(APIView):
     """GET a stats rollup. Tenant-scoped by default; the platform subclass flips
     ``platform=True`` and gates on super-admin."""
@@ -348,6 +359,16 @@ class PlatformInsuranceStatsView(_StatsView):
     permission_classes = [IsSuperAdmin]
     platform = True
     stats_fn = staticmethod(insurance_stats)
+
+
+class PrescriptionStatsView(_StatsView):
+    stats_fn = staticmethod(prescription_stats)
+
+
+class PlatformPrescriptionStatsView(_StatsView):
+    permission_classes = [IsSuperAdmin]
+    platform = True
+    stats_fn = staticmethod(prescription_stats)
 
 
 class AppointmentStatsView(_StatsView):

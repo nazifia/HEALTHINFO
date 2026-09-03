@@ -478,3 +478,56 @@ class Appointment(PatientLinkedModel, TenantOwnedModel):
 
     def __str__(self):
         return f"Appt #{self.pk} ({self.mode}/{self.status})"
+
+
+class Prescription(PatientLinkedModel, TenantOwnedModel):
+    """A drug order: what was prescribed, how much, how often, how long, and
+    whether the pharmacy dispensed it.
+
+    ``CaseReport.medications`` records only *that* a drug was involved in a case;
+    this is the order itself. ``case_report`` links back to the diagnosis it was
+    written for, so a prescription is never orphaned from its reason.
+    """
+
+    class Status(models.TextChoices):
+        PRESCRIBED = "prescribed"
+        PARTIAL = "partially_dispensed"
+        DISPENSED = "dispensed"
+        CANCELLED = "cancelled"
+
+    reporter = models.ForeignKey(  # the prescriber
+        "accounts.User", null=True, blank=True, on_delete=models.SET_NULL
+    )
+    case_report = models.ForeignKey(
+        "analytics.CaseReport", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="prescriptions",
+    )
+    medication = models.ForeignKey(
+        "catalog.Medication", on_delete=models.CASCADE, related_name="prescriptions"
+    )
+    dose = models.CharField(max_length=120, blank=True)  # e.g. "500 mg"
+    frequency = models.CharField(max_length=120, blank=True)  # e.g. "twice daily"
+    duration_days = models.PositiveSmallIntegerField(null=True, blank=True)
+    status = models.CharField(
+        max_length=25, choices=Status.choices, default=Status.PRESCRIBED
+    )
+    dispensed_at = models.DateTimeField(null=True, blank=True)
+    region = models.CharField(max_length=120, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+        indexes = [
+            models.Index(fields=["tenant", "status", "created_at"]),
+            models.Index(fields=["tenant", "medication"]),
+        ]
+
+    def __str__(self):
+        return f"Rx #{self.pk} ({self.medication_id}: {self.status})"
+
+    def save(self, *args, **kwargs):
+        # Dispensing stamps its own time so the two can't disagree; a time
+        # already on file was entered deliberately and stands.
+        if self.status == self.Status.DISPENSED and not self.dispensed_at:
+            self.dispensed_at = timezone.now()
+        super().save(*args, **kwargs)

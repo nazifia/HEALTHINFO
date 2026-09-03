@@ -7,6 +7,7 @@ from rest_framework.test import APIClient
 
 from apps.accounts.models import Role, User
 from apps.analytics.models import CaseReport
+from apps.catalog.models import Disease, Medication
 from apps.patients.models import Patient, PatientAccessLog, age_band
 from apps.tenants.current import clear_current_tenant
 from apps.tenants.models import Tenant
@@ -131,6 +132,41 @@ def test_create_stamps_consent_and_reporter(db_clean):
     p = Patient.all_objects.get(pk=r.json()["id"])
     assert p.tenant_id == a.id and p.registered_by_id == nurse.id
     assert p.consent_at is not None
+
+
+@pytest.mark.parametrize(
+    "role", [Role.DOCTOR, Role.PHARMACIST, Role.NURSE, Role.MIDWIFE, Role.CHEW]
+)
+def test_clinical_cadres_register_edit_and_diagnose(db_clean, role):
+    """Every clinical cadre registers a patient, edits it, and files the
+    diagnosis + prescribed medication against it."""
+    a = Tenant.objects.create(name="A", slug="a")
+    staff = User.objects.create_user(phone="08031000001", password="x",
+                                     tenant=a, role=role)
+    client = _client(staff, a)
+
+    created = client.post("/api/patients/", {
+        "first_name": "Ada", "last_name": "Obi", "sex": "F",
+        "consent_given": True,
+    }, format="json")
+    assert created.status_code == 201, created.content
+    patient_id = created.json()["id"]
+
+    edited = client.patch(f"/api/patients/{patient_id}/",
+                          {"last_name": "Obiora"}, format="json")
+    assert edited.status_code == 200, edited.content
+
+    disease = Disease.objects.create(name="Malaria", slug=f"malaria-{role}")
+    drug = Medication.objects.create(generic_name="Artemether")
+    report = client.post("/api/case-reports/", {
+        "patient": patient_id, "disease": disease.id, "medications": [drug.id],
+        "severity": "mild",
+    }, format="json")
+    assert report.status_code == 201, report.content
+    filed = CaseReport.all_objects.get(pk=report.json()["id"])
+    assert filed.reporter_id == staff.id
+    assert filed.disease_id == disease.id
+    assert list(filed.medications.values_list("id", flat=True)) == [drug.id]
 
 
 def test_duplicate_hospital_number_rejected(db_clean):
