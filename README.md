@@ -247,6 +247,14 @@ bodies — live in `mobile/lib/pharmacy.dart` rather than in the widgets, so the
 are unit-tested and can't drift between screens. They mirror the API, which
 enforces them regardless: a hidden button is convenience, not the control.
 
+| Counter | Purchase orders | One order |
+| :---: | :---: | :---: |
+| ![Pharmacy counter: the day's takings against what patients and insurers owe, then the reorder and expiry lists](docs/screenshots/pharmacy-counter.png) | ![Purchase orders: units on order and ordered value, with a part-delivered order listed](docs/screenshots/pharmacy-orders.png) | ![One order: each line's received-of-ordered count and what is still due, with receive and cancel](docs/screenshots/pharmacy-order.png) |
+
+Shot against `seed_pharmacy`'s demo data, so the figures tie together: 170
+units still owed on that order is 120 ORS sachets plus the 50 ceftriaxone
+nothing has been delivered against yet.
+
 ## Tenant resolution (any of)
 1. Header `X-Tenant-ID: hospital-a`
 2. Custom domain match (`Tenant.domain`)
