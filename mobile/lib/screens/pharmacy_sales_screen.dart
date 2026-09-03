@@ -166,9 +166,18 @@ class _SaleSheetState extends State<SaleSheet> {
 
   Future<void> _pay() async {
     final amount = await _askAmount(
-        context, 'Take payment', 'Amount (₦)', '${_sale['balance_due']}');
+        context, 'Take payment', 'Cash tendered (₦)', '${_sale['balance_due']}');
     if (amount == null) return;
-    await _run('/api/pharmacy/sales/${_sale['id']}/pay/', {'amount': amount});
+    if (!mounted) return;
+    // Only cash reaches the drawer, so how this payment arrived is asked
+    // whenever the sale itself is not a cash sale - an insured bill is often
+    // part settled in notes, part on a card.
+    final method = _sale['payment_method'] == 'cash'
+        ? 'cash'
+        : await _askMethod(context);
+    if (method == null) return;
+    await _run('/api/pharmacy/sales/${_sale['id']}/pay/',
+        {'amount': amount, 'method': method});
   }
 
   Future<void> _cancel() async {
@@ -195,7 +204,12 @@ class _SaleSheetState extends State<SaleSheet> {
   @override
   Widget build(BuildContext context) {
     final lines = (_sale['lines'] as List? ?? []).cast<Map<String, dynamic>>();
+    final payments =
+        (_sale['payments'] as List? ?? []).cast<Map<String, dynamic>>();
     final cancelled = _sale['status'] == 'cancelled';
+    // A settled sale takes no more money — the API refuses it, so the button
+    // goes rather than failing on the counter.
+    final settled = (num.tryParse('${_sale['balance_due']}') ?? 0) <= 0;
     return Container(
       decoration: BoxDecoration(
         color: context.scaffoldBg,
@@ -245,7 +259,21 @@ class _SaleSheetState extends State<SaleSheet> {
               _MoneyRow('Patient pays', money(_sale['patient_payable'])),
             ],
             _MoneyRow('Paid', money(_sale['amount_paid'])),
+            if ((num.tryParse('${_sale['change_due']}') ?? 0) > 0) ...[
+              _MoneyRow('Tendered', money(_sale['amount_tendered'])),
+              _MoneyRow('Change given', money(_sale['change_due'])),
+            ],
             _MoneyRow('Balance', money(_sale['balance_due'])),
+            if (payments.isNotEmpty) ...[
+              const Divider(),
+              for (final p in payments)
+                _MoneyRow(
+                    '${p['method']}'.toUpperCase() +
+                        ((num.tryParse('${p['change']}') ?? 0) > 0
+                            ? ' · ${money(p['change'])} change'
+                            : ''),
+                    money(p['tendered'])),
+            ],
             const SizedBox(height: 16),
             Wrap(spacing: 10, runSpacing: 10, children: [
               OutlinedButton.icon(
@@ -258,7 +286,7 @@ class _SaleSheetState extends State<SaleSheet> {
                 icon: const Icon(Icons.receipt_long_outlined, size: 18),
                 label: const Text('Receipt'),
               ),
-              if (!cancelled)
+              if (!cancelled && !settled)
                 FilledButton.icon(
                   onPressed: _busy ? null : _pay,
                   style: FilledButton.styleFrom(
@@ -338,6 +366,10 @@ class ReceiptSheet extends StatelessWidget {
         row('Patient pays', money(sale['patient_payable'])),
       ],
       row('Paid', money(sale['amount_paid'])),
+      if ((num.tryParse('${sale['change_due']}') ?? 0) > 0) ...[
+        row('Tendered', money(sale['amount_tendered'])),
+        row('Change given', money(sale['change_due'])),
+      ],
       row('Balance', money(sale['balance_due'])),
     ].join('\n');
     return Container(
@@ -391,6 +423,26 @@ Future<String?> _askAmount(BuildContext context, String title, String label,
     ),
   );
 }
+
+/// How the money arrived. Cash is the counter default; the other two are
+/// settled elsewhere and never touch the drawer.
+Future<String?> _askMethod(BuildContext context) => showDialog<String>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('How was it paid?'),
+        children: [
+          for (final entry in const {
+            'cash': 'Cash',
+            'card': 'Card',
+            'transfer': 'Transfer',
+          }.entries)
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(dialogContext).pop(entry.key),
+              child: Text(entry.value),
+            ),
+        ],
+      ),
+    );
 
 Future<String?> _askText(
     BuildContext context, String title, String label) async {

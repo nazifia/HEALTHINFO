@@ -23,10 +23,12 @@ from apps.pharmacy.models import (
     PurchaseOrderLine,
     Sale,
     SaleItem,
+    SalePayment,
     StockBatch,
     StockItem,
     StockMovement,
     Supplier,
+    TillSession,
     receive_stock,
 )
 from apps.tenants.current import clear_current_tenant
@@ -198,11 +200,25 @@ def test_hmo_sale_splits_the_bill_and_raises_a_claim(pharmacy):
         hmo.id, Decimal("87.50"), Claim.Status.DRAFT)
 
     # The patient's co-payment settles the sale; the HMO side rides on the claim.
+    # The patient hands over 50.00 for a 37.50 co-payment: only what is owed is
+    # banked, the rest is change counted back over the counter.
     paid = staff.post(f"/api/pharmacy/sales/{sale.pk}/pay/",
-                      {"amount": "37.50"}, format="json")
+                      {"amount": "50.00"}, format="json")
     assert paid.status_code == 200, paid.content
+    assert paid.json()["change_due"] == "12.50"
     sale.refresh_from_db()
     assert sale.status == Sale.Status.PAID and sale.balance_due == Decimal("0.00")
+    assert sale.amount_paid == Decimal("37.50")
+    assert sale.amount_tendered == Decimal("50.00")
+    assert sale.change_due == Decimal("12.50")
+
+    # A settled sale takes no more money: nothing is owed, so there is nothing
+    # to bank and no reason to take cash for it.
+    again = staff.post(f"/api/pharmacy/sales/{sale.pk}/pay/",
+                       {"amount": "10.00"}, format="json")
+    assert again.status_code == 400, again.content
+    sale.refresh_from_db()
+    assert sale.amount_paid == Decimal("37.50")
 
 
 def test_claim_lifecycle_and_who_may_settle(pharmacy):
@@ -563,6 +579,25 @@ def test_cancelled_batch_releases_its_claims(pharmacy):
     assert batch.status == ClaimBatch.Status.CANCELLED
 
 
+def test_batch_of_cancelled_claims_will_not_submit(pharmacy):
+    """Nothing is left to send once every collected claim was cancelled with its
+    sale, so the schedule is refused rather than going out empty."""
+    tenant = pharmacy["tenant"]
+    hmo = HMO.all_objects.create(tenant=tenant, name="Hygeia")
+    claim = _hmo_sale(pharmacy, hmo, 2, "HY-1")
+    staff = _client(pharmacy["staff"], tenant)
+    batch = ClaimBatch.all_objects.get(pk=staff.post("/api/pharmacy/claim-batches/",
+                                                     {"hmo": hmo.id},
+                                                     format="json").json()["id"])
+    Sale.all_objects.get(pk=claim.sale_id).cancel()
+
+    response = staff.post(f"/api/pharmacy/claim-batches/{batch.pk}/submit/", {},
+                          format="json")
+    assert response.status_code == 400, response.content
+    batch.refresh_from_db()
+    assert batch.status == ClaimBatch.Status.DRAFT
+
+
 def test_receipt_prints_the_sale(pharmacy):
     tenant, item = pharmacy["tenant"], pharmacy["item"]
     staff = _client(pharmacy["staff"], tenant)
@@ -680,3 +715,133 @@ def test_batch_collects_a_claim_that_was_sent_on_its_own(pharmacy):
                       {"amount": "150.00"}, format="json").status_code == 200
     sent.refresh_from_db()
     assert sent.status == Claim.Status.PAID
+
+
+def test_drawer_reconciles_the_cash_that_went_through_it(pharmacy):
+    """Open with a float, sell for cash, count at close - variance is recorded."""
+    tenant, item = pharmacy["tenant"], pharmacy["item"]
+    staff = _client(pharmacy["staff"], tenant)
+
+    opened = staff.post("/api/pharmacy/till-sessions/",
+                        {"opening_float": "5000.00"}, format="json")
+    assert opened.status_code == 201, opened.content
+    till_id = opened.json()["id"]
+
+    # One drawer at a time: a second open is refused, not silently duplicated.
+    again = staff.post("/api/pharmacy/till-sessions/",
+                       {"opening_float": "100.00"}, format="json")
+    assert again.status_code == 400, again.content
+
+    sale_response = staff.post("/api/pharmacy/sales/", {
+        "payment_method": "cash",
+        "items": [{"item": item.id, "quantity": 4}],
+    }, format="json")
+    assert sale_response.status_code == 201, sale_response.content
+    sale = Sale.all_objects.get(pk=sale_response.json()["id"])
+    assert sale.total == Decimal("50.00")  # 4 x 12.50
+
+    # The patient hands over 100.00 for a 50.00 bill: both notes and change
+    # pass through the drawer, so it is 50.00 heavier than it was.
+    paid = staff.post(f"/api/pharmacy/sales/{sale.pk}/pay/",
+                      {"amount": "100.00"}, format="json")
+    assert paid.status_code == 200, paid.content
+    assert paid.json()["change_due"] == "50.00"
+
+    till = TillSession.all_objects.get(pk=till_id)
+    assert (till.cash_in, till.change_out) == (Decimal("100.00"), Decimal("50.00"))
+    assert till.expected_amount == Decimal("5050.00")
+    assert till.variance is None  # nothing counted yet
+    payment = SalePayment.all_objects.get(sale=sale)
+    assert (payment.method, payment.till_session_id) == ("cash", till_id)
+    assert (payment.tendered, payment.applied, payment.change) == (
+        Decimal("100.00"), Decimal("50.00"), Decimal("50.00"))
+
+    # Counted 20.00 short: the shortfall is recorded, never corrected away.
+    closed = staff.post(f"/api/pharmacy/till-sessions/{till_id}/close/",
+                        {"amount": "5030.00", "notes": "Two notes missing."},
+                        format="json")
+    assert closed.status_code == 200, closed.content
+    assert closed.json()["variance"] == "-20.00"
+    till.refresh_from_db()
+    assert till.status == TillSession.Status.CLOSED and till.closed_at is not None
+    assert till.counted_amount == Decimal("5030.00")
+
+    # A closed drawer stays closed, and takes no second count.
+    recount = staff.post(f"/api/pharmacy/till-sessions/{till_id}/close/",
+                         {"amount": "5050.00"}, format="json")
+    assert recount.status_code == 400, recount.content
+
+
+def test_payment_without_an_open_drawer_still_goes_through(pharmacy):
+    """No drawer open is not an error: the sale is paid, nothing is booked."""
+    tenant, item = pharmacy["tenant"], pharmacy["item"]
+    staff = _client(pharmacy["staff"], tenant)
+    sale_response = staff.post("/api/pharmacy/sales/", {
+        "payment_method": "cash",
+        "items": [{"item": item.id, "quantity": 2}],
+    }, format="json")
+    sale = Sale.all_objects.get(pk=sale_response.json()["id"])
+    paid = staff.post(f"/api/pharmacy/sales/{sale.pk}/pay/",
+                      {"amount": "25.00"}, format="json")
+    assert paid.status_code == 200, paid.content
+    sale.refresh_from_db()
+    assert sale.status == Sale.Status.PAID
+    assert SalePayment.all_objects.get(sale=sale).till_session_id is None
+
+
+def test_payment_method_decides_what_reaches_the_drawer(pharmacy):
+    """Half on card, half in cash: only the cash half is in the drawer."""
+    tenant, item = pharmacy["tenant"], pharmacy["item"]
+    staff = _client(pharmacy["staff"], tenant)
+    till_id = staff.post("/api/pharmacy/till-sessions/",
+                         {"opening_float": "1000.00"}, format="json").json()["id"]
+
+    sale = Sale.all_objects.get(pk=staff.post("/api/pharmacy/sales/", {
+        "payment_method": "card",
+        "items": [{"item": item.id, "quantity": 8}],
+    }, format="json").json()["id"])
+    assert sale.total == Decimal("100.00")  # 8 x 12.50
+
+    # The card terminal takes 60.00; the rest is settled in notes.
+    card = staff.post(f"/api/pharmacy/sales/{sale.pk}/pay/",
+                      {"amount": "60.00"}, format="json")
+    assert card.status_code == 200, card.content
+    cash = staff.post(f"/api/pharmacy/sales/{sale.pk}/pay/",
+                      {"amount": "40.00", "method": "cash"}, format="json")
+    assert cash.status_code == 200, cash.content
+
+    sale.refresh_from_db()
+    assert sale.status == Sale.Status.PAID
+    methods = [p.method for p in SalePayment.all_objects.filter(sale=sale)]
+    assert methods == ["card", "cash"]
+
+    till = TillSession.all_objects.get(pk=till_id)
+    assert till.cash_in == Decimal("40.00")  # the card leg never touched it
+    assert till.expected_amount == Decimal("1040.00")
+
+
+def test_insured_copayment_in_cash_reaches_the_drawer(pharmacy):
+    """An HMO sale is not a cash sale, but its co-payment is taken in notes."""
+    tenant, item = pharmacy["tenant"], pharmacy["item"]
+    staff = _client(pharmacy["staff"], tenant)
+    patient = Patient.all_objects.create(tenant=tenant, first_name="Uche",
+                                         last_name="Nwosu")
+    hmo = HMO.all_objects.create(tenant=tenant, name="Hygeia",
+                                 coverage_percent=Decimal("80.00"))
+    HmoEnrollment.all_objects.create(tenant=tenant, patient=patient, hmo=hmo,
+                                     member_number="HY-9")
+    till_id = staff.post("/api/pharmacy/till-sessions/",
+                         {"opening_float": "2000.00"}, format="json").json()["id"]
+
+    sale = Sale.all_objects.get(pk=staff.post("/api/pharmacy/sales/", {
+        "patient": patient.id, "payment_method": "hmo",
+        "items": [{"item": item.id, "quantity": 8}],
+    }, format="json").json()["id"])
+    assert sale.patient_payable == Decimal("20.00")  # 20% of 100.00
+
+    paid = staff.post(f"/api/pharmacy/sales/{sale.pk}/pay/",
+                      {"amount": "20.00"}, format="json")
+    assert paid.status_code == 200, paid.content
+    payment = SalePayment.all_objects.get(sale=sale)
+    assert (payment.method, payment.till_session_id) == ("cash", till_id)
+    assert TillSession.all_objects.get(pk=till_id).cash_in == Decimal("20.00")

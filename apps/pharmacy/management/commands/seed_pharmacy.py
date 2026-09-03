@@ -26,6 +26,7 @@ from apps.patients.models import Patient
 from apps.pharmacy.models import (
     HMO, Claim, ClaimBatch, HmoEnrollment, PurchaseOrder, PurchaseOrderLine,
     Sale, SaleItem, StockBatch, StockItem, StockMovement, Supplier,
+    TillSession,
     claim_for_sale, receive_purchase_line, receive_stock,
 )
 from apps.tenants.models import Tenant
@@ -163,6 +164,11 @@ class Command(BaseCommand):
                               user=staff)
         self.stdout.write(f"purchase order: {order.reference} ({order.status})")
 
+    @staticmethod
+    def _round_up(amount):
+        """The note a patient would actually hand over for that bill."""
+        return (amount / Decimal("500")).to_integral_value(rounding="ROUND_CEILING") * Decimal("500")
+
     def _sales(self, tenant, items, hmo, auto_hmo, staff, today):
         """Five sales — cash paid, cash part-paid, two insured on the batched
         scheme, and one on the scheme that submits per sale."""
@@ -174,16 +180,26 @@ class Command(BaseCommand):
             tenant=tenant, patient=patient, hmo=hmo,
             defaults={"member_number": "HYG-40192", "plan": "Bronze"})
 
+        # The counter opens a drawer first, so the cash below has somewhere to
+        # go and the shift can be reconciled at the end of the day.
+        till, _ = TillSession.all_objects.get_or_create(
+            tenant=tenant, opened_by=staff, status=TillSession.Status.OPEN,
+            defaults={"opening_float": Decimal("5000.00")},
+        )
+
         cash = Sale.all_objects.create(tenant=tenant, served_by=staff,
                                        payment_method=Sale.PaymentMethod.CASH)
         cash.add_line(items["Paracetamol 500mg"], 20, user=staff)
         cash.add_line(items["Cough syrup 100ml"], 1, user=staff)
-        cash.record_payment(cash.patient_payable)
+        # Paid with a round note, so the drawer shows change going back out.
+        cash.record_payment(self._round_up(cash.patient_payable), till=till,
+                            user=staff)
 
         owing = Sale.all_objects.create(tenant=tenant, served_by=staff,
                                         payment_method=Sale.PaymentMethod.CASH)
         owing.add_line(items["Metformin 500mg"], 30, user=staff)
-        owing.record_payment(Decimal("500.00"))  # part-paid: shows as owed
+        # Part-paid: shows as owed.
+        owing.record_payment(Decimal("500.00"), till=till, user=staff)
 
         for lines in ([("Artemether/Lumefantrine 20/120", 2),
                        ("Amoxicillin 500mg caps", 15)],
@@ -194,7 +210,8 @@ class Command(BaseCommand):
             for name, qty in lines:
                 sale.add_line(items[name], qty, user=staff)
             claim_for_sale(sale)
-            sale.record_payment(sale.patient_payable)
+            # An insured co-payment is taken in cash, so it reaches the drawer.
+            sale.record_payment(sale.patient_payable, till=till, user=staff)
 
         # Bola is on the auto-submitting scheme and on nothing else, so the
         # counter can sell to her without naming a card: the API finds the one
@@ -212,7 +229,7 @@ class Command(BaseCommand):
         auto.add_line(items["Salbutamol inhaler"], 1, user=staff)
         auto.add_line(items["Paracetamol 500mg"], 10, user=staff)
         auto_claim = claim_for_sale(auto)
-        auto.record_payment(auto.patient_payable)
+        auto.record_payment(auto.patient_payable, till=till, user=staff)
         self.stdout.write(
             f"auto-submitted claim {auto_claim.reference} ({auto_claim.status})")
 

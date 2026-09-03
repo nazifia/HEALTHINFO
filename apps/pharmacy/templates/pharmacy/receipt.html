@@ -90,6 +90,10 @@
       <div><span>Patient pays</span><span>{{ sale.patient_payable }}</span></div>
     {% endif %}
     <div><span>Paid ({{ sale.get_payment_method_display }})</span><span>{{ sale.amount_paid }}</span></div>
+    {% if sale.change_due %}
+      <div><span>Tendered</span><span>{{ sale.amount_tendered }}</span></div>
+      <div><span>Change</span><span>{{ sale.change_due }}</span></div>
+    {% endif %}
     <div><span>Balance</span><span>{{ sale.balance_due }}</span></div>
   </div>
 

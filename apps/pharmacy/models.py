@@ -550,6 +550,108 @@ class HmoEnrollment(TenantOwnedModel):
         return not (self.valid_to and self.valid_to < today)
 
 
+class TillSession(TenantOwnedModel):
+    """One cashier's drawer, from the float it opens with to the count at close.
+
+    Reconciliation is a single count against ``expected_amount``: the float,
+    plus every note taken over the counter, less the change handed back. Which
+    sales made up that total is answered by the sales pointing at the session.
+    """
+
+    class Status(models.TextChoices):
+        OPEN = "open"
+        CLOSED = "closed"
+
+    opened_by = models.ForeignKey(
+        "accounts.User", on_delete=models.PROTECT, related_name="till_sessions"
+    )
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.OPEN
+    )
+    opening_float = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # Null until the drawer is counted - a closed drawer always has one.
+    counted_amount = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True
+    )
+    closed_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "opened_by"], condition=models.Q(status="open"),
+                name="one_open_till_per_cashier",
+            )
+        ]
+        indexes = [models.Index(fields=["tenant", "status"])]
+
+    def __str__(self):
+        return f"Till {self.pk} ({self.status})"
+
+    @property
+    def _cash(self):
+        """(notes in, change out) from this drawer's payment rows.
+
+        ponytail: summed on read - a shift is a few hundred rows, so there are
+        no running totals to drift out of step with the payments themselves.
+        """
+        # all_objects: the drawer is already this tenant's, so its own payments
+        # are too - and the totals must not depend on who is asking.
+        totals = SalePayment.all_objects.filter(till_session=self).aggregate(
+            tendered=models.Sum("tendered"), change=models.Sum("change")
+        )
+        return _money(totals["tendered"] or 0), _money(totals["change"] or 0)
+
+    @property
+    def cash_in(self):
+        """Notes taken over the counter into this drawer."""
+        return self._cash[0]
+
+    @property
+    def change_out(self):
+        """Change handed back out of this drawer."""
+        return self._cash[1]
+
+    @property
+    def expected_amount(self):
+        """What should be in the drawer: float, plus cash in, less change out."""
+        tendered, change = self._cash
+        return _money(self.opening_float + tendered - change)
+
+    @property
+    def variance(self):
+        """Counted less expected. None while open; negative means short."""
+        if self.counted_amount is None:
+            return None
+        return _money(self.counted_amount - self.expected_amount)
+
+    @classmethod
+    def open_for(cls, user):
+        """The cashier's open drawer, or None - a payment never waits on one."""
+        return cls.objects.filter(opened_by=user, status=cls.Status.OPEN).first()
+
+    def close(self, counted, *, notes=""):
+        """Count the drawer and shut it.
+
+        The variance is recorded, never corrected: a short drawer is a fact to
+        explain, not a number to adjust until it agrees.
+        """
+        if self.status == self.Status.CLOSED:
+            raise ValueError("This drawer is already closed.")
+        counted = _money(counted)
+        if counted < 0:
+            raise ValueError("A counted drawer cannot be negative.")
+        self.counted_amount = counted
+        self.status = self.Status.CLOSED
+        self.closed_at = timezone.now()
+        if notes:
+            self.notes = notes
+        self.save(update_fields=["counted_amount", "status", "closed_at", "notes",
+                                 "updated_at"])
+        return self
+
+
 class Sale(TenantOwnedModel):
     """One dispensing event: what left the shelf, at what price, paid how.
 
@@ -597,6 +699,9 @@ class Sale(TenantOwnedModel):
     patient_payable = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     hmo_payable = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     amount_paid = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # Cash handed over the counter, which can exceed what is owed. The excess is
+    # change given back, never money banked on the sale.
+    amount_tendered = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     served_by = models.ForeignKey(
         "accounts.User", null=True, blank=True, on_delete=models.SET_NULL,
         related_name="pharmacy_sales",
@@ -625,6 +730,11 @@ class Sale(TenantOwnedModel):
         """What the patient still owes. Never negative - an overpayment is
         change given, not a debt owed back through this field."""
         return max(_money(self.patient_payable - self.amount_paid), Decimal("0.00"))
+
+    @property
+    def change_due(self):
+        """Change handed back: whatever was tendered beyond the patient's side."""
+        return max(_money(self.amount_tendered - self.amount_paid), Decimal("0.00"))
 
     @property
     def coverage_percent(self):
@@ -701,17 +811,47 @@ class Sale(TenantOwnedModel):
                                  "patient_payable", "updated_at"])
         return self
 
-    def record_payment(self, amount):
-        """Take money for the patient's side; mark PAID once it is covered."""
+    def default_payment_method(self):
+        """How money arrives by default: an insured sale's co-payment is cash."""
+        if self.payment_method == self.PaymentMethod.HMO:
+            return SalePayment.Method.CASH
+        return self.payment_method
+
+    def record_payment(self, amount, *, method=None, till=None, user=None):
+        """Take cash tendered; mark PAID once the patient's side is covered.
+
+        ``amount`` is what was handed over, which at a counter is often more
+        than the bill. Only what is owed lands on ``amount_paid``; the rest is
+        change (see ``change_due``) rather than a credit sitting on the sale.
+
+        ``method`` is how this payment arrived - the sale's own method unless
+        the counter says otherwise, which is how a card sale can still be part
+        settled in cash. Only cash reaches ``till``, the cashier's open drawer.
+        """
         amount = _money(amount)
         if amount <= 0:
             raise ValueError("Payment must be positive.")
         if self.status == self.Status.CANCELLED:
             raise ValueError("A cancelled sale cannot take payment.")
-        self.amount_paid = _money(self.amount_paid + amount)
-        if self.amount_paid >= self.patient_payable:
-            self.status = self.Status.PAID
-        self.save(update_fields=["amount_paid", "status", "updated_at"])
+        if self.balance_due <= 0:
+            raise ValueError("This sale is settled; there is nothing left to pay.")
+        method = method or self.default_payment_method()
+        if method not in SalePayment.Method.values:
+            raise ValueError(f"{method} is not a way to take money over the counter.")
+        change = max(_money(amount - self.balance_due), Decimal("0.00"))
+        applied = min(amount, self.balance_due)
+        with transaction.atomic():
+            SalePayment.all_objects.create(
+                tenant=self.tenant, sale=self, method=method, tendered=amount,
+                applied=applied, change=change, taken_by=user,
+                till_session=till if method == SalePayment.Method.CASH else None,
+            )
+            self.amount_tendered = _money(self.amount_tendered + amount)
+            self.amount_paid = _money(self.amount_paid + applied)
+            if self.amount_paid >= self.patient_payable:
+                self.status = self.Status.PAID
+            self.save(update_fields=["amount_tendered", "amount_paid", "status",
+                                     "updated_at"])
         return self
 
     def cancel(self, *, reason="", user=None):
@@ -785,6 +925,45 @@ class SaleItem(TenantOwnedModel):
     @property
     def margin(self):
         return _money(self.line_total - self.cost_price * self.quantity)
+
+
+class SalePayment(TenantOwnedModel):
+    """One payment taken against a sale: how much, in what form, into which drawer.
+
+    The sale keeps the running totals; these rows say how the money actually
+    arrived, so a cash co-payment on an insured sale still reaches the drawer
+    while the card half of the same bill does not.
+    """
+
+    class Method(models.TextChoices):
+        CASH = "cash"
+        CARD = "card"
+        TRANSFER = "transfer"
+
+    sale = models.ForeignKey(Sale, on_delete=models.CASCADE, related_name="payments")
+    # PROTECT: a counted drawer cannot lose the payments it was counted against.
+    till_session = models.ForeignKey(
+        TillSession, null=True, blank=True, on_delete=models.PROTECT,
+        related_name="payments",
+    )
+    method = models.CharField(
+        max_length=20, choices=Method.choices, default=Method.CASH
+    )
+    tendered = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # What settled the bill; the rest went back as change.
+    applied = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    change = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    taken_by = models.ForeignKey(
+        "accounts.User", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="pharmacy_payments",
+    )
+
+    class Meta:
+        ordering = ("created_at", "id")
+        indexes = [models.Index(fields=["tenant", "till_session"])]
+
+    def __str__(self):
+        return f"{self.tendered} {self.method} on sale {self.sale_id}"
 
 
 class Claim(TenantOwnedModel):
@@ -1019,7 +1198,7 @@ class ClaimBatch(TenantOwnedModel):
         """Send the schedule: the batch and every claim on it go out together."""
         if self.status != self.Status.DRAFT:
             raise ValueError("Only a draft batch can be submitted.")
-        if not self._claims().exists():
+        if not self._claims().exclude(status=Claim.Status.CANCELLED).exists():
             raise ValueError("The batch has no claims to submit.")
         # Claims already out with the insurer ride along without being sent
         # twice; the schedule is the covering document for all of them.

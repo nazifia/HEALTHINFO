@@ -11,6 +11,7 @@ from .views import (
     StockItemViewSet,
     StockMovementViewSet,
     SupplierViewSet,
+    TillSessionViewSet,
 )
 
 router = SimpleRouter()
@@ -25,6 +26,8 @@ router.register("pharmacy/hmos", HMOViewSet, basename="pharmacy-hmo")
 router.register("pharmacy/enrollments", HmoEnrollmentViewSet,
                 basename="pharmacy-enrollment")
 router.register("pharmacy/sales", SaleViewSet, basename="pharmacy-sale")
+router.register("pharmacy/till-sessions", TillSessionViewSet,
+                basename="pharmacy-till-session")
 router.register("pharmacy/claims", ClaimViewSet, basename="pharmacy-claim")
 router.register("pharmacy/claim-batches", ClaimBatchViewSet,
                 basename="pharmacy-claim-batch")
