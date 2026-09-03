@@ -221,6 +221,14 @@ The `web/` PWA carries the counter screens: `#/pharmacy` (reorder list, stock
 expiring, the day's takings, what insurers owe) and `#/pharmacy/sell`
 (dispensing), with the rest of the module under its Pharmacy nav group.
 
+| Counter | Dispensing | Receipt |
+| :---: | :---: | :---: |
+| ![Web counter: the day's takings and what is owed, over the reorder and expiry lists](docs/screenshots/web-pharmacy-counter.png) | ![Dispensing: an item picker showing stock on hand, with a line added to the sale](docs/screenshots/web-pharmacy-dispense.png) | ![Receipt: batch and expiry per line, then the HMO and patient split](docs/screenshots/web-pharmacy-receipt.png) |
+
+The receipt above is the printable endpoint, not a picture of one: batch and
+expiry sit under each line, and an insured sale shows what the scheme covered
+against what the patient paid.
+
 The Flutter app (`mobile/`) has six sections, shown to pharmacy staff only and
 opening on the counter, since a phone is most useful at the shelf:
 
