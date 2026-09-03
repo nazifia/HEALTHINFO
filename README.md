@@ -229,6 +229,14 @@ The receipt above is the printable endpoint, not a picture of one: batch and
 expiry sit under each line, and an insured sale shows what the scheme covered
 against what the patient paid.
 
+| One purchase order | One claim |
+| :---: | :---: |
+| ![A part-delivered order: 80 of 200 ORS sachets in, the antibiotic still on back-order, and the form that books the next delivery](docs/screenshots/web-pharmacy-order.png) | ![An approved claim: claimed, approved and paid kept apart, offering only the transition its state allows](docs/screenshots/web-pharmacy-claim.png) |
+
+Both clients offer only the transitions a record's state allows — an approved
+claim can be paid, not re-submitted — because the API rejects the rest, and a
+button that always fails is a trap rather than a feature.
+
 The Flutter app (`mobile/`) has six sections, shown to pharmacy staff only and
 opening on the counter, since a phone is most useful at the shelf:
 
@@ -262,6 +270,8 @@ enforces them regardless: a hidden button is convenience, not the control.
 Shot against `seed_pharmacy`'s demo data, so the figures tie together: 170
 units still owed on that order is 120 ORS sachets plus the 50 ceftriaxone
 nothing has been delivered against yet.
+
+![HMO claims on mobile: claimed, approved and outstanding across the tenant, then each claim with the one action its state allows](docs/screenshots/pharmacy-claims.png)
 
 ## Tenant resolution (any of)
 1. Header `X-Tenant-ID: hospital-a`
