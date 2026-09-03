@@ -9,6 +9,22 @@ import '../shared/widgets/snack.dart';
 import '../shared/widgets/stats_kit.dart';
 import 'report_scaffold.dart';
 
+/// Every active stock item, paged through.
+///
+/// A picker that stops at the first 25 items is a picker the counter cannot
+/// sell from, and an order form that cannot see an item cannot restock it.
+/// ponytail: capped at 10 pages; past ~250 items this wants a search field.
+Future<List<Map<String, dynamic>>> loadStockItems() async {
+  final rows = <Map<String, dynamic>>[];
+  for (var page = 1; page <= 10; page++) {
+    final batch = await api
+        .getList('/api/pharmacy/items/', {'is_active': 'true', 'page': '$page'});
+    rows.addAll(batch.cast<Map<String, dynamic>>());
+    if (batch.length < 25) break;
+  }
+  return rows;
+}
+
 /// Stock items — GET /api/pharmacy/items/.
 ///
 /// Staff read the list and book deliveries in; only the pharmacy admin adds an

@@ -85,4 +85,46 @@ void main() {
     expect(units('80'), '80');
     expect(units(null), '—');
   });
+
+  test('an order can only be sent while it is a draft', () {
+    expect(orderActions('draft', 'pharmacist'), ['submit', 'cancel']);
+    // Sent or part-delivered: the only thing left is abandoning the rest.
+    expect(orderActions('submitted', 'pharmacist'), ['cancel']);
+    expect(orderActions('partial', 'tenant_admin'), ['cancel']);
+    // Fully received, or already cancelled: nothing to do.
+    expect(orderActions('received', 'tenant_admin'), isEmpty);
+    expect(orderActions('cancelled', 'pharmacist'), isEmpty);
+    expect(orderActions('draft', 'nurse'), isEmpty);
+  });
+
+  test('an order posts its lines and lets the API count deliveries', () {
+    final lines = [
+      const OrderLineDraft(
+          itemId: 5, name: 'ORS sachet', quantity: 200, unitCost: 95),
+      const OrderLineDraft(
+          itemId: 6, name: 'Ceftriaxone', quantity: 50, unitCost: 1750),
+    ];
+    expect(orderTotal(lines), 200 * 95 + 50 * 1750);
+
+    final body = purchaseOrderBody(
+        supplierId: 2, lines: lines, expectedDate: '2026-09-10', notes: ' ');
+    expect(body['supplier'], 2);
+    expect(body['expected_date'], '2026-09-10');
+    // Blank notes are dropped rather than sent as whitespace.
+    expect(body.containsKey('notes'), isFalse);
+    // What has arrived is a fact about deliveries — an order never asserts it.
+    expect((body['items'] as List).first, {
+      'item': 5,
+      'quantity_ordered': 200,
+      'unit_cost': '95.00',
+    });
+    expect(body.toString().contains('quantity_received'), isFalse);
+  });
+
+  test('an order with no expected date omits it', () {
+    final body = purchaseOrderBody(supplierId: 1, lines: [
+      const OrderLineDraft(itemId: 1, name: 'Paracetamol', quantity: 10, unitCost: 5),
+    ]);
+    expect(body.containsKey('expected_date'), isFalse);
+  });
 }

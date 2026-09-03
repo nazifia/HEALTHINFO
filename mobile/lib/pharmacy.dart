@@ -121,3 +121,67 @@ List<String> batchActions(String? status, String? role) {
       return const [];
   }
 }
+
+/// Actions on a purchase order in its current state (PurchaseOrder.submit /
+/// cancel in apps/pharmacy/models.py). Receiving is not here: it is offered per
+/// line, for as long as anything on the order is still outstanding.
+List<String> orderActions(String? status, String? role) {
+  if (!isPharmacyStaff(role)) return const [];
+  switch (status) {
+    case 'draft':
+      return const ['submit', 'cancel'];
+    case 'submitted':
+    case 'partial':
+      // Cancelling here abandons what has not arrived; stock already received
+      // stays received.
+      return const ['cancel'];
+    default: // received, cancelled
+      return const [];
+  }
+}
+
+/// One line being drafted onto an order — what to ask the supplier for.
+class OrderLineDraft {
+  final int itemId;
+  final String name;
+  final int quantity;
+  final double unitCost;
+
+  const OrderLineDraft({
+    required this.itemId,
+    required this.name,
+    required this.quantity,
+    required this.unitCost,
+  });
+
+  double get lineCost => quantity * unitCost;
+}
+
+double orderTotal(List<OrderLineDraft> lines) =>
+    lines.fold(0, (sum, l) => sum + l.lineCost);
+
+/// POST body for /api/pharmacy/purchase-orders/.
+///
+/// Lines travel under `items`; the API replaces the order's lines with them and
+/// keeps `quantity_received` for itself, since what arrived is a fact about
+/// deliveries, not something an order can assert.
+Map<String, dynamic> purchaseOrderBody({
+  required int supplierId,
+  required List<OrderLineDraft> lines,
+  String? expectedDate,
+  String notes = '',
+}) {
+  return {
+    'supplier': supplierId,
+    'expected_date': ?expectedDate,
+    if (notes.trim().isNotEmpty) 'notes': notes.trim(),
+    'items': [
+      for (final l in lines)
+        {
+          'item': l.itemId,
+          'quantity_ordered': l.quantity,
+          'unit_cost': l.unitCost.toStringAsFixed(2),
+        },
+    ],
+  };
+}
