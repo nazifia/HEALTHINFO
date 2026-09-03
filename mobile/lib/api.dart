@@ -39,8 +39,9 @@ class Api {
 
   bool roleCanWrite(String? role) => writeRoles.contains(role);
 
-  // Roles allowed to file/edit case + ADR reports (mirrors backend REPORT_ROLES).
-  static const reportRoles = {...writeRoles, 'nurse'};
+  // Roles allowed to register/edit patients and file clinical records
+  // (mirrors backend REPORT_ROLES: the nursing cadres write clinically too).
+  static const reportRoles = {...writeRoles, 'nurse', 'midwife', 'chew'};
 
   bool roleCanReport(String? role) => reportRoles.contains(role);
 

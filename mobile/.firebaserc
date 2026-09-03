@@ -1,6 +1,6 @@
 {
   "projects": {
-    "default": "healthinfoapp",
+    "default": "healthinfoapp2",
     "healthinfoapp": "healthinfoapp"
   },
   "targets": {},
