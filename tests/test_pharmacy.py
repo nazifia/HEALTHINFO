@@ -646,6 +646,8 @@ def test_batch_collects_a_claim_that_was_sent_on_its_own(pharmacy):
     staff = _client(pharmacy["staff"], tenant)
     admin = _client(pharmacy["admin"], tenant)
     today = timezone.localdate()
+    unbatched = [r["batch_reference"]
+                 for r in staff.get("/api/pharmacy/claims/").json()["results"]]
     created = staff.post("/api/pharmacy/claim-batches/", {
         "hmo": hmo.id, "period_start": str(today - timedelta(days=30)),
         "period_end": str(today),
@@ -654,6 +656,12 @@ def test_batch_collects_a_claim_that_was_sent_on_its_own(pharmacy):
     batch = ClaimBatch.all_objects.get(pk=created.json()["id"])
     assert batch.totals["claims"] == 2
     assert batch.totals["claimed"] == Decimal("150.00")
+
+    # The claim list names the schedule each claim landed on — unbatched before,
+    # this batch after. That is the only place a reader can see the collection.
+    assert unbatched == [None, None]
+    listed = staff.get("/api/pharmacy/claims/").json()["results"]
+    assert {r["batch_reference"] for r in listed} == {batch.reference}
 
     # Sending the schedule submits the draft and leaves the sent one alone —
     # its submitted_at is when the insurer actually got it.

@@ -513,12 +513,18 @@ function tableHtml(rows, linkFor) {
 }
 
 // First rows' keys, favoring identity/status columns, capped for readability.
+// A foreign key whose row already carries the resolved `_name`/`_reference` is
+// dropped: the bare pk tells a reader nothing the named column doesn't.
 function pickColumns(row) {
   const keys = Object.keys(row);
-  const first = keys.filter((k) => ['id', 'name', 'generic_name', 'title', 'phone', 'slug'].includes(k));
-  const rest = keys.filter((k) => !first.includes(k) && typeof row[k] !== 'object'
+  const resolved = (k) => `${k}_name` in row || `${k}_reference` in row;
+  const first = keys.filter((k) => ['id', 'reference', 'status', 'name', 'generic_name', 'title', 'phone', 'slug'].includes(k));
+  // null is a scalar here, not an object — a column empty on the sampled row
+  // (an unbatched claim's batch) still belongs in the table.
+  const rest = keys.filter((k) => !first.includes(k) && !resolved(k)
+    && (row[k] === null || typeof row[k] !== 'object')
     && !(typeof row[k] === 'string' && row[k].length > 80));
-  return [...first, ...rest].slice(0, 7);
+  return [...first, ...rest].slice(0, 8);
 }
 
 /* ------------------------------------------------------------- auth views */
