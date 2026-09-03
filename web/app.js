@@ -131,18 +131,24 @@ const RESOURCES = {
   'pharmacy-movements':     { title: 'Stock Ledger',    group: 'Pharmacy', path: 'pharmacy/movements',       roles: 'staff', readOnly: true },
   'pharmacy-suppliers':     { title: 'Suppliers',       group: 'Pharmacy', path: 'pharmacy/suppliers',       roles: 'admin', search: true },
   'pharmacy-orders':        { title: 'Purchase Orders', group: 'Pharmacy', path: 'pharmacy/purchase-orders', roles: 'staff', search: true, extra: 'purchase',
-                              actions: [{ name: 'submit', label: 'Submit to supplier' }, { name: 'cancel', label: 'Cancel order', danger: true }] },
+                              actions: [{ name: 'submit', label: 'Submit to supplier', when: ['draft'] },
+                                        { name: 'cancel', label: 'Cancel order', danger: true, when: ['draft', 'submitted', 'partial'] }] },
   'pharmacy-hmos':          { title: 'HMOs',            group: 'Pharmacy', path: 'pharmacy/hmos',            roles: 'admin', search: true },
   'pharmacy-enrollments':   { title: 'Scheme Members',  group: 'Pharmacy', path: 'pharmacy/enrollments',     roles: 'staff', search: true },
   'pharmacy-sales':         { title: 'Sales',           group: 'Pharmacy', path: 'pharmacy/sales',           roles: 'staff', search: true, readOnly: true, receipt: true,
-                              actions: [{ name: 'pay', label: 'Take payment', ask: 'amount' }, { name: 'cancel', label: 'Cancel sale', danger: true }] },
+                              actions: [{ name: 'pay', label: 'Take payment', ask: 'amount', when: ['pending', 'paid'] },
+                                        { name: 'cancel', label: 'Cancel sale', danger: true, when: ['pending', 'paid'] }] },
   'pharmacy-claims':        { title: 'Claims',          group: 'Pharmacy', path: 'pharmacy/claims',          roles: 'staff', search: true, readOnly: true,
-                              actions: [{ name: 'submit', label: 'Submit' }, { name: 'approve', label: 'Approve', ask: 'amount', adminOnly: true },
-                                        { name: 'reject', label: 'Reject', ask: 'reason', adminOnly: true }, { name: 'pay', label: 'Record payment', ask: 'amount', adminOnly: true }] },
+                              actions: [{ name: 'submit', label: 'Submit', when: ['draft', 'rejected'] },
+                                        { name: 'approve', label: 'Approve', ask: 'amount', adminOnly: true, when: ['submitted'] },
+                                        { name: 'reject', label: 'Reject', ask: 'reason', adminOnly: true, when: ['submitted'] },
+                                        { name: 'pay', label: 'Record payment', ask: 'amount', adminOnly: true, when: ['approved'] }] },
   'pharmacy-claim-batches': { title: 'Claim Batches',   group: 'Pharmacy', path: 'pharmacy/claim-batches',   roles: 'staff', search: true,
-                              actions: [{ name: 'add-claims', label: 'Collect claims' }, { name: 'submit', label: 'Submit batch' },
-                                        { name: 'approve', label: 'Approve all', adminOnly: true }, { name: 'pay', label: 'Allocate remittance', ask: 'amount', adminOnly: true },
-                                        { name: 'cancel', label: 'Cancel batch', danger: true }] },
+                              actions: [{ name: 'add-claims', label: 'Collect claims', when: ['draft'] },
+                                        { name: 'submit', label: 'Submit batch', when: ['draft'] },
+                                        { name: 'approve', label: 'Approve all', adminOnly: true, when: ['submitted'] },
+                                        { name: 'pay', label: 'Allocate remittance', ask: 'amount', adminOnly: true, when: ['submitted', 'approved'] },
+                                        { name: 'cancel', label: 'Cancel batch', danger: true, when: ['draft', 'submitted', 'approved'] }] },
   'users':             { title: 'Users',              group: 'Admin' },
   'tenants':           { title: 'Tenants',            group: 'Admin', superOnly: true, tenantActions: true },
 };
@@ -853,7 +859,10 @@ async function viewDetail(slug, id) {
     }
     // Module actions (dispensing, claims, orders): each POSTs to its own
     // endpoint; ``ask`` collects the one value the endpoint needs.
-    const acts = (res.actions || []).filter((a) => !a.adminOnly || isPharmacyAdmin());
+    // Offer only the transitions this record's state actually allows — the API
+    // rejects the rest, so a button that always fails is just a trap.
+    const acts = (res.actions || []).filter((a) =>
+      (!a.adminOnly || isPharmacyAdmin()) && (!a.when || a.when.includes(obj.status)));
     const actsHtml = acts.map((a) =>
       `<button class="btn${a.danger ? ' danger' : ''}" data-pa="${a.name}" data-ask="${a.ask || ''}">${esc(a.label)}</button>`).join('');
     if (res.receipt) actions += `<button id="receipt" class="btn ghost">Print receipt</button>`;
