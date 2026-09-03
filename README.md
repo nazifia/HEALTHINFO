@@ -216,9 +216,36 @@ python manage.py seed_pharmacy            # demo pharmacy (idempotent)
 python manage.py seed_pharmacy --reset    # wipe this tenant's pharmacy first
 ```
 
+### Clients
 The `web/` PWA carries the counter screens: `#/pharmacy` (reorder list, stock
 expiring, the day's takings, what insurers owe) and `#/pharmacy/sell`
 (dispensing), with the rest of the module under its Pharmacy nav group.
+
+The Flutter app (`mobile/`) has six sections, shown to pharmacy staff only and
+opening on the counter, since a phone is most useful at the shelf:
+
+- **Pharmacy counter** — the day's takings against what patients and insurers
+  owe, the reorder and expiry lists, and the button that starts a sale. Four
+  small summaries fetched in parallel, so a failing panel reads "—" rather than
+  blanking the screen.
+- **Stock items** — the item list, each item's batches, receiving a delivery,
+  and (admin) count corrections and write-offs.
+- **Sales** — the list, then one sale: its lines, its money, take payment,
+  cancel, and a receipt rendered in-app. Printing stays on the server endpoint;
+  a phone at the counter is showing the receipt to the patient.
+- **HMO claims** — claims and monthly batches in two tabs, each card offering
+  exactly the transitions that state and role allow.
+- **Suppliers** — the list orders and batches point at (admin writes).
+- **Purchase orders** — what was ordered against what has landed, with
+  per-line receiving that carries the invoice cost.
+
+Dispensing sends items and quantities only: batches, prices and the
+patient/HMO split are the server's, so the basket total on screen is an
+estimate to show the patient and never the invoice. The rules the screens share
+— the admin/staff split, the claim, batch and order transitions, the request
+bodies — live in `mobile/lib/pharmacy.dart` rather than in the widgets, so they
+are unit-tested and can't drift between screens. They mirror the API, which
+enforces them regardless: a hidden button is convenience, not the control.
 
 ## Tenant resolution (any of)
 1. Header `X-Tenant-ID: hospital-a`
