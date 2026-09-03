@@ -254,6 +254,10 @@ class ClaimSerializer(serializers.ModelSerializer):
                                           read_only=True)
     outstanding = serializers.DecimalField(max_digits=12, decimal_places=2,
                                             read_only=True)
+    # Which monthly schedule the claim sits on, if any — since a submitted
+    # claim can still be collected, "is this on a schedule?" is a real question.
+    batch_reference = serializers.CharField(source="batch.reference",
+                                             read_only=True, allow_null=True)
 
     class Meta:
         model = Claim
