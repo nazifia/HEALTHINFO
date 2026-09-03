@@ -227,7 +227,11 @@ expiring, the day's takings, what insurers owe) and `#/pharmacy/sell`
 
 | Counter | Dispensing | Receipt |
 | :---: | :---: | :---: |
-| ![Web counter: the day's takings and what is owed, over the reorder and expiry lists](docs/screenshots/web-pharmacy-counter.png) | ![Dispensing: an item picker showing stock on hand, with a line added to the sale](docs/screenshots/web-pharmacy-dispense.png) | ![Receipt: batch and expiry per line, then the HMO and patient split](docs/screenshots/web-pharmacy-receipt.png) |
+| ![Web counter: the day's takings and what is owed, over the reorder and expiry lists](docs/screenshots/web-pharmacy-counter.png) | ![Dispensing an insured sale: the pharmacist typed the patient's name and the scheme membership filled itself in](docs/screenshots/web-pharmacy-dispense.png) | ![Receipt: batch and expiry per line, then the HMO and patient split](docs/screenshots/web-pharmacy-receipt.png) |
+
+The dispensing shot is the card-less path: the counter named the patient, and
+the one scheme they hold was picked for them — the server would have resolved
+it either way, and asks which only when a patient is on two.
 
 The receipt above is the printable endpoint, not a picture of one: batch and
 expiry sit under each line, and an insured sale shows what the scheme covered
