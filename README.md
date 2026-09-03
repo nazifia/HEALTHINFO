@@ -201,9 +201,11 @@ named patient's claims are commercial and clinical data both.
   `.../reject/`, `.../pay/` (admin). Claimed, approved and paid are kept apart
   because they differ; `.../summary/` shows what each insurer still owes. An
   insurer with `auto_submit_claims` skips the draft: its claims leave as they
-  are raised, rather than waiting for the month's batch.
+  are raised, rather than waiting for the month's batch — and still appear on
+  it, because the batch is what a remittance is read against.
 - `GET/POST /api/pharmacy/claim-batches/` — the monthly schedule. Creating one
-  collects that insurer's unbatched open claims for the period; `submit`,
+  collects that insurer's unbatched open claims for the period, already-sent
+  ones included (submitting the batch does not send them twice); `submit`,
   `approve` and `pay` work on the envelope, and a remittance is allocated across
   its claims oldest-first, so a part-paid batch says which claims are short.
 

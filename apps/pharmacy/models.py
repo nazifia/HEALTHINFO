@@ -835,6 +835,12 @@ class Claim(TenantOwnedModel):
             models.Index(fields=["tenant", "hmo"]),
         ]
 
+    # What a monthly schedule may still collect. A claim sent on its own — the
+    # auto-submitting insurers — belongs on the schedule too: that is the
+    # document the remittance is read against. Approved, paid and cancelled
+    # claims are past the point where bundling means anything.
+    BATCHABLE = (Status.DRAFT, Status.REJECTED, Status.SUBMITTED)
+
     def __str__(self):
         return f"{self.reference} ({self.status}: {self.amount})"
 
@@ -997,26 +1003,29 @@ class ClaimBatch(TenantOwnedModel):
         """Put claims in this batch. Returns how many moved.
 
         Only unbatched claims for this batch's insurer that are still open are
-        taken — a claim already sent on its own, or already in another month's
-        envelope, is left where it is.
+        taken — one already in another month's envelope, or already decided, is
+        left where it is. A claim sent on its own still joins: it is the same
+        month's money, and the insurer reconciles against the schedule.
         """
         if self.status != self.Status.DRAFT:
             raise ValueError("Only a draft batch can take more claims.")
         ids = [c.pk for c in claims]
         return Claim.all_objects.filter(
             pk__in=ids, hmo_id=self.hmo_id, batch__isnull=True,
-            status__in=(Claim.Status.DRAFT, Claim.Status.REJECTED),
+            status__in=Claim.BATCHABLE,
         ).update(batch=self)
 
     def submit(self):
         """Send the schedule: the batch and every claim on it go out together."""
         if self.status != self.Status.DRAFT:
             raise ValueError("Only a draft batch can be submitted.")
+        if not self._claims().exists():
+            raise ValueError("The batch has no claims to submit.")
+        # Claims already out with the insurer ride along without being sent
+        # twice; the schedule is the covering document for all of them.
         claims = list(self._claims().filter(
             status__in=(Claim.Status.DRAFT, Claim.Status.REJECTED)
         ))
-        if not claims:
-            raise ValueError("The batch has no claims to submit.")
         with transaction.atomic():
             for claim in claims:
                 claim.submit()
