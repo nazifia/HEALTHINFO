@@ -40,6 +40,7 @@ from .models import (
     StockItem,
     StockMovement,
     Supplier,
+    TillSession,
     adjust_stock,
     receive_purchase_line,
     receive_stock,
@@ -57,12 +58,14 @@ from .serializers import (
     ReceivePurchaseSerializer,
     ReceiveStockSerializer,
     SaleCancelSerializer,
-    SalePaymentSerializer,
+    SalePaymentInputSerializer,
     SaleSerializer,
     StockBatchSerializer,
     StockItemSerializer,
     StockMovementSerializer,
     SupplierSerializer,
+    TillCloseSerializer,
+    TillSessionSerializer,
 )
 
 MONEY_FIELD = DecimalField(max_digits=14, decimal_places=2)
@@ -357,7 +360,7 @@ class SaleViewSet(mixins.CreateModelMixin, mixins.ListModelMixin,
 
     def get_queryset(self):
         return Sale.objects.select_related("patient", "served_by").prefetch_related(
-            "lines"
+            "lines", "payments"
         )
 
     def perform_create(self, serializer):
@@ -370,12 +373,17 @@ class SaleViewSet(mixins.CreateModelMixin, mixins.ListModelMixin,
     def pay(self, request, pk=None):
         """Take money against the patient's side of the bill."""
         sale = self.get_object()
-        data = _body(SalePaymentSerializer, request)
+        data = _body(SalePaymentInputSerializer, request)
         try:
-            sale.record_payment(data["amount"])
+            sale.record_payment(data["amount"], method=data.get("method"),
+                                till=TillSession.open_for(request.user),
+                                user=request.user)
         except ValueError as exc:
             raise ValidationError({"amount": str(exc)}) from exc
-        return success("Payment recorded.", SaleSerializer(sale).data)
+        message = "Payment recorded."
+        if sale.change_due:
+            message = f"Payment recorded. Change due: {sale.change_due}."
+        return success(message, SaleSerializer(sale).data)
 
     @action(detail=True, methods=["post"], url_path="cancel")
     def cancel(self, request, pk=None):
@@ -443,6 +451,44 @@ class SaleViewSet(mixins.CreateModelMixin, mixins.ListModelMixin,
         })
 
 
+class TillSessionViewSet(mixins.CreateModelMixin, mixins.ListModelMixin,
+                         mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+    """The cash drawer: opened with a float, closed with a count.
+
+    No update and no delete - a counted drawer is a financial record. Cash
+    payments book themselves into the cashier's open drawer as they are taken.
+    """
+
+    serializer_class = TillSessionSerializer
+    permission_classes = [IsTenantMember, IsPharmacyStaff]
+    filterset_fields = ("status", "opened_by")
+    ordering_fields = ("created_at",)
+
+    def get_queryset(self):
+        return TillSession.objects.select_related("opened_by").prefetch_related(
+            "payments"
+        )
+
+    def perform_create(self, serializer):
+        if TillSession.open_for(self.request.user):
+            raise ValidationError(
+                "You already have a drawer open; close it before opening another."
+            )
+        serializer.save(opened_by=self.request.user)
+
+    @action(detail=True, methods=["post"], url_path="close")
+    def close(self, request, pk=None):
+        """Count the drawer and shut it; the variance comes back in the message."""
+        session = self.get_object()
+        data = _body(TillCloseSerializer, request)
+        try:
+            session.close(data["amount"], notes=data.get("notes", ""))
+        except ValueError as exc:
+            raise ValidationError({"amount": str(exc)}) from exc
+        return success(f"Drawer closed. Variance: {session.variance}.",
+                       TillSessionSerializer(session).data)
+
+
 class ClaimViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
                    mixins.UpdateModelMixin, viewsets.GenericViewSet):
     """HMO claims from submission to settlement.
@@ -458,7 +504,7 @@ class ClaimViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
     ordering_fields = ("created_at", "amount")
 
     def get_queryset(self):
-        return Claim.objects.select_related("hmo", "sale", "sale__patient")
+        return Claim.objects.select_related("hmo", "sale", "sale__patient", "batch")
 
     def _transition(self, request, call, message):
         claim = self.get_object()

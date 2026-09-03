@@ -20,6 +20,7 @@ import 'stock_reports_screen.dart';
 import 'pharmacy_counter_screen.dart';
 import 'pharmacy_stock_screen.dart';
 import 'pharmacy_sales_screen.dart';
+import 'pharmacy_till_screen.dart';
 import 'pharmacy_claims_screen.dart';
 import 'pharmacy_suppliers_screen.dart';
 import 'pharmacy_orders_screen.dart';
@@ -108,6 +109,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         PharmacyCounterScreen()),
     _Section('Stock items', Icons.inventory_outlined, PharmacyStockScreen()),
     _Section('Sales', Icons.point_of_sale_outlined, PharmacySalesScreen()),
+    _Section('Cash drawer', Icons.point_of_sale_outlined, PharmacyTillScreen()),
     _Section('HMO claims', Icons.request_quote_outlined, PharmacyClaimsScreen()),
     _Section('Suppliers', Icons.local_shipping_outlined,
         PharmacySuppliersScreen()),

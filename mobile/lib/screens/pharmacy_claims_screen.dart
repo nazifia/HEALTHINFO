@@ -191,6 +191,10 @@ class _ClaimCard extends StatelessWidget {
             'Receipt ${row['sale_reference'] ?? '—'}',
             if ((row['patient_name'] ?? '').toString().isNotEmpty)
               '${row['patient_name']}',
+            if ((row['enrollment_member_number'] ?? '').toString().isNotEmpty)
+              'Card ${row['enrollment_member_number']}',
+            if ((row['batch_reference'] ?? '').toString().isNotEmpty)
+              'Schedule ${row['batch_reference']}',
           ].join(' · '),
           style: TextStyle(color: context.hintColor, fontSize: 13),
         ),

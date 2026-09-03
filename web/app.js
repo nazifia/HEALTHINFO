@@ -136,8 +136,10 @@ const RESOURCES = {
   'pharmacy-hmos':          { title: 'HMOs',            group: 'Pharmacy', path: 'pharmacy/hmos',            roles: 'admin', search: true },
   'pharmacy-enrollments':   { title: 'Scheme Members',  group: 'Pharmacy', path: 'pharmacy/enrollments',     roles: 'staff', search: true },
   'pharmacy-sales':         { title: 'Sales',           group: 'Pharmacy', path: 'pharmacy/sales',           roles: 'staff', search: true, readOnly: true, receipt: true,
-                              actions: [{ name: 'pay', label: 'Take payment', ask: 'amount', when: ['pending', 'paid'] },
+                              actions: [{ name: 'pay', label: 'Take payment', ask: 'amount', choose: 'method:cash,card,transfer', when: ['pending'] },
                                         { name: 'cancel', label: 'Cancel sale', danger: true, when: ['pending', 'paid'] }] },
+  'pharmacy-till':          { title: 'Cash Drawer',    group: 'Pharmacy', path: 'pharmacy/till-sessions',   roles: 'staff', createOnly: true,
+                              actions: [{ name: 'close', label: 'Close drawer', ask: 'amount,notes', when: ['open'] }] },
   'pharmacy-claims':        { title: 'Claims',          group: 'Pharmacy', path: 'pharmacy/claims',          roles: 'staff', search: true, readOnly: true,
                               actions: [{ name: 'submit', label: 'Submit', when: ['draft', 'rejected'] },
                                         { name: 'approve', label: 'Approve', ask: 'amount', adminOnly: true, when: ['submitted'] },
@@ -513,11 +515,13 @@ function tableHtml(rows, linkFor) {
 }
 
 // First rows' keys, favoring identity/status columns, capped for readability.
-// A foreign key whose row already carries the resolved `_name`/`_reference` is
-// dropped: the bare pk tells a reader nothing the named column doesn't.
+// A foreign key whose row already carries a resolved column - one prefixed with
+// the key and ending in `_name`, `_reference` or `_number` - is dropped: the
+// bare pk tells a reader nothing the named column doesn't.
 function pickColumns(row) {
   const keys = Object.keys(row);
-  const resolved = (k) => `${k}_name` in row || `${k}_reference` in row;
+  const resolved = (k) => keys.some((o) => o !== k && o.startsWith(`${k}_`)
+    && /_(name|reference|number)$/.test(o));
   const first = keys.filter((k) => ['id', 'reference', 'status', 'name', 'generic_name', 'title', 'phone', 'slug'].includes(k));
   // null is a scalar here, not an object — a column empty on the sampled row
   // (an unbatched claim's batch) still belongs in the table.
@@ -775,8 +779,10 @@ function reportSummaryHtml(slug, rows) {
 
 /* -------------------------------------------------- generic resource views */
 
+// ``createOnly`` resources (the cash drawer) are made and then only acted on:
+// the list still offers "+ New", the detail page offers no edit or delete.
 function canWriteRes(slug, res) {
-  if (res.readOnly) return false;
+  if (res.readOnly || res.createOnly) return false;
   if (res.roles === 'admin') return isPharmacyAdmin();
   if (res.roles === 'staff') return isPharmacyStaff();
   if (slug === 'users') return ['super_admin', 'tenant_admin'].includes(ME.role);
@@ -799,7 +805,7 @@ async function viewList(slug) {
     const pages = count != null ? Math.max(1, Math.ceil(count / 25)) : 1;
     render(`
       <div class="page-head"><h2>${esc(res.title)}</h2>
-        ${canWrite && slug !== 'tenants' ? `<a class="btn" href="#/r/${slug}/new">+ New</a>` : ''}
+        ${(canWrite || res.createOnly) && slug !== 'tenants' ? `<a class="btn" href="#/r/${slug}/new">+ New</a>` : ''}
       </div>
       <form id="search-form" class="toolbar">
         <input name="q" placeholder="${res.search ? 'Search…' : 'Filter by search…'}" value="${esc(st.search)}">
@@ -870,7 +876,7 @@ async function viewDetail(slug, id) {
     const acts = (res.actions || []).filter((a) =>
       (!a.adminOnly || isPharmacyAdmin()) && (!a.when || a.when.includes(obj.status)));
     const actsHtml = acts.map((a) =>
-      `<button class="btn${a.danger ? ' danger' : ''}" data-pa="${a.name}" data-ask="${a.ask || ''}">${esc(a.label)}</button>`).join('');
+      `<button class="btn${a.danger ? ' danger' : ''}" data-pa="${a.name}" data-ask="${a.ask || ''}" data-choose="${a.choose || ''}">${esc(a.label)}</button>`).join('');
     if (res.receipt) actions += `<button id="receipt" class="btn ghost">Print receipt</button>`;
     render(`<div class="page-head"><h2>${esc(obj.name || obj.generic_name || obj.title || obj.reference || res.title + ' #' + id)}</h2></div>
       <div class="actions">${actions}</div>
@@ -883,10 +889,22 @@ async function viewDetail(slug, id) {
     for (const b of document.querySelectorAll('[data-pa]')) {
       b.onclick = async () => {
         const body = {};
-        if (b.dataset.ask) {
-          const answer = prompt(`${b.textContent} — ${b.dataset.ask}:`);
+        // ``ask`` is one key, or several comma-separated — an optional one
+        // left blank (a drawer's closing note) stays out of the body.
+        for (const key of (b.dataset.ask || '').split(',').filter(Boolean)) {
+          const answer = prompt(`${b.textContent} — ${key}:`);
           if (answer === null) return;
-          if (answer !== '') body[b.dataset.ask] = answer;
+          if (answer !== '') body[key] = answer;
+        }
+        // ``choose`` is "key:one,of,these" — the endpoint takes one of a fixed
+        // set (how a payment arrived), and the first option is the default.
+        if (b.dataset.choose) {
+          const [key, list] = b.dataset.choose.split(':');
+          const options = list.split(',');
+          const picked = prompt(`${b.textContent} — ${key} (${options.join('/')}):`, options[0]);
+          if (picked === null) return;
+          if (!options.includes(picked)) return toast(`${key} must be one of ${options.join(', ')}.`, true);
+          body[key] = picked;
         }
         try {
           const r = await Api.post(rpath(slug, `${id}/${b.dataset.pa}/`), body);

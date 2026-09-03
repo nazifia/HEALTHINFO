@@ -12,10 +12,12 @@ from .models import (
     PurchaseOrderLine,
     Sale,
     SaleItem,
+    SalePayment,
     StockBatch,
     StockItem,
     StockMovement,
     Supplier,
+    TillSession,
     claim_for_sale,
 )
 
@@ -153,8 +155,31 @@ class SaleLineInputSerializer(serializers.Serializer):
     )
 
 
+class SalePaymentSerializer(serializers.ModelSerializer):
+    """One payment as it was taken: the form it arrived in and its drawer."""
+
+    taken_by_name = serializers.CharField(source="taken_by.username", read_only=True)
+
+    class Meta:
+        model = SalePayment
+        fields = ("id", "method", "tendered", "applied", "change", "till_session",
+                  "taken_by_name", "created_at")
+
+
+class SalePaymentInputSerializer(serializers.Serializer):
+    """What the counter says: how much was handed over, and in what form."""
+
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2,
+                                       min_value=Decimal("0.01"))
+    # Left out, the sale's own method applies - an insured sale's co-payment is
+    # taken as cash, which is how it reaches the drawer.
+    method = serializers.ChoiceField(choices=SalePayment.Method.choices,
+                                      required=False)
+
+
 class SaleSerializer(serializers.ModelSerializer):
     lines = SaleItemSerializer(many=True, read_only=True)
+    payments = SalePaymentSerializer(many=True, read_only=True)
     # Write-only request lines; the stored lines come back under ``lines``.
     items = SaleLineInputSerializer(many=True, write_only=True)
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
@@ -162,6 +187,8 @@ class SaleSerializer(serializers.ModelSerializer):
                                            read_only=True)
     balance_due = serializers.DecimalField(max_digits=12, decimal_places=2,
                                            read_only=True)
+    change_due = serializers.DecimalField(max_digits=12, decimal_places=2,
+                                          read_only=True)
     claim_id = serializers.IntegerField(source="claim.id", read_only=True)
 
     class Meta:
@@ -171,7 +198,8 @@ class SaleSerializer(serializers.ModelSerializer):
         # client that could post its own total could bill an HMO anything.
         read_only_fields = ("reference", "served_by", "status", "subtotal",
                             "discount", "total", "patient_payable", "hmo_payable",
-                            "amount_paid", "created_at", "updated_at")
+                            "amount_paid", "amount_tendered", "created_at",
+                            "updated_at")
 
     def validate(self, attrs):
         method = attrs.get("payment_method", Sale.PaymentMethod.CASH)
@@ -237,9 +265,37 @@ class SaleSerializer(serializers.ModelSerializer):
         return sale
 
 
-class SalePaymentSerializer(serializers.Serializer):
+class TillSessionSerializer(serializers.ModelSerializer):
+    """The drawer as the counter sees it: what should be in it, and what was."""
+
+    opened_by_name = serializers.CharField(source="opened_by.username",
+                                            read_only=True)
+    # Totalled from the drawer's payment rows, not stored on the session.
+    cash_in = serializers.DecimalField(max_digits=12, decimal_places=2,
+                                        read_only=True)
+    change_out = serializers.DecimalField(max_digits=12, decimal_places=2,
+                                           read_only=True)
+    expected_amount = serializers.DecimalField(max_digits=12, decimal_places=2,
+                                                read_only=True)
+    variance = serializers.DecimalField(max_digits=12, decimal_places=2,
+                                         read_only=True)
+
+    class Meta:
+        model = TillSession
+        exclude = ("tenant",)
+        # A cashier opens a drawer with a float and closes it with a count;
+        # every other figure is booked by the sales that went through it.
+        read_only_fields = ("opened_by", "status", "counted_amount", "closed_at",
+                            "created_at", "updated_at")
+
+
+class TillCloseSerializer(serializers.Serializer):
+    """The counted cash, and why it differs if it does."""
+
     amount = serializers.DecimalField(max_digits=12, decimal_places=2,
-                                       min_value=Decimal("0.01"))
+                                       min_value=Decimal("0"))
+    notes = serializers.CharField(max_length=255, required=False, allow_blank=True,
+                                   default="")
 
 
 class SaleCancelSerializer(serializers.Serializer):
@@ -254,6 +310,11 @@ class ClaimSerializer(serializers.ModelSerializer):
                                           read_only=True)
     outstanding = serializers.DecimalField(max_digits=12, decimal_places=2,
                                             read_only=True)
+    # The card the patient presented - the raw enrollment id says nothing to
+    # anyone reading the claims table.
+    enrollment_member_number = serializers.CharField(
+        source="enrollment.member_number", read_only=True
+    )
     # Which monthly schedule the claim sits on, if any — since a submitted
     # claim can still be collected, "is this on a schedule?" is a real question.
     batch_reference = serializers.CharField(source="batch.reference",
