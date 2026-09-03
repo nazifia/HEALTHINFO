@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../main.dart';
+import '../pharmacy.dart';
 import '../resources.dart';
 import '../l10n/app_localizations.dart';
 import '../core/locale_provider.dart';
@@ -16,6 +17,10 @@ import 'lab_results_screen.dart';
 import 'immunizations_screen.dart';
 import 'vital_events_screen.dart';
 import 'stock_reports_screen.dart';
+import 'pharmacy_counter_screen.dart';
+import 'pharmacy_stock_screen.dart';
+import 'pharmacy_sales_screen.dart';
+import 'pharmacy_claims_screen.dart';
 import 'chw_reports_screen.dart';
 import 'facility_metrics_screen.dart';
 import 'insurance_claims_screen.dart';
@@ -92,6 +97,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   static const _accessLogSection = _Section(
       'Patient access log', Icons.privacy_tip_outlined, PatientAccessLogScreen());
 
+  // The pharmacy module. Shown to pharmacy staff only — the API gates it the
+  // same way, so hiding the sections is convenience, not the control.
+  // "Stock items" is this pharmacy's own shelf; "Pharmacy stock" further down
+  // is the de-identified snapshot central surveillance reads.
+  static const _pharmacySections = [
+    _Section('Pharmacy counter', Icons.local_pharmacy_outlined,
+        PharmacyCounterScreen()),
+    _Section('Stock items', Icons.inventory_outlined, PharmacyStockScreen()),
+    _Section('Sales', Icons.point_of_sale_outlined, PharmacySalesScreen()),
+    _Section('HMO claims', Icons.request_quote_outlined, PharmacyClaimsScreen()),
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -101,11 +118,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Future<void> _loadRole() async {
     final role = await api.myRole();
     if (!mounted) return;
+    final pharmacy = isPharmacyStaff(role) ? _pharmacySections : <_Section>[];
     if (role == 'tenant_admin') {
-      setState(() => _sections = [_accessLogSection, ..._baseSections]);
+      setState(() =>
+          _sections = [_accessLogSection, ...pharmacy, ..._baseSections]);
       return;
     }
-    if (role != 'super_admin') return;
+    if (role != 'super_admin') {
+      if (pharmacy.isNotEmpty) {
+        setState(() => _sections = [...pharmacy, ..._baseSections]);
+      }
+      return;
+    }
     setState(() {
       _sections = [
         const _Section('Platform', Icons.admin_panel_settings_outlined,
@@ -126,6 +150,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ReportSourcesScreen()),
         const _Section('Surveillance', Icons.notifications_active_outlined,
             SurveillanceScreen()),
+        ...pharmacy,
         ..._baseSections,
       ];
     });
