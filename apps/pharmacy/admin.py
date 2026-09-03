@@ -48,8 +48,9 @@ class StockMovementAdmin(admin.ModelAdmin):
 
 @admin.register(HMO)
 class HMOAdmin(admin.ModelAdmin):
-    list_display = ("name", "tenant", "code", "coverage_percent", "is_active")
-    list_filter = ("tenant", "is_active")
+    list_display = ("name", "tenant", "code", "coverage_percent",
+                    "auto_submit_claims", "is_active")
+    list_filter = ("tenant", "auto_submit_claims", "is_active")
     search_fields = ("name", "code")
 
 

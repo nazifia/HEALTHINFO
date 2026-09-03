@@ -57,7 +57,8 @@ class _DispenseSheetState extends State<DispenseSheet> {
     if (mounted) setState(() => _items = rows);
   }
 
-  /// A patient's scheme cards — an HMO sale needs the one they presented.
+  /// A patient's scheme cards. One card is picked for the pharmacist; two or
+  /// more, and they say which one is being billed.
   Future<void> _loadEnrollments(int? patientId) async {
     setState(() {
       _enrollmentId = null;
@@ -68,7 +69,12 @@ class _DispenseSheetState extends State<DispenseSheet> {
       final rows = await api.getList('/api/pharmacy/enrollments/',
           {'patient': '$patientId', 'is_active': 'true'});
       if (mounted) {
-        setState(() => _enrollments = rows.cast<Map<String, dynamic>>());
+        setState(() {
+          _enrollments = rows.cast<Map<String, dynamic>>();
+          if (_enrollments.length == 1) {
+            _enrollmentId = _enrollments.first['id'] as int?;
+          }
+        });
       }
     } catch (_) {
       // A missing card list is not a reason to block a cash sale.

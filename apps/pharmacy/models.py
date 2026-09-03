@@ -490,6 +490,9 @@ class HMO(TenantOwnedModel):
     coverage_percent = models.DecimalField(
         max_digits=5, decimal_places=2, default=Decimal("100.00")
     )
+    # Some insurers want each claim as the sale happens; others only read the
+    # monthly schedule. Off by default, so a claim waits for its ``ClaimBatch``.
+    auto_submit_claims = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -921,10 +924,13 @@ def claim_for_sale(sale):
     existing = Claim.all_objects.filter(sale=sale).first()
     if existing:
         return existing
-    return Claim.all_objects.create(
+    claim = Claim.all_objects.create(
         tenant=sale.tenant, sale=sale, hmo_id=sale.enrollment.hmo_id,
         enrollment=sale.enrollment, amount=sale.hmo_payable,
     )
+    if claim.hmo.auto_submit_claims:
+        claim.submit()
+    return claim
 
 
 class ClaimBatch(TenantOwnedModel):

@@ -118,9 +118,15 @@ class Command(BaseCommand):
         HMO.all_objects.get_or_create(
             tenant=tenant, name="NHIA",
             defaults={"code": "NHIA", "coverage_percent": Decimal("90.00")})
+        # The per-sale insurer: its claims go out as they are raised, so the
+        # demo has both routes on screen - one batched, one already submitted.
+        reliance, _ = HMO.all_objects.get_or_create(
+            tenant=tenant, name="Reliance HMO",
+            defaults={"code": "REL", "coverage_percent": Decimal("80.00"),
+                      "auto_submit_claims": True})
 
         if not Sale.all_objects.filter(tenant=tenant).exists():
-            self._sales(tenant, items, hygeia, staff, today)
+            self._sales(tenant, items, hygeia, reliance, staff, today)
 
         self.stdout.write(self.style.SUCCESS(
             f"seed_pharmacy complete - counter login {staff.phone[-6:]} / {PASSWORD}"
@@ -157,9 +163,9 @@ class Command(BaseCommand):
                               user=staff)
         self.stdout.write(f"purchase order: {order.reference} ({order.status})")
 
-    def _sales(self, tenant, items, hmo, staff, today):
-        """Four sales — cash paid, cash part-paid, and two insured — then the
-        claim batch those insured sales feed."""
+    def _sales(self, tenant, items, hmo, auto_hmo, staff, today):
+        """Five sales — cash paid, cash part-paid, two insured on the batched
+        scheme, and one on the scheme that submits per sale."""
         patient, _ = Patient.all_objects.get_or_create(
             tenant=tenant, first_name="Ada", last_name="Obi",
             defaults={"sex": "F",
@@ -189,6 +195,26 @@ class Command(BaseCommand):
                 sale.add_line(items[name], qty, user=staff)
             claim_for_sale(sale)
             sale.record_payment(sale.patient_payable)
+
+        # Bola is on the auto-submitting scheme and on nothing else, so the
+        # counter can sell to her without naming a card: the API finds the one
+        # valid membership, and the claim leaves as SUBMITTED, not DRAFT.
+        bola, _ = Patient.all_objects.get_or_create(
+            tenant=tenant, first_name="Bola", last_name="Eze",
+            defaults={"sex": "F",
+                      "date_of_birth": today - timedelta(days=365 * 41)})
+        bola_member, _ = HmoEnrollment.all_objects.get_or_create(
+            tenant=tenant, patient=bola, hmo=auto_hmo,
+            defaults={"member_number": "REL-88117", "plan": "Gold"})
+        auto = Sale.all_objects.create(
+            tenant=tenant, patient=bola, enrollment=bola_member,
+            payment_method=Sale.PaymentMethod.HMO, served_by=staff)
+        auto.add_line(items["Salbutamol inhaler"], 1, user=staff)
+        auto.add_line(items["Paracetamol 500mg"], 10, user=staff)
+        auto_claim = claim_for_sale(auto)
+        auto.record_payment(auto.patient_payable)
+        self.stdout.write(
+            f"auto-submitted claim {auto_claim.reference} ({auto_claim.status})")
 
         batch = ClaimBatch.all_objects.create(
             tenant=tenant, hmo=hmo, period_start=today - timedelta(days=30),
