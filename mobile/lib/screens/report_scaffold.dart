@@ -62,6 +62,8 @@ class ReportListScreen extends StatefulWidget {
   final List<ReportFilter> filters;
   // Optional tap handler on a card (e.g. open a detail page).
   final void Function(Map<String, dynamic> row)? onTap;
+  // Hide the FAB for a list the current user may read but not add to.
+  final bool showFab;
 
   const ReportListScreen({
     super.key,
@@ -77,6 +79,7 @@ class ReportListScreen extends StatefulWidget {
     this.searchHint,
     this.filters = const [],
     this.onTap,
+    this.showFab = true,
   });
 
   @override
@@ -123,13 +126,15 @@ class _ReportListScreenState extends State<ReportListScreen>
   }
 
   Future<void> _openForm([Map<String, dynamic>? existing]) async {
-    final saved = await showModalBottomSheet<bool>(
+    // Anything but null counts as saved: most sheets pop `true`, but one that
+    // creates a record (the dispensing counter) pops the record itself.
+    final saved = await showModalBottomSheet<Object?>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => widget.form(existing),
     );
-    if (saved == true) {
+    if (saved != null && saved != false) {
       _reload();
       if (mounted) showSuccess(context, widget.savedMessage);
     }
@@ -140,14 +145,17 @@ class _ReportListScreenState extends State<ReportListScreen>
     super.build(context);
     return Scaffold(
       backgroundColor: Colors.transparent,
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'fab_${widget.fabLabel}',
-        onPressed: _openForm,
-        backgroundColor: EnhancedTheme.primaryTeal,
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: Text(widget.fabLabel,
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-      ),
+      floatingActionButton: !widget.showFab
+          ? null
+          : FloatingActionButton.extended(
+              heroTag: 'fab_${widget.fabLabel}',
+              onPressed: _openForm,
+              backgroundColor: EnhancedTheme.primaryTeal,
+              icon: const Icon(Icons.add, color: Colors.white),
+              label: Text(widget.fabLabel,
+                  style: const TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.w700)),
+            ),
       body: Column(children: [
         if (widget.searchHint != null)
           Padding(
