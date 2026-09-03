@@ -27,6 +27,7 @@ from .models import (
     Immunization,
     InsuranceClaim,
     LabResult,
+    Prescription,
     StockReport,
     VitalEvent,
 )
@@ -674,4 +675,31 @@ def stock_stats(start=None, end=None, platform=False):
     }
     if platform:
         out["by_tenant"] = _grouped(reports, "tenant__name", 20)
+    return out
+
+
+def prescription_stats(start=None, end=None, platform=False):
+    """Prescribing & dispensing rollup: what gets prescribed and whether the
+    pharmacy actually hands it over.
+
+    ``dispense_rate`` is over orders that were meant to be filled — cancelled
+    ones are excluded, and a partial fill counts as dispensed.
+    """
+    rx = apply_range(_manager(Prescription, platform).all(), start, end)
+    fillable = rx.exclude(status=Prescription.Status.CANCELLED)
+    dispensed = fillable.filter(
+        status__in=(Prescription.Status.DISPENSED, Prescription.Status.PARTIAL)
+    ).count()
+    due = fillable.count()
+    out = {
+        "total": rx.count(),
+        "dispensed": dispensed,
+        "dispense_rate": round(dispensed / due, 4) if due else None,
+        "top_medications": _grouped(rx, "medication__generic_name", 10),
+        "by_status": _grouped(rx, "status"),
+        "by_region": _grouped(rx, "region"),
+        "trend": _series(rx, days=90, bucket="week"),
+    }
+    if platform:
+        out["by_tenant"] = _grouped(rx, "tenant__name", 20)
     return out

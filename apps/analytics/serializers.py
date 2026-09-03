@@ -9,6 +9,7 @@ from .models import (
     Immunization,
     InsuranceClaim,
     LabResult,
+    Prescription,
     StockReport,
     VitalEvent,
 )
@@ -158,6 +159,22 @@ class AppointmentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Appointment
+        exclude = ("tenant",)
+        read_only_fields = ("reporter", "created_at", "updated_at")
+
+    def validate_region(self, value):
+        return _validate_region(value)
+
+
+class PrescriptionSerializer(serializers.ModelSerializer):
+    patient_name = serializers.CharField(source="patient.full_name", read_only=True)
+    reporter_name = serializers.CharField(source="reporter.username", read_only=True)
+    medication_name = serializers.CharField(
+        source="medication.generic_name", read_only=True
+    )
+
+    class Meta:
+        model = Prescription
         exclude = ("tenant",)
         read_only_fields = ("reporter", "created_at", "updated_at")
 
