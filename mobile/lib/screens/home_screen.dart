@@ -21,6 +21,8 @@ import 'pharmacy_counter_screen.dart';
 import 'pharmacy_stock_screen.dart';
 import 'pharmacy_sales_screen.dart';
 import 'pharmacy_claims_screen.dart';
+import 'pharmacy_suppliers_screen.dart';
+import 'pharmacy_orders_screen.dart';
 import 'chw_reports_screen.dart';
 import 'facility_metrics_screen.dart';
 import 'insurance_claims_screen.dart';
@@ -107,6 +109,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _Section('Stock items', Icons.inventory_outlined, PharmacyStockScreen()),
     _Section('Sales', Icons.point_of_sale_outlined, PharmacySalesScreen()),
     _Section('HMO claims', Icons.request_quote_outlined, PharmacyClaimsScreen()),
+    _Section('Suppliers', Icons.local_shipping_outlined,
+        PharmacySuppliersScreen()),
+    _Section('Purchase orders', Icons.receipt_outlined, PharmacyOrdersScreen()),
   ];
 
   @override

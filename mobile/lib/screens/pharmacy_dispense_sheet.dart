@@ -4,6 +4,7 @@ import '../main.dart';
 import '../pharmacy.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/searchable_dropdown.dart';
+import 'pharmacy_stock_screen.dart' show loadStockItems;
 import 'report_scaffold.dart';
 
 /// The dispensing counter: build a basket, name the payer, hand it over.
@@ -46,18 +47,10 @@ class _DispenseSheetState extends State<DispenseSheet> {
     super.dispose();
   }
 
-  /// Walk the pages: a picker that stops at the first 25 items is a picker the
-  /// counter can't sell from.
-  /// ponytail: capped at 10 pages; past ~250 items this wants a search field.
   Future<void> _loadItems() async {
-    final rows = <Map<String, dynamic>>[];
+    var rows = <Map<String, dynamic>>[];
     try {
-      for (var page = 1; page <= 10; page++) {
-        final batch = await api.getList('/api/pharmacy/items/',
-            {'is_active': 'true', 'page': '$page'});
-        rows.addAll(batch.cast<Map<String, dynamic>>());
-        if (batch.length < 25) break;
-      }
+      rows = await loadStockItems();
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
     }
