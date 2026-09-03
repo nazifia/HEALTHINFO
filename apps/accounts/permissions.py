@@ -92,3 +92,46 @@ class ReadOnlyOrReportRole(BasePermission):
         if not user.is_authenticated:
             return False
         return user.is_super_admin or user.role in REPORT_ROLES
+
+
+# The pharmacy module has two seats. Its admin — the tenant's admin, or a super
+# admin — sets prices, corrects stock and decides claims; its staff (the
+# pharmacists) receive consignments, dispense and take payment. The split is by
+# consequence: anything that rewrites what money is owed is the admin's.
+PHARMACY_ADMIN_ROLES = {Role.SUPER_ADMIN, Role.TENANT_ADMIN}
+PHARMACY_STAFF_ROLES = PHARMACY_ADMIN_ROLES | {Role.PHARMACIST}
+
+
+def is_pharmacy_admin(user):
+    return bool(user.is_authenticated) and (
+        user.is_super_admin or user.role in PHARMACY_ADMIN_ROLES
+    )
+
+
+class IsPharmacyStaff(BasePermission):
+    """Pharmacy staff or admin — reads included.
+
+    Not open to every tenant member the way report reads are: cost prices,
+    margins and a named patient's claims are commercial and clinical data both.
+    Pair with IsTenantMember for the tenant check.
+    """
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user.is_authenticated:
+            return False
+        return user.is_super_admin or user.role in PHARMACY_STAFF_ROLES
+
+
+class IsPharmacyAdminOrReadOnly(BasePermission):
+    """Staff read; only the pharmacy admin writes.
+
+    Guards the reference data a sale prices itself from — the item list, the
+    HMOs and their coverage — so a dispensing error can't be papered over by
+    editing the price it was charged at.
+    """
+
+    def has_permission(self, request, view):
+        if request.method in SAFE_METHODS:
+            return True
+        return is_pharmacy_admin(request.user)

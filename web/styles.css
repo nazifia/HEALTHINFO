@@ -187,6 +187,8 @@ tr.rowlink:hover { background: var(--brand-soft); }
 .linktile .tile-label { font-size: 15px; font-weight: 600; color: var(--brand-dark); display: flex; align-items: center; gap: 8px; }
 .linktile .tile-label .ico { color: var(--brand); }
 .home-tiles .tile { min-height: 72px; }
+/* Money and quantity columns line up on the decimal (pharmacy tables). */
+th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .big-val { font-size: 26px; font-weight: 700; }
 .sub { margin: 8px 0 18px; }
 

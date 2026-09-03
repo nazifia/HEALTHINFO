@@ -158,6 +158,68 @@ anonymous walk-ins.
 A weekly Celery beat task (`weekly_tenant_report`, Mondays 04:00) emails each
 tenant admin their rollup + any outbreak alerts.
 
+## Pharmacy (stock, sales, HMO claims)
+Operational pharmacy for one facility, tenant-scoped like everything else.
+`StockReport` in analytics stays what it was — a de-identified snapshot for
+central surveillance; this module is the record it summarizes.
+
+Two seats: the **pharmacy admin** (tenant admin, or super admin) sets prices,
+edits the item list and HMO coverage, corrects stock and decides claims; the
+**pharmacy staff** (pharmacist) receives deliveries, dispenses, takes payment
+and submits claims. Other tenant members get a 403 — cost prices, margins and a
+named patient's claims are commercial and clinical data both.
+
+- `GET/POST /api/pharmacy/items/` — the item list (drugs and consumables; an
+  optional FK to a catalog `Medication`). Admin writes. `POST .../{id}/receive/`
+  books in a consignment; `GET .../low-stock/` is the buying list, `.../valuation/`
+  the shelf at cost and at retail.
+- `GET /api/pharmacy/batches/` — consignments, each with its own expiry and cost.
+  No create and no delete: stock arrives through an item's `receive` and leaves
+  through a sale or `POST .../{id}/adjust/` (admin — a stock count or a
+  write-off, logged with its reason). `GET .../expiring/?days=90` lists what to pull.
+- `GET /api/pharmacy/movements/` — the stock ledger, read-only. Every unit in or
+  out, signed, with the sale or reason behind it. A mistake is corrected by
+  another movement, never by an edit.
+- `GET/POST /api/pharmacy/suppliers/`, `/api/pharmacy/purchase-orders/` — orders
+  with lines; `POST .../{id}/submit/`, `.../cancel/`, and `.../receive/` to book
+  a delivery against one line. Status follows the received counts (draft →
+  submitted → partial → received), over-receipt is refused, and lines freeze
+  once the order is sent.
+- `GET/POST /api/pharmacy/sales/` — dispensing. Post an item and a quantity; the
+  server picks batches **first-expiry-first-out**, writes one line per batch
+  drawn (so a recall knows which units went where) and never touches expired
+  stock. A basket is all-or-nothing. `POST .../{id}/pay/` takes the patient's
+  money, `.../cancel/` returns every unit to the batch it came from and voids
+  the claim, `GET .../{id}/receipt/` prints, `.../summary/` totals the takings.
+- `GET/POST /api/pharmacy/hmos/`, `/api/pharmacy/enrollments/` — insurers and
+  patients' scheme cards. Coverage is a percent (scheme default, per-member
+  override); NHIA's 90/10 drug split is just a row here, not a special case.
+- `GET /api/pharmacy/claims/` — the insurer's share of a sale, raised by the
+  sale itself. `POST .../{id}/submit/` (staff), then `.../approve/`,
+  `.../reject/`, `.../pay/` (admin). Claimed, approved and paid are kept apart
+  because they differ; `.../summary/` shows what each insurer still owes.
+- `GET/POST /api/pharmacy/claim-batches/` — the monthly schedule. Creating one
+  collects that insurer's unbatched open claims for the period; `submit`,
+  `approve` and `pay` work on the envelope, and a remittance is allocated across
+  its claims oldest-first, so a part-paid batch says which claims are short.
+
+Money is derived, never posted: `total = patient_payable + hmo_payable` always,
+with the patient side computed as the remainder so rounding can't lose a kobo.
+Every amount a client could send is an input to the price, not the price.
+
+The receipt is server-rendered HTML sized for an 80mm till roll and for A4
+alike — the browser's print dialog is the driver, so there is no PDF library
+and no print server.
+
+```bash
+python manage.py seed_pharmacy            # demo pharmacy (idempotent)
+python manage.py seed_pharmacy --reset    # wipe this tenant's pharmacy first
+```
+
+The `web/` PWA carries the counter screens: `#/pharmacy` (reorder list, stock
+expiring, the day's takings, what insurers owe) and `#/pharmacy/sell`
+(dispensing), with the rest of the module under its Pharmacy nav group.
+
 ## Tenant resolution (any of)
 1. Header `X-Tenant-ID: hospital-a`
 2. Custom domain match (`Tenant.domain`)
