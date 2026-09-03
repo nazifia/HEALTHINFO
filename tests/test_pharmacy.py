@@ -587,3 +587,43 @@ def test_receipt_prints_the_sale(pharmacy):
     assert "CANCELLED" in staff.get(
         f"/api/pharmacy/sales/{sale_id}/receipt/"
     ).content.decode()
+
+
+def test_insured_patient_is_billed_without_naming_the_card(pharmacy):
+    """The counter picks the patient; the server finds the scheme they are on,
+    and an auto-submitting insurer gets the claim there and then."""
+    tenant, item = pharmacy["tenant"], pharmacy["item"]
+    patient = Patient.all_objects.create(tenant=tenant, first_name="Bola",
+                                         last_name="Eze")
+    hmo = HMO.all_objects.create(tenant=tenant, name="Reliance",
+                                 coverage_percent=Decimal("80.00"),
+                                 auto_submit_claims=True)
+    enrollment = HmoEnrollment.all_objects.create(
+        tenant=tenant, patient=patient, hmo=hmo, member_number="RL-1"
+    )
+
+    staff = _client(pharmacy["staff"], tenant)
+    response = staff.post("/api/pharmacy/sales/", {
+        "patient": patient.id, "payment_method": "hmo",
+        "items": [{"item": item.id, "quantity": 10}],
+    }, format="json")
+    assert response.status_code == 201, response.content
+    sale = Sale.all_objects.get(pk=response.json()["id"])
+    assert sale.enrollment_id == enrollment.id
+    assert sale.hmo_payable == Decimal("100.00")
+
+    claim = Claim.all_objects.get(sale=sale)
+    assert claim.status == Claim.Status.SUBMITTED
+    assert claim.submitted_at is not None
+
+    # A second valid scheme makes the choice the pharmacist's, not the server's.
+    other = HMO.all_objects.create(tenant=tenant, name="AXA",
+                                   coverage_percent=Decimal("50.00"))
+    HmoEnrollment.all_objects.create(tenant=tenant, patient=patient, hmo=other,
+                                     member_number="AX-1")
+    ambiguous = staff.post("/api/pharmacy/sales/", {
+        "patient": patient.id, "payment_method": "hmo",
+        "items": [{"item": item.id, "quantity": 1}],
+    }, format="json")
+    assert ambiguous.status_code == 400
+    assert "more than one scheme" in str(ambiguous.json()["errors"]["enrollment"])

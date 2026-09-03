@@ -194,10 +194,14 @@ named patient's claims are commercial and clinical data both.
 - `GET/POST /api/pharmacy/hmos/`, `/api/pharmacy/enrollments/` — insurers and
   patients' scheme cards. Coverage is a percent (scheme default, per-member
   override); NHIA's 90/10 drug split is just a row here, not a special case.
+  An insured sale need not name the card: give the patient, and the server
+  bills their one valid membership, or asks which when they hold several.
 - `GET /api/pharmacy/claims/` — the insurer's share of a sale, raised by the
   sale itself. `POST .../{id}/submit/` (staff), then `.../approve/`,
   `.../reject/`, `.../pay/` (admin). Claimed, approved and paid are kept apart
-  because they differ; `.../summary/` shows what each insurer still owes.
+  because they differ; `.../summary/` shows what each insurer still owes. An
+  insurer with `auto_submit_claims` skips the draft: its claims leave as they
+  are raised, rather than waiting for the month's batch.
 - `GET/POST /api/pharmacy/claim-batches/` — the monthly schedule. Creating one
   collects that insurer's unbatched open claims for the period; `submit`,
   `approve` and `pay` work on the envelope, and a remittance is allocated across

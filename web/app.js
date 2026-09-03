@@ -1415,7 +1415,8 @@ async function viewSell() {
       b.onclick = () => { basket.splice(Number(b.dataset.drop), 1); draw(); };
     }
 
-    // Patient lookup fills the scheme dropdown — an HMO sale needs the card.
+    // Patient lookup fills the scheme dropdown. One card is picked for the
+    // pharmacist; two or more, and they say which one is being billed.
     let patientId = null;
     const search = $('#checkout').patient_search;
     search.onchange = async () => {
@@ -1430,8 +1431,10 @@ async function viewSell() {
         patientId = p.id;
         $('#patient-hit').textContent = `${p.full_name || p.first_name} · ${p.hospital_number}`;
         const en = await Api.list('/api/pharmacy/enrollments/', { patient: p.id, is_active: true });
-        $('#checkout').enrollment.innerHTML = '<option value="">—</option>' + en.rows.map((r) =>
+        const sel = $('#checkout').enrollment;
+        sel.innerHTML = '<option value="">—</option>' + en.rows.map((r) =>
           `<option value="${r.id}">${esc(r.hmo_name)} · ${esc(r.member_number)} (${r.effective_coverage}%)</option>`).join('');
+        if (en.rows.length === 1) sel.value = String(en.rows[0].id);
       } catch (err) { $('#patient-hit').textContent = err.message; }
     };
 

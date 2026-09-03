@@ -178,6 +178,19 @@ class SaleSerializer(serializers.ModelSerializer):
         enrollment = attrs.get("enrollment")
         patient = attrs.get("patient")
         if method == Sale.PaymentMethod.HMO:
+            if not enrollment and patient:
+                # The counter names the patient, not their card number: find the
+                # scheme they are on. Only when there is exactly one valid
+                # membership — a patient on two schemes must be told which.
+                valid = [e for e in patient.hmo_enrollments.select_related("hmo")
+                         if e.is_valid]
+                if len(valid) == 1:
+                    enrollment = attrs["enrollment"] = valid[0]
+                elif len(valid) > 1:
+                    raise serializers.ValidationError(
+                        {"enrollment": "That patient is on more than one scheme — "
+                                       "say which membership to bill."}
+                    )
             if not enrollment:
                 raise serializers.ValidationError(
                     {"enrollment": "An HMO sale needs the patient's scheme membership."}
