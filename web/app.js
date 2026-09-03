@@ -126,9 +126,30 @@ const RESOURCES = {
   'facility-metrics':  { title: 'Facility Metrics',   group: 'Reports', report: true },
   'insurance-claims':  { title: 'Insurance Claims',   group: 'Reports', report: true },
   'appointments':      { title: 'Appointments',       group: 'Reports', report: true },
+  'pharmacy-items':         { title: 'Stock Items',     group: 'Pharmacy', path: 'pharmacy/items',           roles: 'admin', search: true },
+  'pharmacy-batches':       { title: 'Stock Batches',   group: 'Pharmacy', path: 'pharmacy/batches',         roles: 'staff', search: true, readOnly: true },
+  'pharmacy-movements':     { title: 'Stock Ledger',    group: 'Pharmacy', path: 'pharmacy/movements',       roles: 'staff', readOnly: true },
+  'pharmacy-suppliers':     { title: 'Suppliers',       group: 'Pharmacy', path: 'pharmacy/suppliers',       roles: 'admin', search: true },
+  'pharmacy-orders':        { title: 'Purchase Orders', group: 'Pharmacy', path: 'pharmacy/purchase-orders', roles: 'staff', search: true, extra: 'purchase',
+                              actions: [{ name: 'submit', label: 'Submit to supplier' }, { name: 'cancel', label: 'Cancel order', danger: true }] },
+  'pharmacy-hmos':          { title: 'HMOs',            group: 'Pharmacy', path: 'pharmacy/hmos',            roles: 'admin', search: true },
+  'pharmacy-enrollments':   { title: 'Scheme Members',  group: 'Pharmacy', path: 'pharmacy/enrollments',     roles: 'staff', search: true },
+  'pharmacy-sales':         { title: 'Sales',           group: 'Pharmacy', path: 'pharmacy/sales',           roles: 'staff', search: true, readOnly: true, receipt: true,
+                              actions: [{ name: 'pay', label: 'Take payment', ask: 'amount' }, { name: 'cancel', label: 'Cancel sale', danger: true }] },
+  'pharmacy-claims':        { title: 'Claims',          group: 'Pharmacy', path: 'pharmacy/claims',          roles: 'staff', search: true, readOnly: true,
+                              actions: [{ name: 'submit', label: 'Submit' }, { name: 'approve', label: 'Approve', ask: 'amount', adminOnly: true },
+                                        { name: 'reject', label: 'Reject', ask: 'reason', adminOnly: true }, { name: 'pay', label: 'Record payment', ask: 'amount', adminOnly: true }] },
+  'pharmacy-claim-batches': { title: 'Claim Batches',   group: 'Pharmacy', path: 'pharmacy/claim-batches',   roles: 'staff', search: true,
+                              actions: [{ name: 'add-claims', label: 'Collect claims' }, { name: 'submit', label: 'Submit batch' },
+                                        { name: 'approve', label: 'Approve all', adminOnly: true }, { name: 'pay', label: 'Allocate remittance', ask: 'amount', adminOnly: true },
+                                        { name: 'cancel', label: 'Cancel batch', danger: true }] },
   'users':             { title: 'Users',              group: 'Admin' },
   'tenants':           { title: 'Tenants',            group: 'Admin', superOnly: true, tenantActions: true },
 };
+
+// A resource's API path, which is the slug unless the registry overrides it
+// (the pharmacy module nests everything under /api/pharmacy/).
+const rpath = (slug, suffix = '') => `/api/${RESOURCES[slug]?.path || slug}/${suffix}`;
 
 // M2M PK-list fields (catalog serializers). OPTIONS metadata can't tell
 // many-related from single-related, so name them.
@@ -189,11 +210,12 @@ let ME = null; // current user object
 
 function navHtml() {
   const iconFor = (slug, r) => slug === 'users' ? 'users' : slug === 'tenants' ? 'shield'
-    : r.group === 'Reports' ? 'file' : 'book';
+    : r.group === 'Reports' ? 'file' : r.group === 'Pharmacy' ? 'pill' : 'book';
   const groups = {};
   for (const [slug, r] of Object.entries(RESOURCES)) {
     if (r.superOnly && ME?.role !== 'super_admin') continue;
     if (slug === 'users' && !['super_admin', 'tenant_admin'].includes(ME?.role)) continue;
+    if (r.group === 'Pharmacy' && !PHARMACY_STAFF_ROLES.has(ME?.role)) continue;
     (groups[r.group] ||= []).push(`<a href="#/r/${slug}" data-route="/r/${slug}">${ico(iconFor(slug, r))}${esc(r.title)}</a>`);
   }
   const tools = [
@@ -208,6 +230,12 @@ function navHtml() {
   html += `<div class="nav-group"><h4>Tools</h4>${tools.join('')}</div>`;
   html += `<div class="nav-group"><h4>Catalog</h4>${groups.Catalog.join('')}</div>`;
   html += `<div class="nav-group"><h4>Reports</h4>${groups.Reports.join('')}</div>`;
+  if (groups.Pharmacy?.length) {
+    html += `<div class="nav-group"><h4>Pharmacy</h4>` +
+      `<a href="#/pharmacy" data-route="/pharmacy">${ico('pill')}Counter</a>` +
+      `<a href="#/pharmacy/sell" data-route="/pharmacy/sell">${ico('pill')}Dispense</a>` +
+      groups.Pharmacy.join('') + `</div>`;
+  }
   html += `<div class="nav-group"><h4>Analytics</h4><a href="#/analytics" data-route="/analytics">${ico('chart')}Tenant Analytics</a>`;
   if (ME?.role === 'super_admin') html += `<a href="#/platform" data-route="/platform">${ico('chart')}Platform Analytics</a>`;
   html += `</div>`;
@@ -735,6 +763,14 @@ function reportSummaryHtml(slug, rows) {
 
 /* -------------------------------------------------- generic resource views */
 
+function canWriteRes(slug, res) {
+  if (res.readOnly) return false;
+  if (res.roles === 'admin') return isPharmacyAdmin();
+  if (res.roles === 'staff') return isPharmacyStaff();
+  if (slug === 'users') return ['super_admin', 'tenant_admin'].includes(ME.role);
+  return res.report ? Api.roleCanReport(ME.role) : Api.roleCanWrite(ME.role);
+}
+
 const listState = {}; // per-resource {page, search} kept across visits
 
 async function viewList(slug) {
@@ -743,12 +779,11 @@ async function viewList(slug) {
   if (!await ensureChrome()) return;
   const st = (listState[slug] ||= { page: 1, search: '' });
   spinner();
-  const canWrite = slug === 'users' ? ['super_admin', 'tenant_admin'].includes(ME.role)
-    : res.report ? Api.roleCanReport(ME.role) : Api.roleCanWrite(ME.role);
+  const canWrite = canWriteRes(slug, res);
   try {
     const query = { page: st.page };
     if (st.search) query.search = st.search;
-    const { rows, count } = await Api.list(`/api/${slug}/`, query);
+    const { rows, count } = await Api.list(rpath(slug), query);
     const pages = count != null ? Math.max(1, Math.ceil(count / 25)) : 1;
     render(`
       <div class="page-head"><h2>${esc(res.title)}</h2>
@@ -777,8 +812,12 @@ async function viewList(slug) {
 }
 
 function dlHtml(obj) {
+  // Nested row lists (a sale's lines, an order's lines) render as their own
+  // table — as JSON they are unreadable exactly where the detail matters.
+  const cell = (k, v) => Array.isArray(v) && v.length && typeof v[0] === 'object'
+    ? tableHtml(v) : cellHtml(k, v);
   return `<dl class="detail">${Object.entries(obj).map(([k, v]) =>
-    `<dt>${esc(label(k))}</dt><dd>${cellHtml(k, v)}</dd>`).join('')}</dl>`;
+    `<dt>${esc(label(k))}</dt><dd>${cell(k, v)}</dd>`).join('')}</dl>`;
 }
 
 async function viewDetail(slug, id) {
@@ -786,10 +825,9 @@ async function viewDetail(slug, id) {
   if (!res) return errorBox(new Error('Unknown resource: ' + slug));
   if (!await ensureChrome()) return;
   spinner();
-  const canWrite = slug === 'users' ? ['super_admin', 'tenant_admin'].includes(ME.role)
-    : res.report ? Api.roleCanReport(ME.role) : Api.roleCanWrite(ME.role);
+  const canWrite = canWriteRes(slug, res);
   try {
-    const obj = await Api.get(`/api/${slug}/${id}/`);
+    const obj = await Api.get(rpath(slug, `${id}/`));
     let actions = `<a class="btn ghost" href="#/r/${slug}">&larr; ${esc(res.title)}</a>`;
     if (canWrite) {
       actions += `<a class="btn" href="#/r/${slug}/${id}/edit">Edit</a>
@@ -813,33 +851,58 @@ async function viewDetail(slug, id) {
           <button class="btn danger" data-ta="suspend">Suspend / Reactivate</button>
         </div></div>`;
     }
-    render(`<div class="page-head"><h2>${esc(obj.name || obj.generic_name || obj.title || res.title + ' #' + id)}</h2></div>
+    // Module actions (dispensing, claims, orders): each POSTs to its own
+    // endpoint; ``ask`` collects the one value the endpoint needs.
+    const acts = (res.actions || []).filter((a) => !a.adminOnly || isPharmacyAdmin());
+    const actsHtml = acts.map((a) =>
+      `<button class="btn${a.danger ? ' danger' : ''}" data-pa="${a.name}" data-ask="${a.ask || ''}">${esc(a.label)}</button>`).join('');
+    if (res.receipt) actions += `<button id="receipt" class="btn ghost">Print receipt</button>`;
+    render(`<div class="page-head"><h2>${esc(obj.name || obj.generic_name || obj.title || obj.reference || res.title + ' #' + id)}</h2></div>
       <div class="actions">${actions}</div>
       ${tenantHtml}${workflowHtml}
-      <div class="card">${dlHtml(obj)}</div>`);
+      ${actsHtml ? `<div class="card"><h3>Actions</h3><div class="actions">${actsHtml}</div></div>` : ''}
+      <div class="card">${dlHtml(obj)}</div>
+      ${res.extra === 'purchase' ? purchaseReceiveHtml(obj) : ''}`);
+    if (res.receipt) $('#receipt').onclick = () => printReceipt(id);
+    if (res.extra === 'purchase') wirePurchaseReceive(id, () => viewDetail(slug, id));
+    for (const b of document.querySelectorAll('[data-pa]')) {
+      b.onclick = async () => {
+        const body = {};
+        if (b.dataset.ask) {
+          const answer = prompt(`${b.textContent} — ${b.dataset.ask}:`);
+          if (answer === null) return;
+          if (answer !== '') body[b.dataset.ask] = answer;
+        }
+        try {
+          const r = await Api.post(rpath(slug, `${id}/${b.dataset.pa}/`), body);
+          toast(r?.message || 'Done.');
+          viewDetail(slug, id);
+        } catch (e) { toast(e.message, true); }
+      };
+    }
     if (canWrite) {
       $('#del').onclick = async () => {
         if (!confirm('Delete this record? This cannot be undone.')) return;
-        try { await Api.del(`/api/${slug}/${id}/`); toast('Deleted.'); location.hash = `#/r/${slug}`; }
+        try { await Api.del(rpath(slug, `${id}/`)); toast('Deleted.'); location.hash = `#/r/${slug}`; }
         catch (e) { toast(e.message, true); }
       };
     }
     for (const b of document.querySelectorAll('[data-to]')) {
       b.onclick = async () => {
         const note = prompt(`Note for transition to "${b.dataset.to}" (optional):`) ?? '';
-        try { await Api.post(`/api/${slug}/${id}/transition/`, { to: b.dataset.to, note }); toast('Status updated.'); viewDetail(slug, id); }
+        try { await Api.post(rpath(slug, `${id}/transition/`), { to: b.dataset.to, note }); toast('Status updated.'); viewDetail(slug, id); }
         catch (e) { toast(e.message, true); }
       };
     }
     for (const b of document.querySelectorAll('[data-ta]')) {
       b.onclick = async () => {
-        try { const r = await Api.post(`/api/${slug}/${id}/${b.dataset.ta}/`); toast(r?.message || 'Done.'); viewDetail(slug, id); }
+        try { const r = await Api.post(rpath(slug, `${id}/${b.dataset.ta}/`)); toast(r?.message || 'Done.'); viewDetail(slug, id); }
         catch (e) { toast(e.message, true); }
       };
     }
     if (res.workflow && $('#history')) {
       try {
-        const hist = await Api.get(`/api/${slug}/${id}/history/`);
+        const hist = await Api.get(rpath(slug, `${id}/history/`));
         $('#history').innerHTML = hist.length ? tableHtml(hist) : '<p class="muted">No history.</p>';
       } catch { /* history is optional sugar */ }
     }
@@ -853,10 +916,10 @@ async function viewForm(slug, id) {
   if (!await ensureChrome()) return;
   spinner();
   try {
-    const metaPath = id ? `/api/${slug}/${id}/` : `/api/${slug}/`;
+    const metaPath = id ? rpath(slug, `${id}/`) : rpath(slug);
     const [meta, current] = await Promise.all([
       Api.options(metaPath),
-      id ? Api.get(`/api/${slug}/${id}/`) : Promise.resolve({}),
+      id ? Api.get(rpath(slug, `${id}/`)) : Promise.resolve({}),
     ]);
     const fields = meta?.actions?.PUT || meta?.actions?.POST;
     if (!fields) return errorBox(new Error('You do not have permission to edit this resource.'));
@@ -874,8 +937,8 @@ async function viewForm(slug, id) {
       e.preventDefault();
       const body = collectForm(e.target, fields);
       try {
-        const saved = id ? await Api.patch(`/api/${slug}/${id}/`, body)
-          : await Api.post(`/api/${slug}/`, body);
+        const saved = id ? await Api.patch(rpath(slug, `${id}/`), body)
+          : await Api.post(rpath(slug), body);
         toast('Saved.');
         location.hash = `#/r/${slug}/${saved?.id ?? id ?? ''}`;
       } catch (err) {
@@ -1197,6 +1260,227 @@ async function viewAnalytics(registry, prefix, key) {
   load();
 }
 
+/* ------------------------------------------------------------- pharmacy */
+
+const PHARMACY_ADMIN_ROLES = new Set(['super_admin', 'tenant_admin']);
+const PHARMACY_STAFF_ROLES = new Set([...PHARMACY_ADMIN_ROLES, 'pharmacist']);
+const isPharmacyAdmin = () => PHARMACY_ADMIN_ROLES.has(ME?.role);
+const isPharmacyStaff = () => PHARMACY_STAFF_ROLES.has(ME?.role);
+
+const money = (v) => Number(v || 0).toLocaleString(undefined, {
+  minimumFractionDigits: 2, maximumFractionDigits: 2,
+});
+
+/* Receipts come back as HTML, not JSON: fetch with the JWT, then hand the
+   markup to a new window so the browser's own print dialog does the printing. */
+async function printReceipt(saleId) {
+  try {
+    const html = await Api.text(`/api/pharmacy/sales/${saleId}/receipt/`);
+    const w = window.open('', '_blank');
+    if (!w) return toast('Allow pop-ups to print the receipt.', true);
+    w.document.write(html);
+    w.document.close();
+  } catch (e) { toast(e.message, true); }
+}
+
+/* The counter's own home: what to reorder, what is about to expire, what was
+   taken today, and what the insurers still owe. */
+async function viewPharmacy() {
+  if (!await ensureChrome()) return;
+  if (!isPharmacyStaff()) return errorBox(new Error('Pharmacy staff only.'));
+  spinner();
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    const [low, expiring, sales, claims, value] = await Promise.all([
+      Api.get('/api/pharmacy/items/low-stock/').catch(() => []),
+      Api.get('/api/pharmacy/batches/expiring/', { days: 60 }).catch(() => []),
+      Api.get('/api/pharmacy/sales/summary/', { from: today, to: today }).catch(() => null),
+      Api.get('/api/pharmacy/claims/summary/').catch(() => null),
+      Api.get('/api/pharmacy/items/valuation/').catch(() => null),
+    ]);
+    const tile = (label, value) =>
+      `<div class="tile"><span class="tile-label">${esc(label)}</span><span class="tile-val">${esc(value)}</span></div>`;
+    render(`
+      <div class="page-head"><h2>Pharmacy</h2>
+        <a class="btn" href="#/pharmacy/sell">+ Dispense</a></div>
+      <div class="tiles">
+        ${tile('Sales today', sales ? sales.sales : '—')}
+        ${tile('Billed today', sales ? money(sales.billed) : '—')}
+        ${tile('Collected today', sales ? money(sales.collected) : '—')}
+        ${tile('Owed by patients', sales ? money(sales.outstanding) : '—')}
+        ${tile('Owed by insurers', claims ? money(claims.outstanding) : '—')}
+        ${tile('Stock at cost', value ? money(value.cost_value) : '—')}
+      </div>
+      <div class="card"><h3>Reorder (${low.length})</h3>
+        ${low.length ? tableHtml(low.map((r) => ({
+          id: r.id, item: r.name, on_hand: r.quantity_on_hand,
+          reorder_level: r.reorder_level, unit_price: r.unit_price,
+        })), (r) => `#/r/pharmacy-items/${r.id}`) : '<p class="muted">Nothing to reorder.</p>'}
+      </div>
+      <div class="card"><h3>Expiring within 60 days (${expiring.length})</h3>
+        ${expiring.length ? tableHtml(expiring.map((b) => ({
+          id: b.id, item: b.item_name, batch: b.batch_number,
+          expiry_date: b.expiry_date, quantity: b.quantity,
+        })), (b) => `#/r/pharmacy-batches/${b.id}`) : '<p class="muted">Nothing expiring.</p>'}
+      </div>
+      <div class="card"><h3>Insurers</h3>
+        ${claims && claims.by_hmo.length ? tableHtml(claims.by_hmo.map((h) => ({
+          hmo: h.name, claims: h.claims, claimed: money(h.claimed),
+          approved: money(h.approved), paid: money(h.paid),
+          outstanding: money(h.outstanding),
+        }))) : '<p class="muted">No claims yet.</p>'}
+      </div>`);
+  } catch (e) { errorBox(e); }
+}
+
+/* Dispensing counter. The server picks the batches (first expiry first out),
+   so this screen only asks what and how many. */
+async function viewSell() {
+  if (!await ensureChrome()) return;
+  if (!isPharmacyStaff()) return errorBox(new Error('Pharmacy staff only.'));
+  spinner();
+  const basket = [];
+  let items = [];
+  try {
+    // Walk the pages: the picker is useless if it stops at the first 25 items.
+    // ponytail: capped at 10 pages; past ~250 lines this wants a search box.
+    for (let page = 1; page <= 10; page++) {
+      const { rows, next } = await Api.list('/api/pharmacy/items/', { is_active: true, page });
+      items.push(...rows);
+      if (!next) break;
+    }
+  } catch (e) { return errorBox(e); }
+
+  const optionsHtml = items.map((i) =>
+    `<option value="${i.id}" data-price="${i.unit_price}" data-stock="${i.quantity_on_hand}">
+      ${esc(i.name)} — ${money(i.unit_price)} (${i.quantity_on_hand} in stock)</option>`).join('');
+
+  const basketHtml = () => basket.length ? `
+    <table><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Total</th><th></th></tr></thead>
+    <tbody>${basket.map((b, i) => `<tr>
+      <td>${esc(b.name)}</td><td class="num">${b.quantity}</td>
+      <td class="num">${money(b.price)}</td><td class="num">${money(b.price * b.quantity)}</td>
+      <td><button class="btn ghost" data-drop="${i}">Remove</button></td></tr>`).join('')}
+    </tbody></table>
+    <p><b>Total: ${money(basket.reduce((a, b) => a + b.price * b.quantity, 0))}</b></p>`
+    : '<p class="muted">Nothing added yet.</p>';
+
+  const draw = () => {
+    render(`
+      <div class="page-head"><h2>Dispense</h2>
+        <a class="btn ghost" href="#/pharmacy">&larr; Pharmacy</a></div>
+      <form id="add" class="card form-card">
+        <label>Item<select name="stock_item">${optionsHtml}</select></label>
+        <label>Quantity<input type="number" name="quantity" min="1" value="1"></label>
+        <label>Discount<input type="number" name="discount" min="0" step="0.01" value="0"></label>
+        <div class="actions"><button class="btn">Add to sale</button></div>
+      </form>
+      <div class="card"><h3>Sale</h3><div id="basket">${basketHtml()}</div></div>
+      <form id="checkout" class="card form-card">
+        <label>Patient (optional — leave blank for a walk-in)
+          <input name="patient_search" placeholder="Name or hospital number…"></label>
+        <div id="patient-hit" class="muted"></div>
+        <label>Payment<select name="payment_method">
+          <option value="cash">Cash</option><option value="card">Card</option>
+          <option value="transfer">Transfer</option><option value="hmo">HMO / scheme</option>
+        </select></label>
+        <label>Scheme membership<select name="enrollment"><option value="">—</option></select></label>
+        <div class="actions"><button class="btn">Complete sale</button></div>
+      </form>`);
+
+    $('#add').onsubmit = (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const opt = e.target.stock_item.selectedOptions[0];
+      if (!opt) return;
+      basket.push({
+        item: Number(fd.get('stock_item')), name: opt.textContent.split(' — ')[0].trim(),
+        quantity: Number(fd.get('quantity')), price: Number(opt.dataset.price),
+        discount: Number(fd.get('discount')) || 0,
+      });
+      draw();
+    };
+    for (const b of document.querySelectorAll('[data-drop]')) {
+      b.onclick = () => { basket.splice(Number(b.dataset.drop), 1); draw(); };
+    }
+
+    // Patient lookup fills the scheme dropdown — an HMO sale needs the card.
+    let patientId = null;
+    const search = $('#checkout').patient_search;
+    search.onchange = async () => {
+      patientId = null;
+      $('#checkout').enrollment.innerHTML = '<option value="">—</option>';
+      const q = search.value.trim();
+      if (!q) return ($('#patient-hit').textContent = '');
+      try {
+        const { rows } = await Api.list('/api/patients/', { search: q, page_size: 5 });
+        if (!rows.length) return ($('#patient-hit').textContent = 'No patient found.');
+        const p = rows[0];
+        patientId = p.id;
+        $('#patient-hit').textContent = `${p.full_name || p.first_name} · ${p.hospital_number}`;
+        const en = await Api.list('/api/pharmacy/enrollments/', { patient: p.id, is_active: true });
+        $('#checkout').enrollment.innerHTML = '<option value="">—</option>' + en.rows.map((r) =>
+          `<option value="${r.id}">${esc(r.hmo_name)} · ${esc(r.member_number)} (${r.effective_coverage}%)</option>`).join('');
+      } catch (err) { $('#patient-hit').textContent = err.message; }
+    };
+
+    $('#checkout').onsubmit = async (e) => {
+      e.preventDefault();
+      if (!basket.length) return toast('Add at least one item.', true);
+      const fd = new FormData(e.target);
+      const body = {
+        payment_method: fd.get('payment_method'),
+        items: basket.map((b) => ({ item: b.item, quantity: b.quantity, discount: b.discount })),
+      };
+      if (patientId) body.patient = patientId;
+      if (fd.get('enrollment')) body.enrollment = Number(fd.get('enrollment'));
+      try {
+        const sale = await Api.post('/api/pharmacy/sales/', body);
+        toast(`Sale ${sale.reference} — patient pays ${money(sale.patient_payable)}.`);
+        location.hash = `#/r/pharmacy-sales/${sale.id}`;
+      } catch (err) { toast(err.message, true); }
+    };
+  };
+  draw();
+}
+
+/* Receiving a delivery against a purchase order line. Rendered under the
+   order's detail page, where the outstanding quantities are already listed. */
+function purchaseReceiveHtml(order) {
+  const open = (order.lines || []).filter((l) => l.outstanding > 0);
+  if (!open.length || order.status === 'cancelled') return '';
+  return `<div class="card"><h3>Receive a delivery</h3>
+    <form id="receive" class="form-card">
+      <label>Line<select name="line">${open.map((l) =>
+        `<option value="${l.id}">${esc(l.item_name)} — ${l.outstanding} outstanding</option>`).join('')}</select></label>
+      <label>Quantity<input type="number" name="quantity" min="1" required></label>
+      <label>Batch number<input name="batch_number" required></label>
+      <label>Expiry<input type="date" name="expiry_date"></label>
+      <label>Unit cost (invoice)<input type="number" name="unit_cost" step="0.01" min="0"></label>
+      <div class="actions"><button class="btn">Book in</button></div>
+    </form></div>`;
+}
+
+function wirePurchaseReceive(orderId, reload) {
+  const form = $('#receive');
+  if (!form) return;
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const body = {
+      line: Number(fd.get('line')), quantity: Number(fd.get('quantity')),
+      batch_number: fd.get('batch_number'),
+    };
+    if (fd.get('expiry_date')) body.expiry_date = fd.get('expiry_date');
+    if (fd.get('unit_cost')) body.unit_cost = fd.get('unit_cost');
+    try {
+      const r = await Api.post(`/api/pharmacy/purchase-orders/${orderId}/receive/`, body);
+      toast(r?.message || 'Received.');
+      reload();
+    } catch (err) { toast(err.message, true); }
+  };
+}
+
 /* ----------------------------------------------------------------- router */
 
 const routes = [
@@ -1216,6 +1500,8 @@ const routes = [
   [/^\/interaction-check$/, viewInteractionCheck],
   [/^\/notifiable$/, viewNotifiable],
   [/^\/graph\/([a-z]+)\/(\d+)$/, (m) => viewGraph(m[1], m[2])],
+  [/^\/pharmacy$/, viewPharmacy],
+  [/^\/pharmacy\/sell$/, viewSell],
   [/^\/analytics(?:\/([a-z-]+))?$/, (m) => viewAnalytics(ANALYTICS, '/analytics', m[1])],
   [/^\/platform(?:\/([a-z-]+))?$/, (m) => viewAnalytics(PLATFORM, '/platform', m[1])],
 ];

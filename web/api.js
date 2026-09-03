@@ -122,6 +122,13 @@ const Api = (() => {
       return { rows: data, count: Array.isArray(data) ? data.length : null, next: null, previous: null };
     },
 
+    /* Authenticated GET returning the raw body — for endpoints that answer
+       HTML rather than JSON (the printable receipt). */
+    async text(path, query) {
+      const res = await request('GET', path, { query, raw: true });
+      return res.text();
+    },
+
     /* Authenticated file download (CSV exports need the JWT header, so no plain <a href>). */
     async download(path, query, filename) {
       const res = await request('GET', path, { query, raw: true });
