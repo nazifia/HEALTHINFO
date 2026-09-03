@@ -563,8 +563,7 @@ class ClaimBatchViewSet(mixins.CreateModelMixin, mixins.ListModelMixin,
     def perform_create(self, serializer):
         batch = serializer.save()
         claims = Claim.objects.filter(
-            hmo=batch.hmo, batch__isnull=True,
-            status__in=(Claim.Status.DRAFT, Claim.Status.REJECTED),
+            hmo=batch.hmo, batch__isnull=True, status__in=Claim.BATCHABLE,
         )
         if batch.period_start:
             claims = claims.filter(created_at__date__gte=batch.period_start)
@@ -587,8 +586,7 @@ class ClaimBatchViewSet(mixins.CreateModelMixin, mixins.ListModelMixin,
         batch = self.get_object()
         data = _body(AddClaimsSerializer, request)
         claims = data.get("claims") or list(Claim.objects.filter(
-            hmo=batch.hmo, batch__isnull=True,
-            status__in=(Claim.Status.DRAFT, Claim.Status.REJECTED),
+            hmo=batch.hmo, batch__isnull=True, status__in=Claim.BATCHABLE,
         ))
         try:
             moved = batch.add_claims(claims)

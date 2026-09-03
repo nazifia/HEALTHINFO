@@ -627,3 +627,48 @@ def test_insured_patient_is_billed_without_naming_the_card(pharmacy):
     }, format="json")
     assert ambiguous.status_code == 400
     assert "more than one scheme" in str(ambiguous.json()["errors"]["enrollment"])
+
+
+def test_batch_collects_a_claim_that_was_sent_on_its_own(pharmacy):
+    """An auto-submitting insurer still gets a monthly schedule: its claims are
+    already with it, but the batch is what the remittance is read against."""
+    tenant = pharmacy["tenant"]
+    hmo = HMO.all_objects.create(tenant=tenant, name="Reliance",
+                                 coverage_percent=Decimal("100.00"),
+                                 auto_submit_claims=True)
+    sent = _hmo_sale(pharmacy, hmo, 4, "RL-1")     # 50.00, already submitted
+    assert sent.status == Claim.Status.SUBMITTED
+
+    hmo.auto_submit_claims = False
+    hmo.save(update_fields=["auto_submit_claims"])
+    waiting = _hmo_sale(pharmacy, hmo, 8, "RL-2")  # 100.00, still a draft
+
+    staff = _client(pharmacy["staff"], tenant)
+    admin = _client(pharmacy["admin"], tenant)
+    today = timezone.localdate()
+    created = staff.post("/api/pharmacy/claim-batches/", {
+        "hmo": hmo.id, "period_start": str(today - timedelta(days=30)),
+        "period_end": str(today),
+    }, format="json")
+    assert created.status_code == 201, created.content
+    batch = ClaimBatch.all_objects.get(pk=created.json()["id"])
+    assert batch.totals["claims"] == 2
+    assert batch.totals["claimed"] == Decimal("150.00")
+
+    # Sending the schedule submits the draft and leaves the sent one alone —
+    # its submitted_at is when the insurer actually got it.
+    sent_at = sent.submitted_at
+    assert staff.post(f"/api/pharmacy/claim-batches/{batch.pk}/submit/", {},
+                      format="json").status_code == 200
+    sent.refresh_from_db()
+    waiting.refresh_from_db()
+    assert sent.status == waiting.status == Claim.Status.SUBMITTED
+    assert sent.submitted_at == sent_at
+
+    # And the remittance settles both.
+    assert admin.post(f"/api/pharmacy/claim-batches/{batch.pk}/approve/", {},
+                      format="json").status_code == 200
+    assert admin.post(f"/api/pharmacy/claim-batches/{batch.pk}/pay/",
+                      {"amount": "150.00"}, format="json").status_code == 200
+    sent.refresh_from_db()
+    assert sent.status == Claim.Status.PAID
