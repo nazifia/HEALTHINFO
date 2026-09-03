@@ -275,13 +275,18 @@ enforces them regardless: a hidden button is convenience, not the control.
 
 | Counter | Purchase orders | One order |
 | :---: | :---: | :---: |
-| ![Pharmacy counter: the day's takings against what patients and insurers owe, then the reorder and expiry lists](docs/screenshots/pharmacy-counter.png) | ![Purchase orders: units on order and ordered value, with a part-delivered order listed](docs/screenshots/pharmacy-orders.png) | ![One order: each line's received-of-ordered count and what is still due, with receive and cancel](docs/screenshots/pharmacy-order.png) |
+| ![Pharmacy counter: the day's takings against what patients and insurers owe, the reorder and expiry lists, then what each insurer has been billed](docs/screenshots/pharmacy-counter.png) | ![Purchase orders: units on order and ordered value, with a part-delivered order listed](docs/screenshots/pharmacy-orders.png) | ![One order: each line's received-of-ordered count and what is still due, with receive and cancel](docs/screenshots/pharmacy-order.png) |
 
-Shot against `seed_pharmacy`'s demo data, so the figures tie together: 170
-units still owed on that order is 120 ORS sachets plus the 50 ceftriaxone
+Shot against `seed_pharmacy`'s demo data — the same run as the web screens
+above, so the two agree: 5 sales and ₦6,017.50 collected on either client, and
+170 units still owed on that order is 120 ORS sachets plus the 50 ceftriaxone
 nothing has been delivered against yet.
 
-![HMO claims on mobile: claimed, approved and outstanding across the tenant, then each claim with the one action its state allows](docs/screenshots/pharmacy-claims.png)
+![HMO claims on mobile: claimed, approved and outstanding across the tenant, then each claim with the actions its state allows](docs/screenshots/pharmacy-claims.png)
+
+Both routes to an insurer are on that screen: the Reliance claim went out with
+its sale and is waiting on a decision, while the batched Hygeia ones have been
+approved and are waiting on money.
 
 ## Tenant resolution (any of)
 1. Header `X-Tenant-ID: hospital-a`
