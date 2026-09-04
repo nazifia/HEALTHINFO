@@ -1,4 +1,7 @@
-from django.db import models
+from decimal import Decimal
+
+from django.core.validators import MaxValueValidator, MinValueValidator
+from django.db import models, transaction
 from django.utils import timezone
 
 from apps.tenants.models import TenantOwnedModel
@@ -559,3 +562,356 @@ class Prescription(PatientLinkedModel, TenantOwnedModel):
         if self.status == self.Status.DISPENSED and not self.dispensed_at:
             self.dispensed_at = timezone.now()
         super().save(*args, **kwargs)
+
+
+# Triage bands: field -> (low, high), both inclusive. Outside the band is
+# flagged for a second look, never rejected — the field validators are what
+# reject a typo, so `abnormal_vitals` is a prompt, not a finding.
+TRIAGE_BANDS = {
+    "temperature_c": (35.0, 37.9),
+    "pulse_bpm": (60, 100),
+    "respiratory_rate": (12, 20),
+    "systolic_bp": (90, 139),
+    "diastolic_bp": (60, 89),
+    "oxygen_saturation": (94, 100),
+}
+
+# What those bands become for a child, keyed by the age band on the row (the
+# labels apps.patients.age_band produces). Only the fields that actually move
+# with age are overridden — a child's temperature and oxygen saturation are an
+# adult's, and everything not listed falls back to the adult band above.
+PAEDIATRIC_TRIAGE_BANDS = {
+    "0-1": {
+        "pulse_bpm": (100, 160),
+        "respiratory_rate": (30, 60),
+        "systolic_bp": (70, 100),
+        "diastolic_bp": (35, 65),
+    },
+    "0-5": {  # 1-5: "0-1" is checked first, so this band never sees an infant
+        "pulse_bpm": (90, 140),
+        "respiratory_rate": (20, 40),
+        "systolic_bp": (80, 110),
+        "diastolic_bp": (40, 70),
+    },
+    "6-12": {
+        "pulse_bpm": (70, 120),
+        "respiratory_rate": (18, 30),
+        "systolic_bp": (85, 120),
+        "diastolic_bp": (45, 80),
+    },
+    "13-18": {
+        "pulse_bpm": (60, 110),
+        "respiratory_rate": (12, 24),
+        "systolic_bp": (95, 135),
+        "diastolic_bp": (55, 85),
+    },
+}
+
+
+# A child's blood pressure tracks height more closely than age, so a measured
+# height replaces the age band's cuff numbers. Straight-line fit through the
+# percentile-table anchors (60cm: 70-100/35-65, 168cm: 95-135/55-85), which
+# reproduces the intermediate rows to a couple of mmHg.
+# ponytail: a linear fit, not the NHBPEP table. Swap in the real percentile
+# table if a paediatric unit ever has to report the percentile itself.
+_BP_FOR_HEIGHT = {  # field -> (value at 60cm, mmHg gained per cm of height)
+    "systolic_bp": ((70, 100), 0.23),
+    "diastolic_bp": ((35, 65), 0.185),
+}
+
+
+def _bp_bands_for_height(height_cm):
+    """Cuff bands for a child of this height, in cm."""
+    # Outside the anchors the fit is extrapolating, so it is held at the ends:
+    # a tall teenager is already on the adult numbers the fit converges to.
+    over = max(60.0, min(float(height_cm), 168.0)) - 60
+    return {
+        field: (round(low + rate * over), round(high + rate * over))
+        for field, ((low, high), rate) in _BP_FOR_HEIGHT.items()
+    }
+
+
+def triage_bands(age_group, height_cm=None):
+    """The bands to judge one patient's vitals by, for their age and size.
+
+    An unknown or adult age group gets the adult bands — a missing date of
+    birth must not turn an adult's normal pulse into a flag, and a short adult
+    is not a child.
+    """
+    bands = PAEDIATRIC_TRIAGE_BANDS.get(age_group)
+    if bands is None:
+        return dict(TRIAGE_BANDS)
+    if height_cm:
+        bands = {**bands, **_bp_bands_for_height(height_cm)}
+    return {**TRIAGE_BANDS, **bands}
+
+
+class Consultation(PatientLinkedModel, TenantOwnedModel):
+    """One clinician-patient encounter: why they came, what was measured, and
+    where they went next.
+
+    Deliberately carries no diagnosis and no drug list of its own. The diagnosis
+    is a ``CaseReport`` and the drugs are ``Prescription`` rows written against
+    that case report — a consultation that duplicated either would give the
+    rollups two disagreeing answers for one visit. What lives here is what
+    nothing else records: the presenting complaint, the triage vitals, and the
+    disposition.
+
+    A consultation is open while the patient is in front of the clinician and
+    closed when they leave. A patient has at most one open consultation at a
+    time, and a closed one is a signed clinical note that cannot be edited (see
+    ``save``) — correcting one means filing a new consultation.
+    """
+
+    class Status(models.TextChoices):
+        OPEN = "open"
+        CLOSED = "closed"
+
+    class Disposition(models.TextChoices):
+        HOME = "home", "Discharged home"
+        FOLLOW_UP = "follow_up", "Discharged, follow-up"
+        ADMITTED = "admitted", "Admitted"
+        REFERRED = "referred", "Referred out"
+        DECEASED = "deceased", "Died"
+
+    # How a disposition settles the case report's outcome when the consultation
+    # closes. ADMITTED is absent on purpose: an admitted patient's case is still
+    # running, so its outcome stays whatever the ward records later.
+    OUTCOME_FOR_DISPOSITION = {
+        Disposition.HOME: CaseReport.Outcome.RECOVERED,
+        Disposition.FOLLOW_UP: CaseReport.Outcome.ONGOING,
+        Disposition.REFERRED: CaseReport.Outcome.REFERRED,
+        Disposition.DECEASED: CaseReport.Outcome.DECEASED,
+    }
+
+    reporter = models.ForeignKey(  # the clinician who saw the patient
+        "accounts.User", null=True, blank=True, on_delete=models.SET_NULL
+    )
+    # The booking this encounter came from. NULL for a walk-in, which is most of
+    # an outpatient day — an appointment is never required to be seen.
+    appointment = models.ForeignKey(
+        "analytics.Appointment", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="consultations",
+    )
+    # The diagnosis reached. Optional: it is filled during the visit, and a
+    # consultation that ended without one is still a consultation.
+    case_report = models.ForeignKey(
+        "analytics.CaseReport", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="consultations",
+    )
+
+    chief_complaint = models.CharField(max_length=255)
+
+    # --- triage vitals. All optional — a consultation is still a consultation
+    # when the scale is broken. The validators reject the impossible, not the
+    # abnormal; TRIAGE_BANDS is what merely gets flagged.
+    temperature_c = models.DecimalField(
+        max_digits=4, decimal_places=1, null=True, blank=True,
+        validators=[MinValueValidator(Decimal("25")),
+                    MaxValueValidator(Decimal("45"))],
+    )
+    pulse_bpm = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        validators=[MinValueValidator(20), MaxValueValidator(300)],
+    )
+    respiratory_rate = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        validators=[MinValueValidator(4), MaxValueValidator(80)],
+    )
+    systolic_bp = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        validators=[MinValueValidator(50), MaxValueValidator(300)],
+    )
+    diastolic_bp = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        validators=[MinValueValidator(20), MaxValueValidator(200)],
+    )
+    oxygen_saturation = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        validators=[MinValueValidator(50), MaxValueValidator(100)],
+    )
+    weight_kg = models.DecimalField(
+        max_digits=5, decimal_places=1, null=True, blank=True,
+        validators=[MinValueValidator(Decimal("0.5")),
+                    MaxValueValidator(Decimal("500"))],
+    )
+    height_cm = models.DecimalField(
+        max_digits=5, decimal_places=1, null=True, blank=True,
+        validators=[MinValueValidator(Decimal("20")),
+                    MaxValueValidator(Decimal("260"))],
+    )
+
+    status = models.CharField(
+        max_length=10, choices=Status.choices, default=Status.OPEN
+    )
+    disposition = models.CharField(
+        max_length=20, choices=Disposition.choices, blank=True
+    )
+    follow_up_on = models.DateField(null=True, blank=True)
+    closed_at = models.DateTimeField(null=True, blank=True)
+    region = models.CharField(max_length=120, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+        indexes = [
+            models.Index(fields=["tenant", "status", "created_at"]),
+            models.Index(fields=["tenant", "disposition"]),
+            models.Index(fields=["patient", "status"]),
+        ]
+
+    def __str__(self):
+        return f"Consultation #{self.pk} ({self.status})"
+
+    # --- vitals readouts -------------------------------------------------
+    @property
+    def bmi(self):
+        """Body mass index to one decimal, or None without both measurements."""
+        if not (self.weight_kg and self.height_cm):
+            return None
+        metres = Decimal(self.height_cm) / 100
+        return float(round(Decimal(self.weight_kg) / (metres * metres), 1))
+
+    @property
+    def blood_pressure(self):
+        """Cuff reading as "120/80", or "" when a half of it is missing."""
+        if self.systolic_bp and self.diastolic_bp:
+            return f"{self.systolic_bp}/{self.diastolic_bp}"
+        return ""
+
+    @property
+    def abnormal_vitals(self):
+        """Names of the recorded vitals outside the triage band for this age.
+
+        Unrecorded vitals are absent, not abnormal — a missing reading and a bad
+        one are different problems and only one of them is the patient's.
+        """
+        out = []
+        bands = triage_bands(self.patient_age_group, self.height_cm)
+        for field, (low, high) in bands.items():
+            value = getattr(self, field)
+            if value is None:
+                continue
+            value = float(value)
+            if value < low or value > high:
+                out.append(field)
+        return out
+
+    # --- lifecycle -------------------------------------------------------
+    # The status this row was loaded with, so save() can tell an edit of a
+    # closed note from the close that closed it. None on an unsaved row.
+    _db_status = None
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        obj = super().from_db(db, field_names, values)
+        if "status" in field_names:  # not set when the field was deferred
+            obj._db_status = values[field_names.index("status")]
+        return obj
+
+    def refresh_from_db(self, *args, **kwargs):
+        # Field values are copied onto this instance from a freshly loaded one,
+        # but _db_status is not a field and would keep the status this row was
+        # first loaded with — a note someone else closed meanwhile would still
+        # look open, and editable.
+        super().refresh_from_db(*args, **kwargs)
+        self._db_status = self.status
+
+    def save(self, *args, **kwargs):
+        if self._db_status == self.Status.CLOSED:
+            raise ValueError(
+                "A closed consultation is a signed clinical note and cannot be "
+                "edited. File a new consultation instead."
+            )
+        if self.status == self.Status.OPEN and self.patient_id:
+            # One open consultation per patient. Two clinicians writing vitals
+            # into two open notes for one person is how half a visit goes
+            # missing. Enforced here rather than by a partial unique index,
+            # which MySQL has no equivalent for (see CaseReport.source_ref).
+            # all_objects, not objects: a patient belongs to one tenant, so
+            # this cannot reach across tenants, and the tenant-scoped manager
+            # returns nothing at all when no tenant is bound — which would let
+            # a shell session or an import quietly open the second note.
+            clash = Consultation.all_objects.filter(
+                patient_id=self.patient_id, status=self.Status.OPEN
+            ).exclude(pk=self.pk)
+            if clash.exists():
+                raise ValueError(
+                    "This patient already has an open consultation. Close that "
+                    "one before starting another."
+                )
+        super().save(*args, **kwargs)
+        self._db_status = self.status
+
+    @transaction.atomic
+    def close(self, *, disposition, follow_up_on=None, notes=None):
+        """End the encounter and settle what the visit decided.
+
+        Marks the booking it came from as attended, and carries the disposition
+        through to the case report's outcome so the surveillance rollups agree
+        with the note. A death also files a ``VitalEvent``, which is the row the
+        mortality ratios are counted from and what closes the patient record.
+        """
+        if self.status == self.Status.CLOSED:
+            raise ValueError("This consultation is already closed.")
+        if disposition not in self.Disposition.values:
+            raise ValueError(f"Not a disposition: {disposition!r}")
+        follow_up = follow_up_on or self.follow_up_on
+        if disposition == self.Disposition.FOLLOW_UP and not follow_up:
+            raise ValueError("A follow-up disposition needs a follow-up date.")
+        self.disposition = disposition
+        self.follow_up_on = follow_up
+        if notes:
+            self.notes = f"{self.notes}\n{notes}".strip()
+        self.status = self.Status.CLOSED
+        self.closed_at = timezone.now()
+        self.save()
+        if self.appointment_id:
+            appointment = self.appointment
+            appointment.status = Appointment.Status.COMPLETED
+            appointment.save(update_fields=["status", "updated_at"])
+        outcome = self.OUTCOME_FOR_DISPOSITION.get(disposition)
+        if outcome and self.case_report_id:
+            case = self.case_report
+            # Only ever moves a case that is still running: an outcome someone
+            # already recorded was entered deliberately and stands.
+            if case.outcome == CaseReport.Outcome.ONGOING:
+                case.outcome = outcome
+                case.save(update_fields=["outcome", "updated_at"])
+        if disposition == self.Disposition.DECEASED:
+            self._register_death()
+        return self
+
+    def _register_death(self):
+        """File the death in vital registration, unless it is already there.
+
+        The mortality ratios count ``VitalEvent`` deaths and the patient record
+        is closed by one (see ``VitalEvent.save``), so a deceased disposition
+        that filed nothing left the patient alive in the registry and the death
+        out of the ratios. An unlinked consultation still files the event: it
+        carries the age band and region, which is all the rollup counts.
+
+        ``maternal_death`` is left off. Whether a death was related to
+        pregnancy is a certification decision, not something a disposition
+        knows — whoever certifies it sets the flag on the event.
+        """
+        # all_objects for the same reason as the open-consultation check: the
+        # scoped manager sees nothing without a bound tenant, and a duplicate
+        # death is one the mortality ratios would count twice.
+        already_filed = self.patient_id and VitalEvent.all_objects.filter(
+            patient_id=self.patient_id, event_type=VitalEvent.Kind.DEATH
+        ).exists()
+        if already_filed:
+            return  # someone registered this death already; do not count it twice
+        VitalEvent.objects.create(
+            tenant=self.tenant,
+            patient=self.patient,
+            patient_age_group=self.patient_age_group,
+            patient_sex=self.patient_sex,
+            reporter=self.reporter,
+            event_type=VitalEvent.Kind.DEATH,
+            cause=self.case_report.disease if self.case_report_id else None,
+            infant_death=self.patient_age_group == "0-1",
+            region=self.region,
+            notes=f"Registered from consultation #{self.pk}.",
+        )

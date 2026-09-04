@@ -5,6 +5,7 @@ from .models import (
     Appointment,
     CaseReport,
     CommunityHealthReport,
+    Consultation,
     FacilityMetric,
     Immunization,
     InsuranceClaim,
@@ -179,6 +180,28 @@ class PrescriptionSerializer(serializers.ModelSerializer):
         exclude = ("tenant",)
         # source_ref is provenance written by capture, never by a client.
         read_only_fields = ("reporter", "source_ref", "created_at", "updated_at")
+
+    def validate_region(self, value):
+        return _validate_region(value)
+
+
+class ConsultationSerializer(serializers.ModelSerializer):
+    patient_name = serializers.CharField(source="patient.full_name", read_only=True)
+    reporter_name = serializers.CharField(source="reporter.username", read_only=True)
+    # Derived from the vitals on the row, never sent by a client.
+    bmi = serializers.FloatField(read_only=True)
+    blood_pressure = serializers.CharField(read_only=True)
+    abnormal_vitals = serializers.ListField(child=serializers.CharField(),
+                                            read_only=True)
+
+    class Meta:
+        model = Consultation
+        exclude = ("tenant",)
+        # A consultation is closed through the `close` action, which settles the
+        # appointment and the case report with it. Letting a client PATCH these
+        # straight would close the note and leave both of those behind.
+        read_only_fields = ("reporter", "status", "disposition", "closed_at",
+                            "created_at", "updated_at")
 
     def validate_region(self, value):
         return _validate_region(value)

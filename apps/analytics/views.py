@@ -1,6 +1,7 @@
 from django.db.models import Q
 from django.utils.dateparse import parse_date
 from rest_framework import viewsets
+from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -23,6 +24,7 @@ from .models import (
     Appointment,
     CaseReport,
     CommunityHealthReport,
+    Consultation,
     FacilityMetric,
     Immunization,
     InsuranceClaim,
@@ -36,6 +38,7 @@ from .serializers import (
     AppointmentSerializer,
     CaseReportSerializer,
     CommunityHealthReportSerializer,
+    ConsultationSerializer,
     FacilityMetricSerializer,
     ImmunizationSerializer,
     InsuranceClaimSerializer,
@@ -51,6 +54,7 @@ from .stats import (
     benchmark_stats,
     case_report_stats,
     chw_stats,
+    consultation_stats,
     facility_stats,
     funnel_stats,
     immunization_stats,
@@ -282,6 +286,68 @@ class InsuranceClaimViewSet(_ReportViewSet):
     filterset_fields = ("status", "diagnosis", "region", "patient")
 
 
+class ConsultationViewSet(_ReportViewSet):
+    """Clinician-patient encounters: open one, record the vitals, close it.
+
+    Creating and editing follow the other report types. Closing does not — it
+    settles the booking and the case report alongside the note, so it goes
+    through the `close` action rather than a PATCH of `status`.
+    """
+
+    model = Consultation
+    serializer_class = ConsultationSerializer
+    filterset_fields = ("status", "disposition", "patient", "appointment",
+                        "case_report", "region", "follow_up_on")
+
+    def _save(self, serializer, **kwargs):
+        """Save through the model's own rules, reporting a broken one as a 400.
+
+        The model refuses a second open note for one patient and any edit of a
+        closed one. Both are the client asking for something it may not have,
+        not a server fault, and an uncaught ValueError would be a 500.
+        """
+        try:
+            serializer.save(**kwargs)
+        except ValueError as exc:
+            # A bare string, not {"detail": ...}: the error envelope reports the
+            # first field error verbatim and would print a repr of the list.
+            raise ValidationError(str(exc)) from exc
+
+    def perform_create(self, serializer):
+        self._save(serializer, reporter=self.request.user)
+
+    def perform_update(self, serializer):
+        self._save(serializer)
+
+    def perform_destroy(self, instance):
+        # Same invariant as the edit guard in Consultation.save: a closed note
+        # is signed, and deleting one would be the way around not editing it.
+        if instance.status == Consultation.Status.CLOSED:
+            raise ValidationError(
+                "A closed consultation is a signed clinical note and cannot "
+                "be deleted."
+            )
+        instance.delete()
+
+    @action(detail=True, methods=["post"])
+    def close(self, request, pk=None):
+        """End the encounter: ``{"disposition": ..., "follow_up_on": ...}``.
+
+        ``follow_up_on`` is required for the ``follow_up`` disposition and
+        optional otherwise; ``notes`` is appended to the note if given.
+        """
+        consultation = self.get_object()
+        try:
+            consultation.close(
+                disposition=request.data.get("disposition", ""),
+                follow_up_on=request.data.get("follow_up_on") or None,
+                notes=request.data.get("notes") or None,
+            )
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
+        return Response(self.get_serializer(consultation).data)
+
+
 class AppointmentViewSet(_ReportViewSet):
     """Appointments / telemedicine encounters, tenant-scoped."""
 
@@ -415,6 +481,16 @@ class PlatformAppointmentStatsView(_StatsView):
     permission_classes = [IsSuperAdmin]
     platform = True
     stats_fn = staticmethod(appointment_stats)
+
+
+class ConsultationStatsView(_StatsView):
+    stats_fn = staticmethod(consultation_stats)
+
+
+class PlatformConsultationStatsView(_StatsView):
+    permission_classes = [IsSuperAdmin]
+    platform = True
+    stats_fn = staticmethod(consultation_stats)
 
 
 class TenantCaseReportStatsView(APIView):
