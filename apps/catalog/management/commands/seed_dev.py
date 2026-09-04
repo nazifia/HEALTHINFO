@@ -25,6 +25,19 @@ User = get_user_model()
 
 PASSWORD = "devpass123"  # ponytail: dev-only shared password, never ships to prod
 
+# One phone per role, written out rather than numbered off the loop: a role
+# added to the list later used to shift every phone after it, and the seed then
+# collided with the numbers already handed out in an existing dev database.
+ROLE_PHONES = {
+    Role.TENANT_ADMIN: "+2348000000001",
+    Role.DOCTOR: "+2348000000002",
+    Role.PHARMACIST: "+2348000000003",
+    Role.NURSE: "+2348000000004",
+    Role.PUBLIC: "+2348000000005",
+    Role.MIDWIFE: "+2348000000006",
+    Role.CHEW: "+2348000000007",
+}
+
 
 class Command(BaseCommand):
     help = "Seed development data (idempotent)."
@@ -57,7 +70,7 @@ class Command(BaseCommand):
                                   Role.PUBLIC], start=1):
             u, _ = User.objects.get_or_create(
                 username=role.value,
-                defaults={"phone": f"+23480000000{i:02d}", "role": role,
+                defaults={"phone": ROLE_PHONES[role], "role": role,
                           "tenant": tenant,
                           "email": f"{role.value}@demo.localhost"},
             )
@@ -533,5 +546,51 @@ class Command(BaseCommand):
                 ) for _ in range(count)]
             Appointment.all_objects.bulk_create(rows)
             self.stdout.write(f"appointments: {len(rows)}")
+
+        # One dispensing run over the counter. Everything above is a report
+        # somebody filed; this is the pipeline in apps.analytics.capture doing
+        # the filing itself, so the platform prescription rollup has content.
+        from datetime import timedelta
+        from decimal import Decimal
+
+        from django.utils import timezone
+
+        from apps.inventory.models import StockItem, Store, receive_stock
+        from apps.patients.models import Patient
+        from apps.pos.models import Sale
+        from apps.prescriptions.models import Prescription as CounterRx
+        from apps.prescriptions.models import PrescriptionItem
+
+        if not CounterRx.all_objects.filter(tenant=tenant).exists():
+            patient, _ = Patient.all_objects.get_or_create(
+                tenant=tenant, first_name="Ada", last_name="Obi",
+                defaults={"sex": "F", "region": regions[0],
+                          "date_of_birth": timezone.localdate()
+                          - timedelta(days=365 * 29)},
+            )
+            if not patient.region:  # an older dev row may predate the field
+                patient.region = regions[0]
+                patient.save(update_fields=["region", "updated_at"])
+            item, _ = StockItem.all_objects.get_or_create(
+                tenant=tenant, name="Amoxicillin 250mg",
+                defaults={"medication": amox, "unit": "capsule",
+                          "cost_price": Decimal("10.00"),
+                          "unit_price": Decimal("25.00"), "store": Store.RETAIL},
+            )
+            receive_stock(item, 100, batch_number="SEED-AMOX-1",
+                          expiry_date=timezone.localdate() + timedelta(days=300),
+                          cost_price=Decimal("10.00"))
+            rx = CounterRx.all_objects.create(
+                tenant=tenant, patient=patient, customer_name=patient.full_name,
+                diagnosis="Malaria, uncomplicated", created_by=pharmacist,
+            )
+            PrescriptionItem.all_objects.create(
+                tenant=tenant, prescription=rx, item=item, name=item.name,
+                quantity=10, dosage="500 mg", duration="5 days",
+            )
+            sale = Sale.all_objects.create(tenant=tenant, patient=patient,
+                                           rx=rx, served_by=pharmacist)
+            sale.add_line(item, 10, user=pharmacist)
+            self.stdout.write("dispensed: 1 script captured to the data centre")
 
         self.stdout.write(self.style.SUCCESS("seed_dev complete."))
