@@ -44,6 +44,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       _one('/api/analytics/benchmark/'),
       _one('/api/analytics/retention/'),
       _one('/api/analytics/adr/'),
+      _one('/api/analytics/consultations/'),
     ]);
     Map<String, dynamic>? m(int i) => (r[i] as Map?)?.cast<String, dynamic>();
     return _Bundle(
@@ -52,6 +53,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       benchmark: m(2),
       retention: (r[3] as List?) ?? const [],
       adr: m(4),
+      consultations: m(5),
     );
   }
 
@@ -121,8 +123,16 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   value: '${bn(b.adr, 'total') ?? 0}',
                   color: EnhancedTheme.accentOrange,
                 ),
+                KpiChip(
+                  icon: Icons.pending_actions_outlined,
+                  label: 'Open Visits',
+                  value: '${bn(b.consultations, 'open') ?? 0}',
+                  color: EnhancedTheme.infoBlue,
+                ),
               ]),
               const SizedBox(height: 14),
+              if (b.consultations != null)
+                _ConsultationStatsCard(d: b.consultations!),
               if (b.funnel != null) _FunnelCard(d: b.funnel!),
               if (b.aiQuality != null) _AiQualityCard(d: b.aiQuality!),
               if (b.benchmark != null) _BenchmarkCard(d: b.benchmark!),
@@ -142,12 +152,14 @@ class _Bundle {
   final Map<String, dynamic>? benchmark;
   final List<dynamic> retention;
   final Map<String, dynamic>? adr;
+  final Map<String, dynamic>? consultations;
   _Bundle({
     required this.funnel,
     required this.aiQuality,
     required this.benchmark,
     required this.retention,
     required this.adr,
+    required this.consultations,
   });
 }
 
@@ -344,6 +356,88 @@ class _AdrStatsCard extends StatelessWidget {
                   value: (r['count'] as num?) ?? 0
                 ),
             ]),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Clinic load — /api/analytics/consultations/. What patients came with, how
+/// long a visit takes, and where they went next.
+class _ConsultationStatsCard extends StatelessWidget {
+  final Map<String, dynamic> d;
+  const _ConsultationStatsCard({required this.d});
+
+  /// A `_grouped` list from the API as chart rows. [field] is the column it
+  /// was grouped by, which is the key each row carries its label under.
+  static List<({String label, num value})> _rows(Object? raw, String field,
+      {int limit = 6}) {
+    final rows = (raw as List?)?.cast<Map<String, dynamic>>() ?? const [];
+    return [
+      for (final r in rows.take(limit))
+        (
+          label: '${r[field] ?? ''}'.trim().isEmpty
+              ? 'Unspecified'
+              : '${r[field]}'.replaceAll('_', ' '),
+          value: (r['count'] as num?) ?? 0,
+        ),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final minutes = d['median_minutes_to_close'] as num?;
+    final byDisposition = _rows(d['by_disposition'], 'disposition');
+    final complaints = _rows(d['top_complaints'], 'chief_complaint');
+    final trend = (d['trend'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+    return PanelCard(
+      title: 'Consultations (${d['total'] ?? 0} total)',
+      accent: EnhancedTheme.primaryTeal,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Expanded(child: StatMetric('open', '${d['open'] ?? 0}')),
+            Expanded(
+                child: StatMetric(
+                    'admitted', pctOf(d['admission_rate'] as num?))),
+            Expanded(
+                child: StatMetric('median visit',
+                    minutes == null ? '—' : '$minutes min')),
+          ]),
+          if (byDisposition.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text('Where they went next',
+                style: TextStyle(
+                    color: context.subLabelColor,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            MiniBarChart(rows: byDisposition),
+          ],
+          if (complaints.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text('Top complaints',
+                style: TextStyle(
+                    color: context.subLabelColor,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            MiniBarChart(rows: complaints),
+          ],
+          if (trend.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            TrendLineChart(
+              color: EnhancedTheme.primaryTeal,
+              rows: [
+                for (final r in trend)
+                  (
+                    period: '${r['period'] ?? ''}',
+                    value: (r['count'] as num?) ?? 0
+                  ),
+              ],
+            ),
           ],
         ],
       ),

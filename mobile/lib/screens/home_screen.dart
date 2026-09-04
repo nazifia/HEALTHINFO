@@ -44,6 +44,7 @@ import 'chw_reports_screen.dart';
 import 'facility_metrics_screen.dart';
 import 'insurance_claims_screen.dart';
 import 'appointments_screen.dart';
+import 'consultations_screen.dart';
 import 'public_health_screen.dart';
 import 'collated_reports_screen.dart';
 import 'report_sources_screen.dart';
@@ -104,6 +105,7 @@ final _catalogGroup = _Group('Catalog', [
 
 const _recordsGroup = _Group('Clinical records', [
   _Section('Patients', Icons.people_outline, PatientsScreen()),
+  _Section('Consultations', Icons.medical_information_outlined, ConsultationsScreen()),
   _Section('Case reports', Icons.assignment_outlined, CasesScreen()),
   _Section('Adverse reactions', Icons.medication_liquid_outlined, AdrScreen()),
   _Section('Lab results', Icons.science_outlined, LabResultsScreen()),

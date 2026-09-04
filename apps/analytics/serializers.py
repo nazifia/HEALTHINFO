@@ -188,6 +188,11 @@ class PrescriptionSerializer(serializers.ModelSerializer):
 class ConsultationSerializer(serializers.ModelSerializer):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
+    # The diagnosis this visit reached. It lives on the case report — this is a
+    # label so a client can show it without fetching the case per row.
+    case_report_disease = serializers.CharField(
+        source="case_report.disease.name", read_only=True
+    )
     # Derived from the vitals on the row, never sent by a client.
     bmi = serializers.FloatField(read_only=True)
     blood_pressure = serializers.CharField(read_only=True)
