@@ -7,6 +7,7 @@ from .models import (
     Appointment,
     CaseReport,
     CommunityHealthReport,
+    Consultation,
     FacilityMetric,
     Immunization,
     InsuranceClaim,
@@ -116,3 +117,12 @@ class PrescriptionAdmin(admin.ModelAdmin):
     list_filter = ("tenant", "status")
     search_fields = ("dose", "frequency", "notes")
     raw_id_fields = ("medication", "case_report", "reporter")
+
+
+@admin.register(Consultation)
+class ConsultationAdmin(admin.ModelAdmin):
+    list_display = ("id", "tenant", "reporter", "patient", "chief_complaint",
+                    "status", "disposition", "created_at")
+    list_filter = ("tenant", "status", "disposition")
+    search_fields = ("chief_complaint", "notes", "patient_age_group")
+    raw_id_fields = ("patient", "reporter", "appointment", "case_report")

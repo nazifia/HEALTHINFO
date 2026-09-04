@@ -6,7 +6,14 @@ rollup serves "last 30 days", "this quarter", or all-time without new code.
 from datetime import timedelta
 from statistics import median
 
-from django.db.models import Avg, Count, Sum
+from django.db.models import (
+    Avg,
+    Count,
+    DurationField,
+    ExpressionWrapper,
+    F,
+    Sum,
+)
 from django.db.models.functions import TruncDay, TruncWeek
 from django.utils import timezone
 
@@ -23,6 +30,7 @@ from .models import (
     Appointment,
     CaseReport,
     CommunityHealthReport,
+    Consultation,
     FacilityMetric,
     Immunization,
     InsuranceClaim,
@@ -594,6 +602,68 @@ def appointment_stats(start=None, end=None, platform=False):
     }
     if platform:
         out["by_tenant"] = _grouped(appts, "tenant__name", 20)
+    return out
+
+
+def _median_minutes(qs, start_field, end_field):
+    """Median minutes between two datetime columns, or None with no rows.
+
+    The database sorts and only the middle row (or the two straddling it) comes
+    back, so the window can hold any number of rows without the whole span
+    column being read into memory. Rows missing either end are not counted:
+    they have no duration, and counting them as zero would flatter the number.
+    """
+    spans = (
+        qs.exclude(**{f"{start_field}__isnull": True})
+        .exclude(**{f"{end_field}__isnull": True})
+        .annotate(
+            span=ExpressionWrapper(
+                F(end_field) - F(start_field), output_field=DurationField()
+            )
+        )
+        .order_by("span")
+        .values_list("span", flat=True)
+    )
+    count = spans.count()
+    if not count:
+        return None
+    # One row for an odd count, the two either side of the middle for an even
+    # one — the same rows statistics.median would have averaged.
+    middle = spans[(count - 1) // 2:count // 2 + 1]
+    return round(sum(s.total_seconds() for s in middle) / len(middle) / 60, 1)
+
+
+def consultation_stats(start=None, end=None, platform=False):
+    """Clinic load: what patients came with, and where they went next.
+
+    ``by_disposition`` is over closed consultations only — an open note has no
+    disposition yet, and counting those blanks would read as a fifth outcome.
+    """
+    rows = apply_range(_manager(Consultation, platform).all(), start, end)
+    closed = rows.filter(status=Consultation.Status.CLOSED)
+    closed_count = closed.count()
+    admitted = closed.filter(disposition=Consultation.Disposition.ADMITTED).count()
+    # Minutes from opening the note to closing it — how long a visit takes.
+    # Median, not mean: one note left open over a weekend would otherwise move
+    # the whole number.
+    out = {
+        "total": rows.count(),
+        "open": rows.filter(status=Consultation.Status.OPEN).count(),
+        "admission_rate": (
+            round(admitted / closed_count, 4) if closed_count else None
+        ),
+        "median_minutes_to_close": _median_minutes(
+            closed, "created_at", "closed_at"
+        ),
+        "by_disposition": _grouped(closed, "disposition"),
+        "by_age_group": _grouped(rows, "patient_age_group"),
+        "by_sex": _grouped(rows, "patient_sex"),
+        "top_complaints": _grouped(rows, "chief_complaint", 20),
+        "by_region": _grouped(rows, "region"),
+        "trend": _series(rows, days=90, bucket="week"),
+    }
+    if platform:
+        out["by_tenant"] = _grouped(rows, "tenant__name", 20)
     return out
 
 

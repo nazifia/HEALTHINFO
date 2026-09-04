@@ -13,6 +13,8 @@ from .views import (
     CaseReportViewSet,
     ChwStatsView,
     CommunityHealthReportViewSet,
+    ConsultationStatsView,
+    ConsultationViewSet,
     FacilityMetricViewSet,
     FacilityStatsView,
     FunnelView,
@@ -32,6 +34,7 @@ from .views import (
     PlatformInsuranceStatsView,
     PlatformLabStatsView,
     PlatformCaseReportStatsView,
+    PlatformConsultationStatsView,
     PlatformDashboardView,
     PlatformReportSourcesView,
     PlatformSpikesView,
@@ -62,6 +65,7 @@ router.register("chw-reports", CommunityHealthReportViewSet, basename="chw-repor
 router.register("facility-metrics", FacilityMetricViewSet, basename="facility-metric")
 router.register("insurance-claims", InsuranceClaimViewSet, basename="insurance-claim")
 router.register("appointments", AppointmentViewSet, basename="appointment")
+router.register("consultations", ConsultationViewSet, basename="consultation")
 router.register("prescriptions", PrescriptionViewSet, basename="prescription")
 
 urlpatterns = router.urls + [
@@ -150,6 +154,12 @@ urlpatterns = router.urls + [
         "analytics/platform/prescriptions/",
         PlatformPrescriptionStatsView.as_view(),
         name="platform-prescription-stats",
+    ),
+    path("analytics/consultations/", ConsultationStatsView.as_view(), name="consultation-stats"),
+    path(
+        "analytics/platform/consultations/",
+        PlatformConsultationStatsView.as_view(),
+        name="platform-consultation-stats",
     ),
     path("analytics/appointments/", AppointmentStatsView.as_view(), name="appointment-stats"),
     path(

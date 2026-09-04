@@ -35,6 +35,7 @@ def _history_sources():
         "chw_reports": (m.CommunityHealthReport, s.CommunityHealthReportSerializer),
         "insurance_claims": (m.InsuranceClaim, s.InsuranceClaimSerializer),
         "appointments": (m.Appointment, s.AppointmentSerializer),
+        "consultations": (m.Consultation, s.ConsultationSerializer),
         "prescriptions": (m.Prescription, s.PrescriptionSerializer),
     }
 
