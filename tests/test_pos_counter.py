@@ -36,6 +36,7 @@ from apps.pos.models import (
 )
 from apps.prescriptions.models import (
     ConsultationPayout,
+    Hospital,
     Prescriber,
     PrescriberCommission,
     Prescription,
@@ -362,3 +363,18 @@ def test_profit_flags_lines_that_carry_no_cost(counter):
     assert report["revenue"] == Decimal("200.00")    # 100 + 100
     assert report["cost"] == Decimal("40.00")        # only the costed line
     assert 0 < report["cost_coverage"] < 1
+
+
+def test_hospital_list_counts_its_prescribers(counter):
+    """The hospitals list carries how many doctors write from each one."""
+    tenant = counter["tenant"]
+    clinic = Hospital.all_objects.create(tenant=tenant, name="Ikeja General")
+    Hospital.all_objects.create(tenant=tenant, name="Empty Clinic")
+    for name in ("Dr Ada Eze", "Dr Musa Bello"):
+        Prescriber.all_objects.create(tenant=tenant, name=name, hospital=clinic)
+
+    rows = _client(counter["staff"], tenant).get(
+        "/api/prescriptions/hospitals/"
+    ).data["results"]
+    counts = {r["name"]: r["prescriber_count"] for r in rows}
+    assert counts == {"Ikeja General": 2, "Empty Clinic": 0}

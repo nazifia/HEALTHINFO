@@ -277,6 +277,10 @@ class PrescriptionViewSet(_ReportViewSet):
     model = Prescription
     serializer_class = PrescriptionSerializer
     filterset_fields = ("status", "medication", "case_report", "region", "patient")
+    # Digits only: apps.prescriptions hangs hospitals/, prescribers/ and the
+    # payout lists off the same /api/prescriptions/ prefix, and this detail
+    # route is matched first — a catch-all pk would swallow them as ids.
+    lookup_value_regex = r"[0-9]+"
 
 
 class _StatsView(APIView):

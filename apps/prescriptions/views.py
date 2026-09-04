@@ -51,6 +51,11 @@ class HospitalViewSet(PharmacyViewSet):
     search_fields = ("name", "city", "phone")
     ordering_fields = ("name", "created_at")
 
+    def get_queryset(self):
+        return Hospital.objects.annotate(
+            prescriber_count=Count("prescribers")
+        ).order_by("name", "id")
+
 
 class PrescriberViewSet(PharmacyViewSet):
     """Doctors whose scripts this pharmacy fills.

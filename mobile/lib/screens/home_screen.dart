@@ -29,6 +29,7 @@ import 'branches_screen.dart';
 import 'customers_screen.dart';
 import 'prescriptions_screen.dart';
 import 'prescribers_screen.dart';
+import 'hospitals_screen.dart';
 import 'stock_checks_screen.dart';
 import 'transfers_screen.dart';
 import 'expenses_screen.dart';
@@ -135,6 +136,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _Section('Expenses', Icons.receipt_outlined, ExpensesScreen()),
     _Section('Customers', Icons.people_alt_outlined, CustomersScreen()),
     _Section('Prescribers', Icons.badge_outlined, PrescribersScreen()),
+    _Section('Hospitals', Icons.local_hospital_outlined, HospitalsScreen()),
     _Section('HMO claims', Icons.request_quote_outlined, PharmacyClaimsScreen()),
     _Section('Suppliers', Icons.local_shipping_outlined,
         PharmacySuppliersScreen()),
