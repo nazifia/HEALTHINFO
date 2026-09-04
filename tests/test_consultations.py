@@ -9,6 +9,7 @@ from apps.accounts.models import Role, User
 
 from apps.analytics.models import Appointment, CaseReport, Consultation, VitalEvent
 from apps.analytics.stats import consultation_stats
+from apps.catalog.models import Disease
 from apps.patients.models import Patient
 from apps.tenants.current import clear_current_tenant, set_current_tenant
 from apps.tenants.models import Tenant
@@ -263,3 +264,25 @@ def test_api_will_not_edit_or_delete_a_signed_note(api, patient):
     deleted = api.delete(url)
     assert deleted.status_code == 400
     assert "cannot be deleted" in deleted.json()["message"]
+
+
+def test_api_names_the_diagnosis_of_the_linked_case(api, patient):
+    """The list carries the diagnosis, so a client shows it without a second fetch."""
+    disease = Disease.objects.create(name="Malaria")
+    case = CaseReport.objects.create(patient=patient, disease=disease)
+    created = api.post(
+        "/api/consultations/",
+        {"patient": patient.id, "chief_complaint": "Fever", "case_report": case.id},
+        format="json",
+    ).json()
+    assert created["case_report_disease"] == "Malaria"
+
+    # An undiagnosed visit carries no diagnosis name at all — not a blank one
+    # a client would print as an empty "Dx:".
+    api.post(f"/api/consultations/{created['id']}/close/",
+             {"disposition": "home"}, format="json")
+    undiagnosed = api.post(
+        "/api/consultations/",
+        {"patient": patient.id, "chief_complaint": "Cough"}, format="json",
+    ).json()
+    assert "case_report_disease" not in undiagnosed

@@ -615,6 +615,8 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
 
   // Response key -> (heading, icon, field to show as the row's title).
   static const _sections = {
+    'consultations':
+        ('Consultations', Icons.medical_information_outlined, 'chief_complaint'),
     'case_reports': ('Case reports', Icons.assignment_outlined, 'disease_name'),
     'adverse_reactions':
         ('Adverse reactions', Icons.medication_liquid_outlined, 'reaction'),
