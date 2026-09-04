@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../main.dart';
 import '../nigeria.dart';
+import '../pharmacy.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/glass_card.dart';
@@ -9,7 +10,9 @@ import '../shared/widgets/stats_kit.dart';
 import '../shared/widgets/bar_chart.dart';
 import '../shared/widgets/searchable_dropdown.dart';
 import 'report_scaffold.dart';
+import 'drug_orders_screen.dart';
 import 'patient_access_log_screen.dart';
+import 'prescriptions_screen.dart';
 
 /// Patient registry — GET/POST /api/patients/.
 /// The only screen that shows identifying data; the backend limits it to
@@ -624,6 +627,8 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
     'immunizations': ('Immunizations', Icons.vaccines_outlined, 'vaccine'),
     'vital_events': ('Vital events', Icons.child_friendly_outlined, 'event_type'),
     'chw_reports': ('CHW reports', Icons.groups_outlined, 'report_type'),
+    'prescriptions':
+        ('Prescriptions', Icons.medication_outlined, 'medication_name'),
     'insurance_claims':
         ('Insurance claims', Icons.receipt_long_outlined, 'diagnosis_name'),
     'appointments': ('Appointments', Icons.event_outlined, 'reason'),
@@ -692,6 +697,24 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
     }
   }
 
+  /// Prescribe off this record: the clinician's own order, filed against the
+  /// patient and waiting for whoever dispenses it.
+  Future<void> _prescribe() async {
+    if (!await prescribeFor(context, widget.patient)) return;
+    _say('Order written for ${widget.patient['full_name']}.');
+    setState(() {
+      _future = api.get('/api/patients/${widget.patient['id']}/history/');
+    });
+  }
+
+  /// Write a counter script for this patient without hunting them down again
+  /// on the pharmacy screen. It reaches their history once the counter
+  /// dispenses off it — that is the point the drug actually left the shelf.
+  Future<void> _writeScript() async {
+    if (!await writeScriptFor(context, widget.patient)) return;
+    _say('Script written. It lands here once the counter dispenses it.');
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = widget.patient;
@@ -699,20 +722,33 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
       appBar: AppBar(
         title: Text('${p['full_name'] ?? 'Patient'}'),
         actions: [
-          // The read trail and merging are both admin-only on the API, so
-          // don't offer either button to anyone who'd just get a 403.
+          // Each button is gated the way its endpoint is: clinical cadres
+          // prescribe, pharmacy staff write counter scripts, and the read
+          // trail and merging are admin-only. Nobody is offered a 403.
           FutureBuilder<String?>(
             future: api.myRole(),
             builder: (context, snap) {
               const admins = {'tenant_admin', 'super_admin'};
-              if (!admins.contains(snap.data)) return const SizedBox.shrink();
+              final role = snap.data;
               return Row(mainAxisSize: MainAxisSize.min, children: [
-                IconButton(
+                if (api.roleCanReport(role))
+                  IconButton(
+                    tooltip: 'Prescribe medications',
+                    icon: const Icon(Icons.medication_outlined),
+                    onPressed: _prescribe,
+                  ),
+                if (isPharmacyStaff(role))
+                  IconButton(
+                    tooltip: 'Write a counter script',
+                    icon: const Icon(Icons.description_outlined),
+                    onPressed: _writeScript,
+                  ),
+                if (admins.contains(role)) IconButton(
                   tooltip: 'Merge a duplicate into this record',
                   icon: const Icon(Icons.merge_outlined),
                   onPressed: _mergeDuplicate,
                 ),
-                IconButton(
+                if (admins.contains(role)) IconButton(
                   tooltip: 'Who accessed this record',
                   icon: const Icon(Icons.privacy_tip_outlined),
                   onPressed: () => Navigator.of(context).push(

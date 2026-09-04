@@ -137,6 +137,25 @@ void main() {
     expect(rxActions('pending', 'nurse'), isEmpty);
   });
 
+  test('a script written from a record is filed against that patient', () {
+    final body = prescriptionBody(
+      customerName: 'Aisha Bello',
+      lines: [const RxLineDraft(name: 'Amoxicillin', quantity: 15)],
+      patientId: 42,
+    );
+    // Without this the script is a name string, and what the counter
+    // dispenses off it never reaches the patient's history.
+    expect(body['patient'], 42);
+  });
+
+  test('a script with no patient leaves the link off entirely', () {
+    final body = prescriptionBody(
+      customerName: 'Walk-in',
+      lines: [const RxLineDraft(name: 'Amoxicillin', quantity: 15)],
+    );
+    expect(body.containsKey('patient'), isFalse);
+  });
+
   test('a script never sends the consultation fee it was quoted', () {
     final body = prescriptionBody(
       customerName: '  ',

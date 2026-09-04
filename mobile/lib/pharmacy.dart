@@ -202,7 +202,7 @@ List<String> rxActions(String? status, String? role) {
   }
 }
 
-/// POST body for /api/prescriptions/.
+/// POST body for /api/prescriptions/scripts/.
 ///
 /// The consultation fee is not sent: the server snapshots it from the
 /// prescriber's own band, so a client that named a figure could undercharge

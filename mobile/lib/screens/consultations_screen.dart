@@ -8,6 +8,7 @@ import '../shared/widgets/stats_kit.dart';
 import '../shared/widgets/bar_chart.dart';
 import '../shared/widgets/searchable_dropdown.dart';
 import '../shared/widgets/snack.dart';
+import 'drug_orders_screen.dart';
 import 'report_scaffold.dart';
 
 const _dispositions = {
@@ -265,17 +266,28 @@ class _Card extends StatelessWidget {
                 onSaved: reload,
               ),
             ),
-            if (isOpen)
-              FutureBuilder<String?>(
-                future: api.myRole(),
-                builder: (context, snap) => api.roleCanReport(snap.data)
-                    ? TextButton.icon(
-                        icon: const Icon(Icons.task_alt, size: 18),
-                        label: const Text('Close'),
-                        onPressed: () => _close(context),
-                      )
-                    : const SizedBox.shrink(),
-              ),
+            FutureBuilder<String?>(
+              future: api.myRole(),
+              builder: (context, snap) {
+                if (!api.roleCanReport(snap.data)) return const SizedBox.shrink();
+                return Row(mainAxisSize: MainAxisSize.min, children: [
+                  // Drugs outlive the visit: a closed note is signed, but the
+                  // patient still leaves with a prescription, so this stays
+                  // available either side of the close.
+                  TextButton.icon(
+                    icon: const Icon(Icons.medication_outlined, size: 18),
+                    label: const Text('Prescribe'),
+                    onPressed: () => _prescribe(context),
+                  ),
+                  if (isOpen)
+                    TextButton.icon(
+                      icon: const Icon(Icons.task_alt, size: 18),
+                      label: const Text('Close'),
+                      onPressed: () => _close(context),
+                    ),
+                ]);
+              },
+            ),
           ]),
         ],
       ),
@@ -291,8 +303,37 @@ class _Card extends StatelessWidget {
     );
     if (done == true) {
       reload();
-      if (context.mounted) showSuccess(context, 'Consultation closed.');
+      // Most visits end with something to take home, so the toast carries the
+      // next step rather than making the clinician find the patient again.
+      if (context.mounted) {
+        showSuccess(context, 'Consultation closed.',
+            action: SnackBarAction(
+              label: 'Prescribe',
+              textColor: Colors.white,
+              onPressed: () => _prescribe(context),
+            ));
+      }
     }
+  }
+
+  /// Write a drug order for this visit's patient. The order carries the case
+  /// report the consultation reached, so it is filed against its diagnosis.
+  Future<void> _prescribe(BuildContext context) async {
+    final patientId = row['patient'];
+    if (patientId == null) {
+      showError(context, 'This consultation has no patient linked.');
+      return;
+    }
+    final written = await prescribeFor(
+      context,
+      {
+        'id': patientId,
+        'full_name': '${row['patient_name'] ?? ''}',
+        'region': '${row['region'] ?? ''}',
+      },
+      caseReport: row['case_report'] as int?,
+    );
+    if (written && context.mounted) showSuccess(context, 'Order written.');
   }
 }
 

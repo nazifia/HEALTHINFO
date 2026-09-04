@@ -147,3 +147,37 @@ def test_public_role_cannot_write_orders(db_clean):
     r = _client(user, a).post("/api/prescriptions/",
                               {"medication": drug.id}, format="json")
     assert r.status_code == 403, r.content
+
+
+def test_a_counter_script_has_its_own_path(db_clean):
+    """A counter script and a drug order are different records, and both are
+    reachable: /api/prescriptions/ is the clinician's order, and the pharmacy's
+    script lives under /api/prescriptions/scripts/.
+
+    Registered on the bare prefix, the script viewset was shadowed by the
+    analytics one — the URLconf includes analytics first — so nothing could
+    list or write a script through the API at all.
+    """
+    from apps.prescriptions.models import Prescription as Script
+    from apps.prescriptions.models import PrescriptionItem
+
+    a = Tenant.objects.create(name="A", slug="a")
+    pharmacist = User.objects.create_user(phone="08030000301", password="x",
+                                          tenant=a, role=Role.PHARMACIST)
+    patient = Patient.objects.create(tenant=a, first_name="Ada", last_name="Obi")
+    client = _client(pharmacist, a)
+
+    written = client.post("/api/prescriptions/scripts/", {
+        "customer_name": "Ada Obi", "patient": patient.id,
+        "medications": [{"name": "Artemether", "quantity": 6, "dosage": "1 bd"}],
+    }, format="json")
+    assert written.status_code == 201, written.content
+    script = Script.all_objects.get(pk=written.json()["id"])
+    # The patient rides along, which is what puts a dispense in their history.
+    lines = PrescriptionItem.all_objects.filter(prescription=script)
+    assert script.patient_id == patient.id and lines.count() == 1
+
+    # Same id in both tables, two different records: the bare path must still
+    # reach the drug order, not the script.
+    assert client.get(f"/api/prescriptions/scripts/{script.pk}/").status_code == 200
+    assert client.get(f"/api/prescriptions/{script.pk}/").status_code == 404
