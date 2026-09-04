@@ -59,7 +59,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     return RefreshIndicator(
       onRefresh: () async {
         final f = _load();
-        setState(() => _future = f);
+        setState(() { _future = f; });
         await f;
       },
       child: FutureBuilder<Map<String, dynamic>>(

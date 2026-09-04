@@ -43,7 +43,7 @@ class _AdrScreenState extends State<AdrScreen>
   }
 
   void _reload() {
-    setState(() => _future = api.getList('/api/adverse-reactions/'));
+    setState(() { _future = api.getList('/api/adverse-reactions/'); });
   }
 
   Future<void> _openForm([Map<String, dynamic>? existing]) async {

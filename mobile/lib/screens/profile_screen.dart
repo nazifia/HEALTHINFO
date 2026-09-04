@@ -84,7 +84,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       });
       if (!mounted) return;
       showSuccess(context, 'Profile updated');
-      setState(() => _future = _load());
+      setState(() { _future = _load(); });
     } on ApiException catch (e) {
       if (mounted) showError(context, e.friendly);
     }

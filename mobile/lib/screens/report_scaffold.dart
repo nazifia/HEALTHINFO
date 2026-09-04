@@ -528,8 +528,10 @@ class _PatientSearchSheetState extends State<_PatientSearchSheet> {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 350), () {
       if (!mounted) return;
-      setState(() => _future =
-          api.getList('/api/patients/', q.isEmpty ? null : {'search': q}));
+      setState(() {
+        _future =
+            api.getList('/api/patients/', q.isEmpty ? null : {'search': q});
+      });
     });
   }
 

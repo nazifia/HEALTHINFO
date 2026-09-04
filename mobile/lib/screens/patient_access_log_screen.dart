@@ -39,7 +39,7 @@ class _PatientAccessLogScreenState extends State<PatientAccessLogScreen>
         if (_action != 'all') 'action': _action,
       });
 
-  void _reload() => setState(() => _future = _load());
+  void _reload() => setState(() { _future = _load(); });
 
   @override
   Widget build(BuildContext context) {

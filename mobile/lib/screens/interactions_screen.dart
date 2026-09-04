@@ -39,7 +39,7 @@ class _InteractionsScreenState extends State<InteractionsScreen>
     return RefreshIndicator(
       onRefresh: () async {
         final f = api.getList('/api/interactions/');
-        setState(() => _future = f);
+        setState(() { _future = f; });
         await f;
       },
       child: FutureBuilder<List<dynamic>>(

@@ -115,7 +115,7 @@ class _PharmacyCounterScreenState extends State<PharmacyCounterScreen> {
     );
   }
 
-  void _reload() => setState(() => _future = _load());
+  void _reload() => setState(() { _future = _load(); });
 
   Future<void> _dispense() async {
     final sale = await showModalBottomSheet<Map<String, dynamic>>(
@@ -154,7 +154,7 @@ class _PharmacyCounterScreenState extends State<PharmacyCounterScreen> {
       body: RefreshIndicator(
         onRefresh: () async {
           final f = _load();
-          setState(() => _future = f);
+          setState(() { _future = f; });
           await f;
         },
         child: FutureBuilder<_CounterData>(

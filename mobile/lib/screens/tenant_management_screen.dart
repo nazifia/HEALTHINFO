@@ -32,7 +32,7 @@ class _TenantManagementScreenState extends State<TenantManagementScreen> {
     _future = api.getList('/api/tenants/$_kind/');
   }
 
-  void _reload() => setState(() => _future = api.getList('/api/tenants/$_kind/'));
+  void _reload() => setState(() { _future = api.getList('/api/tenants/$_kind/'); });
 
   Future<void> _post(String path, String ok) async {
     try {

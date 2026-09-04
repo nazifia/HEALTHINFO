@@ -44,7 +44,7 @@ class _CasesScreenState extends State<CasesScreen>
   }
 
   void _reload() {
-    setState(() => _future = api.getList('/api/case-reports/'));
+    setState(() { _future = api.getList('/api/case-reports/'); });
   }
 
   Future<void> _openForm([Map<String, dynamic>? existing]) async {

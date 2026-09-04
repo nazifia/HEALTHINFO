@@ -42,7 +42,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     _future = api.getList('/api/users/');
   }
 
-  void _reload() => setState(() => _future = api.getList('/api/users/'));
+  void _reload() => setState(() { _future = api.getList('/api/users/'); });
 
   Future<void> _edit(Map<String, dynamic> u) async {
     final saved = await showDialog<bool>(
