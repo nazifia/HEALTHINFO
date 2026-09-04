@@ -180,6 +180,77 @@ class _SaleSheetState extends State<SaleSheet> {
         {'amount': amount, 'method': method});
   }
 
+  /// Settle the bill out of the customer's wallet.
+  ///
+  /// A wallet short of the bill still dispenses: the shortfall becomes debt
+  /// and the sale is marked CREDIT, which keeps it out of revenue until it is
+  /// paid. The confirmation says so, because that is a decision, not a detail.
+  Future<void> _payWallet() async {
+    // The sale carries the customer, not their balance — read it now so the
+    // confirmation can name the shortfall rather than discovering it after.
+    Object? balance;
+    try {
+      final c = await api.get('/api/customers/${_sale['customer']}/');
+      balance = (c as Map)['wallet_balance'];
+    } catch (_) {}
+    if (!mounted) return;
+    final split = walletSplit(balance, _sale['balance_due']);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Pay from wallet'),
+        content: Text(split.credit <= 0
+            ? 'Take ${money(split.paid)} off the wallet?'
+            : 'The wallet covers ${money(split.paid)}. '
+                '${money(split.credit)} becomes the customer\'s debt and the '
+                'sale is recorded as credit.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Pay')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await _run('/api/pos/sales/${_sale['id']}/pay-wallet/', {});
+  }
+
+  /// Take one line back: stock to its batch, refund out the chosen way.
+  Future<void> _takeReturn(Map<String, dynamic> line) async {
+    final qty = await _askAmount(context, 'Return ${line['item_name']}',
+        'Units coming back', '${line['returnable'] ?? line['quantity']}');
+    if (qty == null || !mounted) return;
+    final method = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Refund how?'),
+        children: [
+          for (final m in const {
+            'cash': 'Cash out of the drawer',
+            'wallet': 'Back onto the wallet',
+            'original': 'However it was paid',
+          }.entries)
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(context).pop(m.key),
+              child: Text(m.value),
+            ),
+        ],
+      ),
+    );
+    if (method == null || !mounted) return;
+    final reason = await _askText(context, 'Return', 'Reason');
+    if (!mounted) return;
+    await _run('/api/pos/sales/${_sale['id']}/return/', {
+      'line': line['id'],
+      'quantity': int.tryParse(qty.trim()) ?? 0,
+      'refund_method': method,
+      'reason': reason ?? '',
+    });
+  }
+
   Future<void> _cancel() async {
     final reason = await _askText(context, 'Cancel sale', 'Reason');
     if (reason == null) return;
@@ -249,8 +320,19 @@ class _SaleSheetState extends State<SaleSheet> {
                     style: TextStyle(color: context.labelColor, fontSize: 14)),
                 subtitle: Text('${units(l['quantity'])} × ${money(l['unit_price'])}'
                     '${l['batch_number'] == null ? '' : ' · batch ${l['batch_number']}'}'),
-                trailing: Text(money(l['line_total']),
-                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Text(money(l['line_total']),
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  // A line is returnable until every unit on it has come back;
+                  // the server keeps that count, so the button follows it.
+                  if (!cancelled && (num.tryParse('${l['returnable']}') ?? 0) > 0)
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'Take a return',
+                      icon: const Icon(Icons.undo_outlined, size: 18),
+                      onPressed: _busy ? null : () => _takeReturn(l),
+                    ),
+                ]),
               ),
             const Divider(),
             _MoneyRow('Total', money(_sale['total']), bold: true),
@@ -293,6 +375,14 @@ class _SaleSheetState extends State<SaleSheet> {
                       backgroundColor: EnhancedTheme.primaryTeal),
                   icon: const Icon(Icons.payments_outlined, size: 18),
                   label: const Text('Take payment'),
+                ),
+              // Only a sale with a customer on it has a wallet to draw on.
+              if (!cancelled && !settled && _sale['customer'] != null)
+                OutlinedButton.icon(
+                  onPressed: _busy ? null : _payWallet,
+                  icon: const Icon(Icons.account_balance_wallet_outlined,
+                      size: 18),
+                  label: const Text('Pay from wallet'),
                 ),
               if (!cancelled)
                 TextButton.icon(

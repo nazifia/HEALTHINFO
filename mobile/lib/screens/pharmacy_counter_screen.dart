@@ -34,11 +34,50 @@ class _CounterData {
 
 class _PharmacyCounterScreenState extends State<PharmacyCounterScreen> {
   late Future<_CounterData> _future;
+  String? _role;
 
   @override
   void initState() {
     super.initState();
     _future = _load();
+    api.myRole().then((r) {
+      if (mounted) setState(() => _role = r);
+    });
+  }
+
+  /// Pull every already-expired batch off the shelf in one go.
+  ///
+  /// Expired stock still counts as stock on hand until someone writes it off,
+  /// which is exactly what makes a valuation wrong. Admin only, and confirmed
+  /// first: each batch gets its own write-off movement and none of it comes
+  /// back.
+  Future<void> _writeOffExpired() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Write off expired stock'),
+        content: const Text(
+            'Every batch already past its expiry date is taken off the shelf, '
+            'batch by batch. This cannot be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Write off')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      final r = await api.post('/api/inventory/batches/write-off-expired/', {});
+      if (!mounted) return;
+      showSuccess(context, '${(r as Map?)?['message'] ?? 'Done.'}');
+      _reload();
+    } catch (e) {
+      if (mounted) showError(context, '$e');
+    }
   }
 
   String _today() => DateTime.now().toIso8601String().substring(0, 10);
@@ -203,6 +242,16 @@ class _PharmacyCounterScreenState extends State<PharmacyCounterScreen> {
                   icon: Icons.event_busy_outlined,
                   heading: 'Expiring within 60 days (${d.expiring.length})',
                   color: EnhancedTheme.accentOrange,
+                  trailing: !isPharmacyAdmin(_role)
+                      ? null
+                      : TextButton.icon(
+                          onPressed: _writeOffExpired,
+                          style: TextButton.styleFrom(
+                              foregroundColor: EnhancedTheme.errorRed),
+                          icon: const Icon(Icons.delete_sweep_outlined,
+                              size: 18),
+                          label: const Text('Write off expired'),
+                        ),
                   child: d.expiring.isEmpty
                       ? Text('Nothing expiring.',
                           style:
