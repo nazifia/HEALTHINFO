@@ -6,7 +6,7 @@ import pytest
 from rest_framework.test import APIClient
 
 from apps.accounts.models import Role, User
-from apps.analytics.models import CaseReport
+from apps.analytics.models import CaseReport, Prescription
 from apps.catalog.models import Disease, Medication
 from apps.patients.models import Patient, PatientAccessLog, age_band
 from apps.tenants.current import clear_current_tenant
@@ -545,3 +545,47 @@ def test_next_of_kin_phone_finds_the_patient(db_clean):
     c = _client(doctor, a)
     body = c.get("/api/patients/", {"search": "+2348039999999"}).json()
     assert body["count"] == 1 and body["results"][0]["id"] == p.pk
+
+
+def test_an_nhis_number_starting_234_is_not_read_as_a_country_code(db_clean):
+    """Only a Nigerian mobile is folded; every other number keeps its digits."""
+    a = Tenant.objects.create(name="A", slug="a")
+    p = Patient.objects.create(tenant=a, first_name="Ada", last_name="Obi",
+                               nhis_number="2345678901")
+    doctor = User.objects.create_user(phone="08030000033", password="x",
+                                      tenant=a, role=Role.DOCTOR)
+    body = _client(doctor, a).get("/api/patients/",
+                                  {"search": "2345678901"}).json()
+    assert body["count"] == 1 and body["results"][0]["id"] == p.pk
+
+
+def test_the_prescriber_can_find_the_patient_they_prescribed_for(db_clean):
+    """A doctor's caseload includes the patients they wrote an order for —
+    otherwise the search that follows up a prescription finds nothing."""
+    a = Tenant.objects.create(name="A", slug="a")
+    p = Patient.objects.create(tenant=a, first_name="Ada", last_name="Obi")
+    mine = User.objects.create_user(phone="08030000034", password="x",
+                                    tenant=a, role=Role.DOCTOR)
+    other = User.objects.create_user(phone="08030000035", password="x",
+                                     tenant=a, role=Role.DOCTOR)
+    # registered_by set, so the patient is not visible to everyone by default.
+    p.registered_by = other
+    p.save(update_fields=["registered_by"])
+    drug = Medication.objects.create(generic_name="Artemether")
+    Prescription.objects.create(tenant=a, patient=p, medication=drug,
+                                reporter=mine)
+
+    body = _client(mine, a).get("/api/patients/", {"search": "Obi"}).json()
+    assert [row["id"] for row in body["results"]] == [p.pk]
+
+
+def test_a_lookup_can_ask_for_a_short_page(db_clean):
+    """The typeahead lookups ask for the first few matches, not a full page."""
+    a = Tenant.objects.create(name="A", slug="a")
+    for i in range(7):
+        Patient.objects.create(tenant=a, first_name=f"Ada{i}", last_name="Obi")
+    doctor = User.objects.create_user(phone="08030000036", password="x",
+                                      tenant=a, role=Role.DOCTOR)
+    body = _client(doctor, a).get("/api/patients/",
+                                  {"search": "Obi", "page_size": 5}).json()
+    assert body["count"] == 7 and len(body["results"]) == 5

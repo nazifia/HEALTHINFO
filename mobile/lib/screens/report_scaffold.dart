@@ -129,11 +129,12 @@ class _ReportListScreenState extends State<ReportListScreen>
     return rows;
   }
 
-  // ponytail: 350ms debounce; the token above drops out-of-order replies.
+  // ponytail: 250ms debounce — the same wait as the web client, so the two
+  // feel alike; the token above drops out-of-order replies.
   void _onSearchChanged(String value) {
     _query = value.trim();
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 350), () {
+    _debounce = Timer(const Duration(milliseconds: 250), () {
       if (mounted) _reload();
     });
   }
@@ -542,7 +543,7 @@ class _PatientSearchSheetState extends State<_PatientSearchSheet> {
   void _search(String value) {
     final q = value.trim();
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 350), () {
+    _debounce = Timer(const Duration(milliseconds: 250), () {
       if (!mounted) return;
       final id = ++_requestId;
       setState(() {
@@ -624,6 +625,9 @@ class _PatientSearchSheetState extends State<_PatientSearchSheet> {
                           '${r['hospital_number'] ?? ''}',
                           if ('${r['sex'] ?? ''}'.isNotEmpty) '${r['sex']}',
                           if (r['age'] != null) '${r['age']}y',
+                          // The number is searchable, so show which one the
+                          // row was found by.
+                          if ('${r['phone'] ?? ''}'.isNotEmpty) '${r['phone']}',
                         ].join(' · '),
                         style: TextStyle(color: context.hintColor, fontSize: 12),
                       ),

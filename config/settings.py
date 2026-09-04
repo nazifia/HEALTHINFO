@@ -167,7 +167,7 @@ REST_FRAMEWORK = {
         "rest_framework.filters.SearchFilter",
         "rest_framework.filters.OrderingFilter",
     ),
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "DEFAULT_PAGINATION_CLASS": "config.pagination.SizedPageNumberPagination",
     "PAGE_SIZE": 25,
     # Don't let DRF hijack ?format= for renderer negotiation — views read it
     # themselves to switch JSON/CSV (otherwise ?format=csv 404s, no csv renderer).
