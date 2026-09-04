@@ -1558,6 +1558,13 @@ async function viewSell() {
       try {
         const { rows } = await Api.list('/api/patients/', { search: q, page_size: 5 });
         if (!rows.length) return ($('#patient-hit').textContent = 'No patient found.');
+        // Never guess between two people: billing the wrong record is worse
+        // than making the pharmacist type the hospital number.
+        if (rows.length > 1) {
+          $('#patient-hit').textContent =
+            `${rows.length} patients match — search the hospital number.`;
+          return;
+        }
         const p = rows[0];
         patientId = p.id;
         $('#patient-hit').textContent = `${p.full_name || p.first_name} · ${p.hospital_number}`;
@@ -1572,6 +1579,11 @@ async function viewSell() {
     $('#checkout').onsubmit = async (e) => {
       e.preventDefault();
       if (!basket.length) return toast('Add at least one item.', true);
+      // A typed-but-unresolved patient means the lookup never landed; selling
+      // it as a walk-in would quietly lose the billing.
+      if (search.value.trim() && !patientId) {
+        return toast('Pick the patient first — the lookup has no single match.', true);
+      }
       const fd = new FormData(e.target);
       const body = {
         payment_method: fd.get('payment_method'),

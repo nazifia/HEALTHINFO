@@ -94,6 +94,9 @@ class _ReportListScreenState extends State<ReportListScreen>
   // user has it on "any", so the request just doesn't carry it.
   final Map<String, String> _picked = {};
   Timer? _debounce;
+  // Bumped per request; a reply carrying an old token is a slower earlier
+  // search landing after a newer one, and is dropped.
+  int _requestId = 0;
 
   bool get _narrowed => _query.isNotEmpty || _picked.isNotEmpty;
 
@@ -112,11 +115,21 @@ class _ReportListScreenState extends State<ReportListScreen>
     super.dispose();
   }
 
-  void _reload() => setState(
-      () => _future = api.getList(widget.path, listQuery(_query, _picked)));
+  void _reload() {
+    final id = ++_requestId;
+    setState(() => _future = _guard(
+        id, api.getList(widget.path, listQuery(_query, _picked))));
+  }
 
-  // ponytail: 350ms debounce, no in-flight cancellation — a slow earlier
-  // response can still land last. Add a request token if that ever shows up.
+  /// Never resolves if a newer request has started, so the stale reply can't
+  /// overwrite the newer one in the FutureBuilder.
+  Future<List<dynamic>> _guard(int id, Future<List<dynamic>> pending) async {
+    final rows = await pending;
+    if (id != _requestId) return Completer<List<dynamic>>().future;
+    return rows;
+  }
+
+  // ponytail: 350ms debounce; the token above drops out-of-order replies.
   void _onSearchChanged(String value) {
     _query = value.trim();
     _debounce?.cancel();
@@ -516,6 +529,9 @@ class _PatientSearchSheet extends StatefulWidget {
 class _PatientSearchSheetState extends State<_PatientSearchSheet> {
   Future<List<dynamic>> _future = api.getList('/api/patients/');
   Timer? _debounce;
+  // Same guard as the list screen: the last query typed wins, not the last
+  // reply to arrive.
+  int _requestId = 0;
 
   @override
   void dispose() {
@@ -528,11 +544,18 @@ class _PatientSearchSheetState extends State<_PatientSearchSheet> {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 350), () {
       if (!mounted) return;
+      final id = ++_requestId;
       setState(() {
-        _future =
-            api.getList('/api/patients/', q.isEmpty ? null : {'search': q});
+        _future = _guard(id,
+            api.getList('/api/patients/', q.isEmpty ? null : {'search': q}));
       });
     });
+  }
+
+  Future<List<dynamic>> _guard(int id, Future<List<dynamic>> pending) async {
+    final rows = await pending;
+    if (id != _requestId) return Completer<List<dynamic>>().future;
+    return rows;
   }
 
   @override

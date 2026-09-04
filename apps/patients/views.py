@@ -1,9 +1,13 @@
+import re
+
 from django.db.models import Q
-from rest_framework import viewsets
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import filters, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
+from apps.accounts.models import normalize_phone
 from apps.accounts.permissions import (
     IsClinicalStaff,
     IsTenantAdmin,
@@ -62,6 +66,29 @@ def visible_patients(user):
     return qs.filter(scope).distinct()
 
 
+# A query that is nothing but digits and the separators people type into a
+# phone number: "0803 123 4567", "+234-803-123-4567", "(0803)1234567".
+_NUMBER_QUERY = re.compile(r"[+(]?\d[\d\s()+-]{4,}")
+
+
+class NumberAwareSearchFilter(filters.SearchFilter):
+    """SearchFilter that folds a typed number onto the shape we store.
+
+    Phone numbers are normalized on write (see normalize_phone): every one is
+    held as local ``0XXXXXXXXXX``. Without this, "+2348031234567" and
+    "0803-123-4567" match nothing, and the default term split turns a spaced
+    number into three fragments that match by luck rather than by number.
+    Hospital numbers are digits too, and normalize_phone leaves them alone —
+    they start 0, 3 or 4, never 234.
+    """
+
+    def get_search_terms(self, request):
+        raw = request.query_params.get(self.search_param, "").strip()
+        if _NUMBER_QUERY.fullmatch(raw):
+            return [normalize_phone(raw)]
+        return super().get_search_terms(request)
+
+
 class PatientViewSet(viewsets.ModelViewSet):
     """Tenant-scoped patient registry. Clinical staff only — this is the one
     endpoint that returns identifying data, so plain tenant members can't read it.
@@ -71,8 +98,12 @@ class PatientViewSet(viewsets.ModelViewSet):
     permission_classes = [IsTenantMember, IsClinicalStaff]
     filterset_fields = ("sex", "status", "region", "blood_group", "genotype",
                         "patient_type")
+    # next_of_kin_phone is searchable too: a relative's number is often the
+    # only one reception is given, and it is normalized to the same shape.
     search_fields = ("hospital_number", "first_name", "last_name", "other_names",
-                     "phone", "nhis_number")
+                     "phone", "next_of_kin_phone", "nhis_number")
+    filter_backends = (DjangoFilterBackend, NumberAwareSearchFilter,
+                       filters.OrderingFilter)
     ordering_fields = ("last_name", "created_at", "date_of_birth")
 
     def get_queryset(self):

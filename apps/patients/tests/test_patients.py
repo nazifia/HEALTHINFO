@@ -505,3 +505,43 @@ def test_merged_status_cannot_be_set_by_hand(db_clean):
     r = _client(doctor, a).patch(f"/api/patients/{p.pk}/", {"status": "merged"},
                                  format="json")
     assert r.status_code == 400 and "status" in r.json()["errors"]
+
+
+@pytest.mark.parametrize(
+    "typed",
+    ["+2348031234567", "2348031234567", "0803-123-4567", "0803 123 4567",
+     "(0803) 123 4567", "08031234567", "8031234567"],
+)
+def test_phone_is_findable_however_it_is_typed(db_clean, typed):
+    """Numbers are stored in one shape; the search box has to speak all of them."""
+    a = Tenant.objects.create(name="A", slug="a")
+    Patient.objects.create(tenant=a, first_name="Ada", last_name="Obi",
+                           phone="08031234567")
+    doctor = User.objects.create_user(phone="08030000030", password="x",
+                                      tenant=a, role=Role.DOCTOR)
+    c = _client(doctor, a)
+    assert c.get("/api/patients/", {"search": typed}).json()["count"] == 1
+
+
+def test_hospital_number_search_survives_the_phone_folding(db_clean):
+    a = Tenant.objects.create(name="A", slug="a")
+    p = Patient.objects.create(tenant=a, first_name="Ada", last_name="Obi",
+                               hospital_number="0123456789")
+    doctor = User.objects.create_user(phone="08030000031", password="x",
+                                      tenant=a, role=Role.DOCTOR)
+    c = _client(doctor, a)
+    body = c.get("/api/patients/", {"search": "0123456789"}).json()
+    assert body["count"] == 1 and body["results"][0]["id"] == p.pk
+
+
+def test_next_of_kin_phone_finds_the_patient(db_clean):
+    """Reception is often given the relative's number, not the patient's."""
+    a = Tenant.objects.create(name="A", slug="a")
+    p = Patient.objects.create(tenant=a, first_name="Ada", last_name="Obi",
+                               phone="08031234567",
+                               next_of_kin_phone="08039999999")
+    doctor = User.objects.create_user(phone="08030000032", password="x",
+                                      tenant=a, role=Role.DOCTOR)
+    c = _client(doctor, a)
+    body = c.get("/api/patients/", {"search": "+2348039999999"}).json()
+    assert body["count"] == 1 and body["results"][0]["id"] == p.pk
