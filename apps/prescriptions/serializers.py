@@ -13,6 +13,9 @@ from .models import (
 
 
 class HospitalSerializer(serializers.ModelSerializer):
+    # Annotated by the viewset; absent on the row a write echoes back.
+    prescriber_count = serializers.IntegerField(read_only=True, default=0)
+
     class Meta:
         model = Hospital
         exclude = ("tenant",)
