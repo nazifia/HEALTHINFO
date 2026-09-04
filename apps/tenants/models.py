@@ -124,8 +124,13 @@ class SharedTenantManager(TenantManager):
 class TenantOwnedModel(models.Model):
     # Nullable so a row can be global (shared across all tenants). Private rows
     # still carry their owning tenant; see SharedTenantManager.
+    # Reverse accessors are namespaced by app: two apps may legitimately own a
+    # model of the same name (analytics.Prescription is a surveillance record,
+    # prescriptions.Prescription is a script at the counter) and the default
+    # ``prescription_set`` would collide between them.
     tenant = models.ForeignKey(
-        Tenant, null=True, blank=True, on_delete=models.CASCADE
+        Tenant, null=True, blank=True, on_delete=models.CASCADE,
+        related_name="%(app_label)s_%(class)s_set",
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

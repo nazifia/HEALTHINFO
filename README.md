@@ -163,6 +163,20 @@ Operational pharmacy for one facility, tenant-scoped like everything else.
 `StockReport` in analytics stays what it was — a de-identified snapshot for
 central surveillance; this module is the record it summarizes.
 
+It is laid out as six apps rather than one, the way PharmApp lays its backend
+out: `inventory` (items, batches, the ledger, stocktakes, inter-store
+transfers), `pos` (sales, returns, tills, payment requests, expenses,
+notifications, purchase orders), `customers` (buyers and their prepaid
+wallets), `branches`, `prescriptions` (scripts, prescribers, what they are
+owed) and `reports`. `pharmacy` keeps the part PharmApp has no equivalent of:
+HMO cover and the claims raised against it.
+
+Each app is served at its own prefix — `/api/inventory/…`, `/api/pos/…`,
+`/api/customers/…`, `/api/branches/…`, `/api/prescriptions/…`,
+`/api/reports/…`. **Every stock and sale route is also served under its
+original `/api/pharmacy/…` path**, so the Flutter and PWA clients keep working
+unchanged; the two prefixes are the same viewsets, not a redirect.
+
 Two seats: the **pharmacy admin** (tenant admin, or super admin) sets prices,
 edits the item list and HMO coverage, corrects stock and decides claims; the
 **pharmacy staff** (pharmacist) receives deliveries, dispenses, takes payment
@@ -208,6 +222,43 @@ named patient's claims are commercial and clinical data both.
   ones included (submitting the batch does not send them twice); `submit`,
   `approve` and `pay` work on the envelope, and a remittance is allocated across
   its claims oldest-first, so a part-paid batch says which claims are short.
+
+- `GET/POST /api/customers/` — the counter's buyer list, retail or wholesale,
+  optionally linked to a `Patient`. `POST .../{id}/top-up/` puts prepaid money
+  on the wallet (settling any debt before it adds credit), `.../deduct/` is the
+  admin's correction, `.../wallet/` is the balance and the rows behind it, and
+  `.../debtors/` is who owes. A wallet sale that overdraws still dispenses:
+  `POST /api/pos/sales/{id}/pay-wallet/` pays what the wallet holds, records
+  the rest as debt and marks the sale `credit`, which keeps it out of revenue
+  until it is paid.
+- `POST /api/pos/sales/{id}/return/` — one line back over the counter: stock to
+  the batch it came from, refund to the wallet, to cash, or by the original
+  method. The sale follows to `partial_return` or `returned`, and the refund is
+  recognised on the day it happened, never against the day of the sale.
+- `GET/POST /api/inventory/stock-checks/` — a stocktake. Expected quantities are
+  snapshotted when the sheet is raised, `POST .../{id}/count/` records what was
+  found, and `.../complete/` (admin) writes each discrepancy as an ADJUSTMENT
+  movement. An uncounted line is left alone: not counting is not counting zero.
+- `GET/POST /api/inventory/transfers/` — retail and wholesale hold the same drug
+  as two item rows, so a transfer moves units between them. `POST
+  .../{id}/approve/` is the move: both legs in one transaction, so units are
+  never on neither shelf.
+- `GET/POST /api/pos/payment-requests/` — the dispenser's basket handed to a
+  cashier where those are two people. Nothing leaves the shelf until
+  `.../complete/` turns it into a sale.
+- `GET/POST /api/pos/expenses/` — money out that bought no stock. A cash expense
+  names the drawer it left, so the till still counts correctly at close.
+- `GET/POST /api/prescriptions/` — scripts filled at the counter, with lines
+  ticked off by `POST .../{id}/dispense/` and the status following what was
+  ticked. A sale against a script raises the prescriber's commission (a share
+  of that sale) and, once, their consultation payout (a flat band fee charged
+  silently at the till); `/api/prescriptions/commissions/` and
+  `/api/prescriptions/consultation-payouts/` settle them.
+- `GET /api/reports/sales|inventory|customers|profit|monthly|cashier-sales|staff-performance/`
+  — `?period=today|week|month|quarter|year` or `?from=&to=`. Two rules run
+  through all of them: a refund counts on the day it was recorded, and a line
+  with no recorded cost is left out of cost of goods and reported in
+  `cost_coverage` rather than treated as free.
 
 Money is derived, never posted: `total = patient_payable + hmo_payable` always,
 with the patient side computed as the remainder so rounding can't lose a kobo.
