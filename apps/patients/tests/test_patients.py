@@ -69,6 +69,57 @@ def test_supplied_hospital_number_is_kept(db_clean):
     assert p.hospital_number == "MRN-9"
 
 
+def test_phone_becomes_the_hospital_number(db_clean):
+    t = Tenant.objects.create(name="Clinic", slug="clinic")
+    p = Patient.objects.create(tenant=t, first_name="Ada", last_name="Obi",
+                               phone="+234 803 123 4567")
+    assert p.hospital_number == "08031234567"
+
+
+def test_shared_phone_falls_back_to_a_generated_number(db_clean):
+    """A family line belongs to whoever was registered on it first."""
+    t = Tenant.objects.create(name="Clinic", slug="clinic")
+    first = Patient.objects.create(tenant=t, first_name="Ada", last_name="Obi",
+                                   phone="08031234567")
+    second = Patient.objects.create(tenant=t, first_name="Ola", last_name="Obi",
+                                    phone="08031234567")
+    assert first.hospital_number == "08031234567"
+    assert second.hospital_number != first.hospital_number
+    assert len(second.hospital_number) == 10
+
+
+def test_number_follows_a_corrected_phone(db_clean):
+    t = Tenant.objects.create(name="Clinic", slug="clinic")
+    p = Patient.objects.create(tenant=t, first_name="Ada", last_name="Obi",
+                               phone="08031234567")
+    p = Patient.all_objects.get(pk=p.pk)
+    p.phone = "08039999999"
+    p.save(update_fields=["phone"])
+    assert Patient.all_objects.get(pk=p.pk).hospital_number == "08039999999"
+
+
+def test_a_hand_typed_number_ignores_the_phone(db_clean):
+    t = Tenant.objects.create(name="Clinic", slug="clinic")
+    p = Patient.objects.create(tenant=t, first_name="Ada", last_name="Obi",
+                               phone="08031234567", hospital_number="MRN-9")
+    p = Patient.all_objects.get(pk=p.pk)
+    p.phone = "08039999999"
+    p.save()
+    assert p.hospital_number == "MRN-9"
+
+
+def test_number_stays_when_the_new_phone_is_someone_elses(db_clean):
+    t = Tenant.objects.create(name="Clinic", slug="clinic")
+    Patient.objects.create(tenant=t, first_name="Ola", last_name="Obi",
+                           phone="08039999999")
+    p = Patient.objects.create(tenant=t, first_name="Ada", last_name="Obi",
+                               phone="08031234567")
+    p = Patient.all_objects.get(pk=p.pk)
+    p.phone = "08039999999"
+    p.save()
+    assert p.hospital_number == "08031234567"
+
+
 def test_patients_filter_by_type(db_clean):
     a = Tenant.objects.create(name="A", slug="a")
     Patient.objects.create(tenant=a, first_name="Ada", last_name="A",

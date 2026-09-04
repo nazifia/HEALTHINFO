@@ -10,7 +10,7 @@ import secrets
 
 from django.db import models, transaction
 
-from apps.accounts.models import phone_validator
+from apps.accounts.models import normalize_phone, phone_validator
 from apps.tenants.models import TenantOwnedModel
 
 # Age bands used across the analytics rollups, as (exclusive upper bound in
@@ -34,9 +34,11 @@ def age_band(years):
 class Patient(TenantOwnedModel):
     """A person registered at one facility (tenant).
 
-    ``hospital_number`` is the facility's own identifier and is unique per
-    tenant; it is generated when the client doesn't supply one so registration
-    never blocks on a numbering scheme.
+    ``hospital_number`` is the facility's identifier for the patient and is
+    unique per tenant. When the client doesn't supply one it is their own
+    phone number, falling back to a generated number when there is no phone
+    or the number is already another patient's here. A number that came from
+    the phone follows it when the phone is corrected (see save).
     """
 
     class Sex(models.TextChoices):
@@ -186,6 +188,33 @@ class Patient(TenantOwnedModel):
         """On the national insurance scheme — drives exemption at billing."""
         return self.patient_type == self.PatientType.NHIA
 
+    def hospital_number_from_phone(self):
+        """The patient's own phone as their hospital number, when it is free.
+
+        A number is one person's, so it makes the identifier reception already
+        has on the card. Returns "" when there is no phone, or when this
+        tenant already gave that number to someone else (a shared family line,
+        a recycled number) — the caller falls back to a generated number.
+        """
+        phone = normalize_phone(self.phone)
+        if not phone:
+            return ""
+        taken = Patient.all_objects.filter(
+            tenant_id=self.tenant_id, hospital_number=phone
+        ).exclude(pk=self.pk)
+        return "" if taken.exists() else phone
+
+    # The phone this row was loaded with, so save() can tell a number that
+    # followed the phone from one typed in by hand. None on an unsaved row.
+    _db_phone = None
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        obj = super().from_db(db, field_names, values)
+        if "phone" in field_names:  # not set when the field was deferred
+            obj._db_phone = values[field_names.index("phone")]
+        return obj
+
     def generate_hospital_number(self):
         """A free 10-digit number whose leading digit encodes the patient type.
 
@@ -258,19 +287,34 @@ class Patient(TenantOwnedModel):
             source.save(update_fields=["status", "merged_into", "updated_at"])
         return moved
 
+    def _also_save(self, kwargs, field):
+        """Add ``field`` to an update_fields save that didn't ask for it."""
+        fields = kwargs.get("update_fields")
+        if fields is not None and field not in fields:
+            kwargs["update_fields"] = list(fields) + [field]
+
     def save(self, *args, **kwargs):
         if not self.hospital_number:
-            self.hospital_number = self.generate_hospital_number()
+            self.hospital_number = (self.hospital_number_from_phone()
+                                    or self.generate_hospital_number())
+        elif self.hospital_number == normalize_phone(self._db_phone or ""):
+            # The number is the phone this row was loaded with, and the phone
+            # has since changed: move the number with it. A new number that is
+            # blank or already another patient's here leaves the old one alone
+            # — a number that resolves beats one that matches the phone.
+            moved = self.hospital_number_from_phone()
+            if moved and moved != self.hospital_number:
+                self.hospital_number = moved
+                self._also_save(kwargs, "hospital_number")
         # A date of death outranks whatever status was sent: it is the harder
         # fact of the two. Bringing a patient back means clearing the date.
         # MERGED is exempt — that one describes the record, not the person.
         if self.date_of_death and self.status not in (self.Status.DECEASED,
                                                       self.Status.MERGED):
             self.status = self.Status.DECEASED
-            fields = kwargs.get("update_fields")
-            if fields is not None and "status" not in fields:
-                kwargs["update_fields"] = list(fields) + ["status"]
+            self._also_save(kwargs, "status")
         super().save(*args, **kwargs)
+        self._db_phone = self.phone
 
 
 class PatientAccessLog(TenantOwnedModel):
