@@ -74,6 +74,14 @@ urlpatterns = [
     path("api/", include("apps.ai.urls")),
     path("api/", include("apps.patients.urls")),
     path("api/", include("apps.analytics.urls")),
+    path("api/", include("apps.branches.urls")),
+    path("api/", include("apps.customers.urls")),
+    path("api/", include("apps.inventory.urls")),
+    path("api/", include("apps.pos.urls")),
+    path("api/", include("apps.prescriptions.urls")),
+    path("api/", include("apps.reports.urls")),
+    # HMO claims, plus the /api/pharmacy/* aliases the mobile and web clients
+    # were written against.
     path("api/", include("apps.pharmacy.urls")),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path(

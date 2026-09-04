@@ -45,7 +45,17 @@ INSTALLED_APPS = [
     "apps.ai",
     "apps.patients",
     "apps.analytics",
+    # Pharmacy, laid out the way PharmApp lays it out: stock, counter,
+    # customers, branches, scripts and reports each own their own app.
+    # "apps.pharmacy" keeps what PharmApp has no equivalent of: HMO cover and
+    # the claims raised against it.
+    "apps.branches",
+    "apps.customers",
+    "apps.inventory",
     "apps.pharmacy",
+    "apps.pos",
+    "apps.prescriptions",
+    "apps.reports",
 ]
 
 MIDDLEWARE = [
