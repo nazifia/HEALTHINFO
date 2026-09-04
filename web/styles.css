@@ -63,28 +63,55 @@ a:hover { text-decoration: underline; }
   padding: 3px 12px; font-size: 13px; border: 1px solid rgba(255,255,255,.18);
 }
 a.badge:hover { background: rgba(255,255,255,.3); text-decoration: none; }
+.badge.clickable { cursor: pointer; }
+.badge.clickable:hover { background: rgba(255,255,255,.3); }
 
 #body { display: flex; flex: 1; min-height: 0; }
 #sidebar {
-  width: 232px; flex: 0 0 auto; overflow-y: auto;
-  background: var(--card); border-right: 1px solid var(--border); padding: 12px 0 24px;
+  width: 244px; flex: 0 0 auto; overflow-y: auto; overscroll-behavior: contain;
+  background: var(--card); border-right: 1px solid var(--border);
+  padding: 10px 0 28px; scrollbar-width: thin; scrollbar-color: var(--border) transparent;
 }
+#sidebar::-webkit-scrollbar { width: 8px; }
+#sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; border: 2px solid var(--card); }
+#sidebar::-webkit-scrollbar-track { background: transparent; }
 #sidebar a {
+  position: relative;
   display: flex; align-items: center; gap: 10px;
-  padding: 7px 18px; color: var(--text); font-size: 14px;
-  border-left: 3px solid transparent;
+  margin: 1px 10px; padding: 8px 12px; border-radius: 8px;
+  color: var(--text); font-size: 14px; line-height: 1.3;
+  transition: background .12s, color .12s;
 }
-#sidebar a .ico { color: var(--muted); }
+#sidebar a .ico { color: var(--muted); transition: color .12s; }
 #sidebar a:hover { background: var(--bg); text-decoration: none; }
-#sidebar a.active {
-  background: var(--brand-soft); color: var(--brand-dark); font-weight: 600;
-  border-left-color: var(--brand);
-}
+#sidebar a:hover .ico { color: var(--text); }
+#sidebar a:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+#sidebar a.active { background: var(--brand-soft); color: var(--brand-dark); font-weight: 600; }
 #sidebar a.active .ico { color: var(--brand); }
-.nav-group h4 {
-  margin: 16px 18px 4px; font-size: 11px; text-transform: uppercase;
-  letter-spacing: 1.2px; color: var(--muted); font-weight: 600;
+/* active marker sits inside the pill so it never shifts the label */
+#sidebar a.active::before {
+  content: ""; position: absolute; left: -10px; top: 50%; transform: translateY(-50%);
+  width: 3px; height: 18px; border-radius: 0 3px 3px 0; background: var(--brand);
 }
+#sidebar .nav-home { margin-bottom: 8px; }
+.nav-group { padding-top: 6px; }
+.nav-group + .nav-group { margin-top: 4px; border-top: 1px solid var(--border); }
+.nav-group > summary {
+  list-style: none; cursor: pointer; user-select: none;
+  display: flex; align-items: center; gap: 6px;
+  margin: 10px 12px 4px; padding: 4px 10px; border-radius: 6px;
+  font-size: 10.5px; text-transform: uppercase;
+  letter-spacing: 1.1px; color: var(--muted); font-weight: 700;
+}
+.nav-group > summary::-webkit-details-marker { display: none; }
+.nav-group > summary:hover { background: var(--bg); color: var(--text); }
+.nav-group > summary:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+.nav-group > summary::after {
+  content: ""; margin-left: auto;
+  width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(45deg); transition: transform .15s;
+}
+.nav-group[open] > summary::after { transform: translateY(1px) rotate(-135deg); }
 #main { flex: 1; overflow-y: auto; padding: 24px 28px 48px; }
 
 h2 { margin: 0 0 4px; font-size: 22px; letter-spacing: -.2px; }

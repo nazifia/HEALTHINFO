@@ -31,6 +31,7 @@ import 'prescriptions_screen.dart';
 import 'prescribers_screen.dart';
 import 'hospitals_screen.dart';
 import 'stock_checks_screen.dart';
+import 'stock_ledger_screen.dart';
 import 'transfers_screen.dart';
 import 'expenses_screen.dart';
 import 'payment_requests_screen.dart';
@@ -47,6 +48,8 @@ import 'collated_reports_screen.dart';
 import 'report_sources_screen.dart';
 import 'platform_adr_screen.dart';
 import 'surveillance_screen.dart';
+import 'idsr_screen.dart';
+import 'notifiable_screen.dart';
 import 'analytics_screen.dart';
 import 'interactions_screen.dart';
 import 'interaction_check_screen.dart';
@@ -92,6 +95,8 @@ final List<_Section> _baseSections = [
   const _Section('Insurance claims', Icons.receipt_long_outlined, InsuranceClaimsScreen()),
   const _Section('Appointments', Icons.event_outlined, AppointmentsScreen()),
   const _Section('Analytics', Icons.query_stats_outlined, AnalyticsScreen()),
+  const _Section('IDSR report', Icons.assignment_outlined, IdsrScreen()),
+  const _Section('Notifiable cases', Icons.flag_outlined, NotifiableScreen()),
   const _Section('Ask AI', Icons.auto_awesome, AskScreen()),
   const _Section('Profile', Icons.person_outline, ProfileScreen()),
 ];
@@ -127,6 +132,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         PaymentRequestsScreen()),
     _Section('Stock items', Icons.inventory_outlined, PharmacyStockScreen()),
     _Section('Stock checks', Icons.fact_check_outlined, StockChecksScreen()),
+    _Section('Stock ledger', Icons.receipt_long_outlined, StockLedgerScreen()),
     _Section('Transfers', Icons.swap_horiz_outlined, TransfersScreen()),
     _Section('Sales', Icons.point_of_sale_outlined, PharmacySalesScreen()),
     _Section('Returns', Icons.undo_outlined, ReturnsScreen()),

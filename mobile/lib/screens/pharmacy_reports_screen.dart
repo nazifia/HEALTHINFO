@@ -26,6 +26,12 @@ class _PharmacyReportsScreenState extends State<PharmacyReportsScreen> {
   String _period = 'month';
   late Future<_Reports> _future = _load();
 
+  // The named month behind the monthly card. It steps on its own arrows rather
+  // than off the period chips: the other reports answer "this quarter", this
+  // one answers "March", and the server zero-fills the days either way.
+  DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
+  late Future<Map<String, dynamic>?> _monthly = _loadMonthly();
+
   static const _periods = {
     'today': 'Today',
     'week': 'Last 7 days',
@@ -62,7 +68,29 @@ class _PharmacyReportsScreenState extends State<PharmacyReportsScreen> {
     );
   }
 
-  void _reload() => setState(() => _future = _load());
+  Future<Map<String, dynamic>?> _loadMonthly() async {
+    try {
+      final r = await api.get('/api/reports/monthly/',
+          {'year': '${_month.year}', 'month': '${_month.month}'});
+      return (r as Map).cast<String, dynamic>();
+    } catch (_) {
+      return null; // same degrade-alone rule as every other card here
+    }
+  }
+
+  void _stepMonth(int months) {
+    final next = stepMonth(_month, months, DateTime.now());
+    if (next == _month) return;
+    setState(() {
+      _month = next;
+      _monthly = _loadMonthly();
+    });
+  }
+
+  void _reload() => setState(() {
+        _future = _load();
+        _monthly = _loadMonthly();
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -122,6 +150,16 @@ class _PharmacyReportsScreenState extends State<PharmacyReportsScreen> {
               if (r.customers != null) _CustomersCard(c: r.customers!),
               if (r.cashiers != null) _CashierCard(c: r.cashiers!),
               if (r.staff != null) _StaffCard(s: r.staff!),
+              FutureBuilder<Map<String, dynamic>?>(
+                future: _monthly,
+                builder: (context, m) => m.data == null
+                    ? const SizedBox.shrink()
+                    : _MonthlyCard(
+                        m: m.data!,
+                        month: _month,
+                        onStep: _stepMonth,
+                      ),
+              ),
               if (r.isEmpty)
                 const EmptyState(
                   icon: Icons.lock_outline,
@@ -160,6 +198,88 @@ class _Reports {
       customers == null &&
       cashiers == null &&
       staff == null;
+}
+
+/// Move [month] by [months], stopping at the month [now] falls in.
+///
+/// The API would happily zero-fill a month that has not happened, so the
+/// forward edge is held here. Returns [month] unchanged when the step would
+/// cross it, which is what tells the caller not to refetch.
+DateTime stepMonth(DateTime month, int months, DateTime now) {
+  final next = DateTime(month.year, month.month + months);
+  final current = DateTime(now.year, now.month);
+  return next.isAfter(current) ? DateTime(month.year, month.month) : next;
+}
+
+/// One named month, day by day — GET /api/reports/monthly/.
+///
+/// The other cards answer a period ("this quarter"); this one answers a month
+/// by name, so it carries its own arrows. The series is zero-filled by the
+/// server, so every day of the month is a point whether or not it sold.
+class _MonthlyCard extends StatelessWidget {
+  final Map<String, dynamic> m;
+  final DateTime month;
+  final void Function(int months) onStep;
+  const _MonthlyCard(
+      {required this.m, required this.month, required this.onStep});
+
+  static const _names = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final daily = ((m['daily'] ?? []) as List).cast<Map<String, dynamic>>();
+    final now = DateTime.now();
+    final atCurrent = month.year == now.year && month.month == now.month;
+    return PanelCard(
+      title: 'Month',
+      accent: EnhancedTheme.accentPurple,
+      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+        IconButton(
+          icon: const Icon(Icons.chevron_left),
+          tooltip: 'Previous month',
+          onPressed: () => onStep(-1),
+        ),
+        Text('${_names[month.month - 1]} ${month.year}',
+            style: TextStyle(
+                color: context.labelColor, fontWeight: FontWeight.w700)),
+        IconButton(
+          icon: const Icon(Icons.chevron_right),
+          tooltip: 'Next month',
+          onPressed: atCurrent ? null : () => onStep(1),
+        ),
+      ]),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        KpiRow(tiles: [
+          KpiTile(
+              icon: Icons.payments_outlined,
+              label: 'Revenue',
+              value: money(m['total_revenue']),
+              color: EnhancedTheme.accentPurple),
+          KpiTile(
+              icon: Icons.receipt_long_outlined,
+              label: 'Sales',
+              value: units(m['total_sales']),
+              color: EnhancedTheme.accentCyan),
+        ]),
+        if (daily.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text('Daily revenue',
+              style: TextStyle(
+                  color: context.labelColor, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 4),
+          Sparkline(
+            values: [
+              for (final d in daily) num.tryParse('${d['revenue']}') ?? 0
+            ],
+            color: EnhancedTheme.accentPurple,
+          ),
+        ],
+      ]),
+    );
+  }
 }
 
 class _SalesCard extends StatelessWidget {
