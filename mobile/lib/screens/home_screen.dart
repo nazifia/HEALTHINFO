@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../main.dart';
 import '../pharmacy.dart';
@@ -72,34 +73,70 @@ class _Section {
   const _Section(this.label, this.icon, this.page);
 }
 
-/// Catalog tabs (data-driven) followed by the standalone feature screens.
-/// The super-admin platform dashboard is prepended at runtime for super_admins
-/// only (see [_HomeScreenState._sections]).
-final List<_Section> _baseSections = [
-  const _Section('Dashboard', Icons.insights_outlined, DashboardScreen()),
-  for (final r in catalogResources)
-    _Section(r.label, r.icon, CatalogListScreen(resource: r)),
-  const _Section('Interactions', Icons.warning_amber_outlined, InteractionsScreen()),
-  const _Section('Interaction checker', Icons.rule, InteractionCheckScreen()),
-  const _Section('Differential', Icons.healing_outlined, DifferentialScreen()),
-  const _Section('Semantic search', Icons.travel_explore, SemanticSearchScreen()),
-  const _Section('Patients', Icons.people_outline, PatientsScreen()),
-  const _Section('Case reports', Icons.assignment_outlined, CasesScreen()),
-  const _Section('Adverse reactions', Icons.medication_liquid_outlined, AdrScreen()),
-  const _Section('Lab results', Icons.science_outlined, LabResultsScreen()),
-  const _Section('Immunizations', Icons.vaccines_outlined, ImmunizationsScreen()),
-  const _Section('Vital events', Icons.child_friendly_outlined, VitalEventsScreen()),
-  const _Section('Pharmacy stock', Icons.inventory_2_outlined, StockReportsScreen()),
-  const _Section('CHW reports', Icons.groups_outlined, ChwReportsScreen()),
-  const _Section('Facility KPIs', Icons.local_hospital_outlined, FacilityMetricsScreen()),
-  const _Section('Insurance claims', Icons.receipt_long_outlined, InsuranceClaimsScreen()),
-  const _Section('Appointments', Icons.event_outlined, AppointmentsScreen()),
-  const _Section('Analytics', Icons.query_stats_outlined, AnalyticsScreen()),
-  const _Section('IDSR report', Icons.assignment_outlined, IdsrScreen()),
-  const _Section('Notifiable cases', Icons.flag_outlined, NotifiableScreen()),
-  const _Section('Ask AI', Icons.auto_awesome, AskScreen()),
-  const _Section('Profile', Icons.person_outline, ProfileScreen()),
-];
+/// A collapsible block of sections in the drawer. `label` is the stable key —
+/// it names the stored collapse state and picks the translation — so it must
+/// stay unique and stay in English even when the drawer is not.
+class _Group {
+  final String label;
+  final List<_Section> sections;
+  const _Group(this.label, this.sections);
+}
+
+/// Group headers are the only nav text that is translated; the section labels
+/// below them are still English everywhere.
+String _groupLabel(AppLocalizations t, String key) => switch (key) {
+      'Catalog' => t.navCatalog,
+      'Clinical records' => t.navClinicalRecords,
+      'Tools' => t.navTools,
+      'Reports' => t.navReports,
+      'Pharmacy' => t.navPharmacy,
+      'Administration' => t.navAdministration,
+      'Account' => t.navAccount,
+      _ => key,
+    };
+
+/// Always visible above the groups — the drawer's "home".
+const _dashboard = _Section('Dashboard', Icons.insights_outlined, DashboardScreen());
+
+final _catalogGroup = _Group('Catalog', [
+  for (final r in catalogResources) _Section(r.label, r.icon, CatalogListScreen(resource: r)),
+]);
+
+const _recordsGroup = _Group('Clinical records', [
+  _Section('Patients', Icons.people_outline, PatientsScreen()),
+  _Section('Case reports', Icons.assignment_outlined, CasesScreen()),
+  _Section('Adverse reactions', Icons.medication_liquid_outlined, AdrScreen()),
+  _Section('Lab results', Icons.science_outlined, LabResultsScreen()),
+  _Section('Immunizations', Icons.vaccines_outlined, ImmunizationsScreen()),
+  _Section('Vital events', Icons.child_friendly_outlined, VitalEventsScreen()),
+  _Section('Appointments', Icons.event_outlined, AppointmentsScreen()),
+]);
+
+const _toolsGroup = _Group('Tools', [
+  _Section('Interactions', Icons.warning_amber_outlined, InteractionsScreen()),
+  _Section('Interaction checker', Icons.rule, InteractionCheckScreen()),
+  _Section('Differential', Icons.healing_outlined, DifferentialScreen()),
+  _Section('Semantic search', Icons.travel_explore, SemanticSearchScreen()),
+  _Section('Ask AI', Icons.auto_awesome, AskScreen()),
+]);
+
+const _reportsGroup = _Group('Reports', [
+  _Section('Pharmacy stock', Icons.inventory_2_outlined, StockReportsScreen()),
+  _Section('CHW reports', Icons.groups_outlined, ChwReportsScreen()),
+  _Section('Facility KPIs', Icons.local_hospital_outlined, FacilityMetricsScreen()),
+  _Section('Insurance claims', Icons.receipt_long_outlined, InsuranceClaimsScreen()),
+  _Section('IDSR report', Icons.assignment_outlined, IdsrScreen()),
+  _Section('Notifiable cases', Icons.flag_outlined, NotifiableScreen()),
+  _Section('Analytics', Icons.query_stats_outlined, AnalyticsScreen()),
+]);
+
+const _accountGroup = _Group('Account', [
+  _Section('Profile', Icons.person_outline, ProfileScreen()),
+]);
+
+/// The groups every signed-in user sees, in drawer order.
+List<_Group> get _baseGroups =>
+    [_catalogGroup, _recordsGroup, _toolsGroup, _reportsGroup, _accountGroup];
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -109,11 +146,27 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
+  static const _closedKey = 'navClosedGroups';
+
   int _index = 0;
 
-  // Super-admins get the cross-tenant platform dashboard prepended, tenant
-  // admins the patient access log; everyone else sees just the base sections.
-  List<_Section> _sections = _baseSections;
+  // Super-admins get the cross-tenant platform block, tenant admins the patient
+  // access log, pharmacy staff the pharmacy block; everyone gets the base groups.
+  List<_Group> _groups = _baseGroups;
+
+  // Flattened view of [_groups] plus the dashboard at index 0. The drawer, the
+  // app bar title and the IndexedStack all index into this.
+  List<_Section> _flat = _flatten(_baseGroups);
+
+  // Group labels the user collapsed, restored from disk on start.
+  final Set<String> _closed = {};
+
+  // Bumped by expand/collapse-all. It is part of every ExpansionTile key, so a
+  // bump gives them fresh state that honours _closed again.
+  int _navEpoch = 0;
+
+  static List<_Section> _flatten(List<_Group> gs) =>
+      [_dashboard, for (final g in gs) ...g.sections];
 
   // Governance view: who read patient data. Admin-only both here and in the API.
   static const _accessLogSection = _Section(
@@ -121,9 +174,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   // The pharmacy module. Shown to pharmacy staff only — the API gates it the
   // same way, so hiding the sections is convenience, not the control.
-  // "Stock items" is this pharmacy's own shelf; "Pharmacy stock" further down
+  // "Stock items" is this pharmacy's own shelf; "Pharmacy stock" in Reports
   // is the de-identified snapshot central surveillance reads.
-  static const _pharmacySections = [
+  static const _pharmacyGroup = _Group('Pharmacy', [
     _Section('Pharmacy counter', Icons.local_pharmacy_outlined,
         PharmacyCounterScreen()),
     _Section('Prescriptions', Icons.description_outlined,
@@ -155,53 +208,81 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _Section('Branches', Icons.storefront_outlined, BranchesScreen()),
     _Section('Cashiers', Icons.badge_outlined, CashiersScreen()),
     _Section('Staff commissions', Icons.percent_outlined, CommissionsScreen()),
-  ];
+  ]);
+
+  // Central-only cross-tenant views. Hidden from non-super-admins.
+  static const _platformGroup = _Group('Administration', [
+    _Section('Platform', Icons.admin_panel_settings_outlined,
+        SuperAdminDashboardScreen()),
+    _Section('Tenants', Icons.apartment_outlined, TenantManagementScreen()),
+    _Section('Users', Icons.manage_accounts_outlined, UserManagementScreen()),
+    _accessLogSection,
+    _Section('Collated reports', Icons.bar_chart_outlined,
+        CollatedReportsScreen()),
+    _Section('ADR collation', Icons.vaccines_outlined, PlatformAdrScreen()),
+    _Section('Public health', Icons.public_outlined, PublicHealthScreen()),
+    _Section('Report sources', Icons.inventory_2_outlined,
+        ReportSourcesScreen()),
+    _Section('Surveillance', Icons.notifications_active_outlined,
+        SurveillanceScreen()),
+  ]);
 
   @override
   void initState() {
     super.initState();
+    _loadClosed();
     _loadRole();
+  }
+
+  Future<void> _loadClosed() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getStringList(_closedKey);
+    if (!mounted || saved == null) return;
+    setState(() => _closed
+      ..clear()
+      ..addAll(saved));
+  }
+
+  Future<void> _saveClosed() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_closedKey, _closed.toList());
+  }
+
+  void _toggleAll() {
+    final anyOpen = _groups.any((g) => !_closed.contains(g.label));
+    setState(() {
+      _closed
+        ..clear()
+        ..addAll(anyOpen ? _groups.map((g) => g.label) : const <String>[]);
+      _navEpoch++;
+    });
+    _saveClosed();
+  }
+
+  void _setGroups(List<_Group> gs) {
+    setState(() {
+      _groups = gs;
+      _flat = _flatten(gs);
+    });
   }
 
   Future<void> _loadRole() async {
     final role = await api.myRole();
     if (!mounted) return;
-    final pharmacy = isPharmacyStaff(role) ? _pharmacySections : <_Section>[];
+    final pharmacy = isPharmacyStaff(role) ? [_pharmacyGroup] : <_Group>[];
+    if (role == 'super_admin') {
+      _setGroups([_platformGroup, ...pharmacy, ..._baseGroups]);
+      return;
+    }
     if (role == 'tenant_admin') {
-      setState(() =>
-          _sections = [_accessLogSection, ...pharmacy, ..._baseSections]);
-      return;
-    }
-    if (role != 'super_admin') {
-      if (pharmacy.isNotEmpty) {
-        setState(() => _sections = [...pharmacy, ..._baseSections]);
-      }
-      return;
-    }
-    setState(() {
-      _sections = [
-        const _Section('Platform', Icons.admin_panel_settings_outlined,
-            SuperAdminDashboardScreen()),
-        const _Section('Tenants', Icons.apartment_outlined,
-            TenantManagementScreen()),
-        const _Section('Users', Icons.manage_accounts_outlined,
-            UserManagementScreen()),
-        _accessLogSection,
-        // Central-only cross-tenant collation views. Hidden from non-super-admins.
-        const _Section('Collated reports', Icons.bar_chart_outlined,
-            CollatedReportsScreen()),
-        const _Section('ADR collation', Icons.vaccines_outlined,
-            PlatformAdrScreen()),
-        const _Section('Public health', Icons.public_outlined,
-            PublicHealthScreen()),
-        const _Section('Report sources', Icons.inventory_2_outlined,
-            ReportSourcesScreen()),
-        const _Section('Surveillance', Icons.notifications_active_outlined,
-            SurveillanceScreen()),
+      _setGroups([
+        const _Group('Administration', [_accessLogSection]),
         ...pharmacy,
-        ..._baseSections,
-      ];
-    });
+        ..._baseGroups,
+      ]);
+      return;
+    }
+    if (pharmacy.isNotEmpty) _setGroups([...pharmacy, ..._baseGroups]);
   }
 
   Future<void> _logout() async {
@@ -213,73 +294,162 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   // Drawer/rail nav, reused for both the slide-out (narrow) and the always-on
-  // pane (wide). `embedded` drops the brand header gap so it sits under the bar.
-  Widget _nav(int catalogCount, {required bool embedded}) {
-    return NavigationDrawer(
-      backgroundColor: context.scaffoldBg,
-      selectedIndex: _index,
-      onDestinationSelected: (i) {
-        setState(() => _index = i);
-        if (!embedded) Navigator.of(context).pop(); // close slide-out drawer
-      },
-      children: [
-        Container(
-          margin: const EdgeInsets.fromLTRB(12, 16, 12, 8),
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [EnhancedTheme.primaryTeal, EnhancedTheme.accentCyan],
-            ),
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: EnhancedTheme.primaryTeal.withValues(alpha: 0.3),
-                blurRadius: 18,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: const Row(
-            children: [
-              Icon(Icons.health_and_safety, color: Colors.white, size: 36),
-              SizedBox(width: 12),
-              Flexible(
-                child: Text('Health Info',
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                    )),
-              ),
-            ],
+  // pane (wide). `embedded` keeps the slide-out from popping the route twice.
+  Widget _nav({required bool embedded}) {
+    // Index 0 is the dashboard; each group's tiles follow in flattened order.
+    var i = 1;
+    final tiles = <Widget>[];
+    for (final g in _groups) {
+      final first = i;
+      final children = [
+        for (final s in g.sections) _navTile(s, i++, embedded: embedded),
+      ];
+      tiles.add(_navGroupTile(g, children, first, i, embedded: embedded));
+    }
+    return Material(
+      color: context.scaffoldBg,
+      child: ListView(
+        padding: const EdgeInsets.only(bottom: 24),
+        children: [
+          _brandHeader(),
+          _navTile(_dashboard, 0, embedded: embedded),
+          _toggleAllButton(),
+          ...tiles,
+        ],
+      ),
+    );
+  }
+
+  Widget _toggleAllButton() {
+    final t = AppLocalizations.of(context);
+    final anyOpen = _groups.any((g) => !_closed.contains(g.label));
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Padding(
+        padding: const EdgeInsets.only(right: 14, top: 2),
+        child: TextButton.icon(
+          onPressed: _toggleAll,
+          icon: Icon(anyOpen ? Icons.unfold_less : Icons.unfold_more, size: 16),
+          label: Text(anyOpen ? t.navCollapseAll : t.navExpandAll,
+              style: const TextStyle(fontSize: 12)),
+          style: TextButton.styleFrom(
+            foregroundColor: context.subLabelColor,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            minimumSize: const Size(0, 28),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
         ),
-        for (var i = 0; i < _sections.length; i++) ...[
-          if (i == catalogCount)
-            const Padding(
-              padding: EdgeInsets.fromLTRB(28, 12, 28, 4),
-              child: Divider(),
-            ),
-          NavigationDrawerDestination(
-            icon: Icon(_sections[i].icon),
-            label: Text(_sections[i].label),
+      ),
+    );
+  }
+
+  Widget _brandHeader() => Container(
+        margin: const EdgeInsets.fromLTRB(12, 16, 12, 12),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [EnhancedTheme.primaryTeal, EnhancedTheme.accentCyan],
           ),
-        ],
-      ],
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: EnhancedTheme.primaryTeal.withValues(alpha: 0.3),
+              blurRadius: 18,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.health_and_safety, color: Colors.white, size: 36),
+            SizedBox(width: 12),
+            Flexible(
+              child: Text('Health Info',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                  )),
+            ),
+          ],
+        ),
+      );
+
+  // One collapsible block. Opens on its own if it holds the current section, so
+  // a restored collapse never hides where the user is.
+  Widget _navGroupTile(_Group g, List<Widget> children, int first, int endExclusive,
+      {required bool embedded}) {
+    // After an explicit collapse-all, honour it — even for the group the user
+    // is standing in. Before that, never hide the current section.
+    final holdsSelection =
+        _navEpoch == 0 && _index >= first && _index < endExclusive;
+    return ExpansionTile(
+      key: ValueKey('${g.label}:$_navEpoch'),
+      initiallyExpanded: holdsSelection || !_closed.contains(g.label),
+      onExpansionChanged: (open) {
+        open ? _closed.remove(g.label) : _closed.add(g.label);
+        _saveClosed();
+      },
+      tilePadding: const EdgeInsets.symmetric(horizontal: 20),
+      childrenPadding: const EdgeInsets.only(bottom: 4),
+      shape: const Border(),
+      collapsedShape: const Border(),
+      dense: true,
+      title: Text(
+        _groupLabel(AppLocalizations.of(context), g.label).toUpperCase(),
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.1,
+          color: context.subLabelColor,
+        ),
+      ),
+      children: children,
+    );
+  }
+
+  // One destination. Rounded, inset, tinted when selected — matches the web nav.
+  Widget _navTile(_Section s, int i, {required bool embedded}) {
+    // The drawer numbers its tiles by hand; _flat must agree or taps open the
+    // wrong page. Debug-only check, fires the moment the two orders drift.
+    assert(identical(_flat[i], s), 'nav index $i does not match _flat');
+    final selected = _index == i;
+    final accent = Theme.of(context).colorScheme.primary;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 1),
+      child: ListTile(
+        dense: true,
+        visualDensity: VisualDensity.compact,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        selected: selected,
+        selectedTileColor: accent.withValues(alpha: 0.12),
+        selectedColor: accent,
+        leading: Icon(s.icon, size: 20),
+        minLeadingWidth: 20,
+        title: Text(
+          s.label,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+          ),
+        ),
+        onTap: () {
+          setState(() => _index = i);
+          if (!embedded) Navigator.of(context).pop(); // close slide-out drawer
+        },
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final section = _sections[_index];
+    final section = _flat[_index];
     final isDark = context.isDark;
-    // Divider sits after the catalog block; shift it by however many super-admin
-    // sections got prepended ahead of the base list.
-    final catalogCount =
-        catalogResources.length + (_sections.length - _baseSections.length);
     // ponytail: single breakpoint. Tablet/desktop get an always-on nav pane +
     // width-capped content; phones keep the slide-out drawer. Tune 900 if needed.
     final wide = MediaQuery.of(context).size.width >= 900;
@@ -311,7 +481,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           const SizedBox(width: 4),
         ],
       ),
-      drawer: wide ? null : SizedBox(width: 280, child: _nav(catalogCount, embedded: false)),
+      drawer: wide ? null : Drawer(width: 288, child: _nav(embedded: false)),
       body: Stack(
         children: [
           Positioned.fill(child: DecoratedBox(decoration: context.bgGradient)),
@@ -319,7 +489,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             child: Row(
               children: [
                 if (wide) ...[
-                  SizedBox(width: 300, child: _nav(catalogCount, embedded: true)),
+                  SizedBox(width: 300, child: _nav(embedded: true)),
                   const VerticalDivider(width: 1),
                 ],
                 Expanded(
@@ -338,7 +508,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget _content() {
     final body = IndexedStack(
       index: _index,
-      children: [for (final s in _sections) s.page],
+      children: [for (final s in _flat) s.page],
     );
     return Center(
       child: ConstrainedBox(

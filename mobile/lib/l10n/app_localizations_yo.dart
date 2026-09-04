@@ -111,4 +111,31 @@ class AppLocalizationsYo extends AppLocalizations {
   @override
   String get medicalDisclaimer =>
       'For information only. Not a substitute for professional medical advice.';
+
+  @override
+  String get navCatalog => 'Àkójọpọ̀';
+
+  @override
+  String get navClinicalRecords => 'Àkọsílẹ̀ ìwòsàn';
+
+  @override
+  String get navTools => 'Àwọn irinsẹ́';
+
+  @override
+  String get navReports => 'Àwọn ìròyìn';
+
+  @override
+  String get navPharmacy => 'Ilé ìtajà oògùn';
+
+  @override
+  String get navAdministration => 'Ìṣàkóso';
+
+  @override
+  String get navAccount => 'Àkántì';
+
+  @override
+  String get navExpandAll => 'Ṣí gbogbo rẹ̀';
+
+  @override
+  String get navCollapseAll => 'Pa gbogbo rẹ̀';
 }

@@ -111,4 +111,31 @@ class AppLocalizationsHa extends AppLocalizations {
   @override
   String get medicalDisclaimer =>
       'For information only. Not a substitute for professional medical advice.';
+
+  @override
+  String get navCatalog => 'Jerin bayanai';
+
+  @override
+  String get navClinicalRecords => 'Bayanan asibiti';
+
+  @override
+  String get navTools => 'Kayan aiki';
+
+  @override
+  String get navReports => 'Rahotanni';
+
+  @override
+  String get navPharmacy => 'Kantin magani';
+
+  @override
+  String get navAdministration => 'Gudanarwa';
+
+  @override
+  String get navAccount => 'Asusu';
+
+  @override
+  String get navExpandAll => 'Buɗe duka';
+
+  @override
+  String get navCollapseAll => 'Rufe duka';
 }

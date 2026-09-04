@@ -43,5 +43,16 @@
   "@interactionsFound": { "placeholders": { "count": { "type": "int" } } },
   "noKnownInteractions": "No known interactions",
 
-  "medicalDisclaimer": "For information only. Not a substitute for professional medical advice."
+  "medicalDisclaimer": "For information only. Not a substitute for professional medical advice.",
+
+  "@_nav": { "description": "Collapsible drawer group headers" },
+  "navCatalog": "Catalog",
+  "navClinicalRecords": "Clinical records",
+  "navTools": "Tools",
+  "navReports": "Reports",
+  "navPharmacy": "Pharmacy",
+  "navAdministration": "Administration",
+  "navAccount": "Account",
+  "navExpandAll": "Expand all",
+  "navCollapseAll": "Collapse all"
 }

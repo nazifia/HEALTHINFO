@@ -293,6 +293,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'For information only. Not a substitute for professional medical advice.'**
   String get medicalDisclaimer;
+
+  /// No description provided for @navCatalog.
+  ///
+  /// In en, this message translates to:
+  /// **'Catalog'**
+  String get navCatalog;
+
+  /// No description provided for @navClinicalRecords.
+  ///
+  /// In en, this message translates to:
+  /// **'Clinical records'**
+  String get navClinicalRecords;
+
+  /// No description provided for @navTools.
+  ///
+  /// In en, this message translates to:
+  /// **'Tools'**
+  String get navTools;
+
+  /// No description provided for @navReports.
+  ///
+  /// In en, this message translates to:
+  /// **'Reports'**
+  String get navReports;
+
+  /// No description provided for @navPharmacy.
+  ///
+  /// In en, this message translates to:
+  /// **'Pharmacy'**
+  String get navPharmacy;
+
+  /// No description provided for @navAdministration.
+  ///
+  /// In en, this message translates to:
+  /// **'Administration'**
+  String get navAdministration;
+
+  /// No description provided for @navAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Account'**
+  String get navAccount;
+
+  /// No description provided for @navExpandAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Expand all'**
+  String get navExpandAll;
+
+  /// No description provided for @navCollapseAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Collapse all'**
+  String get navCollapseAll;
 }
 
 class _AppLocalizationsDelegate
