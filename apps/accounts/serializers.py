@@ -2,13 +2,41 @@ import re
 
 from django.contrib.auth.password_validation import validate_password
 from django.db import transaction
+from django.db.models import Q
 from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+from apps.tenants.current import get_current_tenant
 from apps.tenants.models import Jurisdiction, Tenant
 
 from .models import LICENSED_ROLES, Role, User, normalize_license
+
+
+def visible_users(tenant):
+    """Users a request bound to `tenant` is allowed to resolve.
+
+    User is not a TenantOwnedModel — its manager is unscoped — so every lookup
+    that turns caller-supplied input into a user has to narrow it by hand or
+    one tenant reaches another's staff. NULL-tenant rows (super-admins) stay
+    visible everywhere; no tenant bound at all is the platform/CLI path and
+    scopes to nothing.
+    """
+    qs = User.objects.all()
+    if tenant is None:
+        return qs
+    return qs.filter(Q(tenant=tenant) | Q(tenant__isnull=True))
+
+
+class TenantUserField(serializers.PrimaryKeyRelatedField):
+    """A user primary key that only accepts members of the request's tenant.
+
+    Use for any writable FK to User: the auto-generated field would take any
+    id in the table, letting a tenant bind another tenant's staff to its rows.
+    """
+
+    def get_queryset(self):
+        return visible_users(get_current_tenant())
 
 
 class LoginSerializer(TokenObtainPairSerializer):
@@ -38,9 +66,13 @@ class LoginSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         license_number = normalize_license(attrs.pop("license_number", None))
         phone = (attrs.get(self.username_field) or "").strip()
+        # Sign-in resolves only users of the tenant being signed in to, so one
+        # organization's credentials never mint a token on another's host.
+        tenant = getattr(self.context.get("request"), "tenant", None)
+        users = visible_users(tenant)
 
         if license_number:
-            user = User.objects.filter(license_number=license_number).first()
+            user = users.filter(license_number=license_number).first()
             if user is None:
                 raise AuthenticationFailed(self._failed, "no_active_account")
             # Hand the parent the phone it expects; the password is still
@@ -52,13 +84,13 @@ class LoginSerializer(TokenObtainPairSerializer):
             # refused rather than guessed; an admin renumbers one of the pair.
             # ponytail: suffix scan; index phone_suffix if pharmacist rows grow.
             matches = list(
-                User.objects.filter(role=Role.PHARMACIST, phone__endswith=phone)[:2]
+                users.filter(role=Role.PHARMACIST, phone__endswith=phone)[:2]
             )
             if len(matches) != 1:
                 raise AuthenticationFailed(self._failed, "no_active_account")
             attrs[self.username_field] = matches[0].phone
         elif phone:
-            holder = User.objects.filter(phone=phone).first()
+            holder = users.filter(phone=phone).first()
             # A licensed user whose licence is on file signs in with it and
             # nothing else. One with no licence yet (a row that predates this
             # field) keeps phone login until an admin fills it in, so nobody is
@@ -73,7 +105,17 @@ class LoginSerializer(TokenObtainPairSerializer):
             raise serializers.ValidationError(
                 {"phone": "Provide a phone number or a license number."}
             )
-        return super().validate(attrs)
+        data = super().validate(attrs)
+        # authenticate() searches the whole user table; the token is only valid
+        # for the tenant the user actually belongs to.
+        if tenant is not None and self.user.tenant_id not in (tenant.id, None):
+            raise AuthenticationFailed(self._failed, "no_active_account")
+        # A client on a shared host can't know which organization a user belongs
+        # to until they sign in, so the token answer names it: the client sends
+        # it straight back as X-Tenant-ID. Empty for super-admins (no tenant).
+        data["tenant"] = self.user.tenant.slug if self.user.tenant_id else ""
+        data["role"] = self.user.role
+        return data
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -116,7 +158,10 @@ class UserSerializer(serializers.ModelSerializer):
             # other out. Refuse the second one here, where an admin can still
             # pick a different number.
             phone = attrs.get("phone", getattr(self.instance, "phone", "")) or ""
-            clashes = User.objects.filter(
+            # Only inside the tenant they sign in to: two pharmacists in
+            # different organizations share a suffix without ever colliding.
+            tenant = attrs.get("tenant", getattr(self.instance, "tenant", None))
+            clashes = visible_users(tenant).filter(
                 role=Role.PHARMACIST, phone__endswith=phone[-6:]
             )
             if self.instance is not None:
@@ -164,6 +209,16 @@ class RegisterSerializer(serializers.ModelSerializer):
     def validate_username(self, value):
         return value.strip() or None
 
+    def validate(self, attrs):
+        # A user with no tenant belongs to no organization: they'd fail every
+        # tenant-scoped permission and still be visible from every tenant.
+        # The client picks one from /api/auth/register/organizations/.
+        if getattr(self.context["request"], "tenant", None) is None:
+            raise serializers.ValidationError(
+                {"tenant": "Choose the organization you are joining."}
+            )
+        return attrs
+
     def create(self, validated_data):
         password = validated_data.pop("password")
         # New users are bound to the request tenant; role is always public.
@@ -183,6 +238,9 @@ class OnboardingSerializer(serializers.Serializer):
 
     org_name = serializers.CharField(max_length=200)
     org_slug = serializers.SlugField(max_length=50)
+    org_kind = serializers.ChoiceField(
+        choices=Tenant.Kind.choices, default=Tenant.Kind.PHARMACY
+    )
     org_address = serializers.CharField(required=False, allow_blank=True)
     org_contact = serializers.CharField(max_length=120, required=False, allow_blank=True)
     # The tenant's own jurisdiction (usually its local gov). Optional so signup
@@ -209,6 +267,7 @@ class OnboardingSerializer(serializers.Serializer):
         tenant = Tenant.objects.create(
             name=validated_data["org_name"],
             slug=validated_data["org_slug"],
+            kind=validated_data["org_kind"],
             address=validated_data.get("org_address", ""),
             contact=validated_data.get("org_contact", ""),
             jurisdiction=validated_data.get("jurisdiction"),

@@ -20,10 +20,23 @@ class TenantViewSet(viewsets.ModelViewSet):
 
     serializer_class = TenantSerializer
     permission_classes = [IsSuperAdmin]
-    filterset_fields = ("subscription_status", "status")
+    filterset_fields = ("subscription_status", "status", "kind")
 
     def get_queryset(self):
         return Tenant.objects.annotate(user_count=Count("users")).order_by("name")
+
+    def _by_kind(self, request, kind):
+        """Kind-scoped list. Same shape as /tenants/ so paging and filters hold."""
+        page = self.paginate_queryset(self.filter_queryset(self.get_queryset()).filter(kind=kind))
+        return self.get_paginated_response(self.get_serializer(page, many=True).data)
+
+    @action(detail=False, methods=["get"])
+    def hospitals(self, request):
+        return self._by_kind(request, Tenant.Kind.HOSPITAL)
+
+    @action(detail=False, methods=["get"])
+    def pharmacies(self, request):
+        return self._by_kind(request, Tenant.Kind.PHARMACY)
 
     def _set_subscription(self, request, pk, value):
         tenant = self.get_object()

@@ -11,6 +11,7 @@ from apps.accounts.permissions import (
     IsTenantMember,
     ReadOnlyOrReportRole,
 )
+from apps.tenants.models import Tenant
 
 from .export import case_reports_csv, csv_response
 from .idsr import SUMMARY_COLUMNS, platform_idsr_report, tenant_idsr_report
@@ -272,7 +273,13 @@ class AppointmentViewSet(_ReportViewSet):
 
 
 class PrescriptionViewSet(_ReportViewSet):
-    """Staff write/list drug orders and mark them dispensed, tenant-scoped."""
+    """Staff write/list drug orders and mark them dispensed, tenant-scoped.
+
+    A pharmacy tenant sees only the orders sent for a patient — a script with no
+    patient on it is the prescriber's own working note, not something to dispense
+    from. Hospital tenants see every order they wrote. Tenant scoping still runs
+    underneath: this narrows a tenant's own rows, it never widens them.
+    """
 
     model = Prescription
     serializer_class = PrescriptionSerializer
@@ -281,6 +288,13 @@ class PrescriptionViewSet(_ReportViewSet):
     # payout lists off the same /api/prescriptions/ prefix, and this detail
     # route is matched first — a catch-all pk would swallow them as ids.
     lookup_value_regex = r"[0-9]+"
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        tenant = getattr(self.request, "tenant", None)
+        if tenant is not None and tenant.kind == Tenant.Kind.PHARMACY:
+            qs = qs.filter(patient__isnull=False)
+        return qs
 
 
 class _StatsView(APIView):

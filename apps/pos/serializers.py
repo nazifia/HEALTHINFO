@@ -1,7 +1,9 @@
 from decimal import Decimal
 
 from rest_framework import serializers
+from rest_framework.validators import UniqueValidator
 
+from apps.accounts.serializers import TenantUserField
 from apps.inventory.models import OutOfStock, StockItem, Supplier
 from apps.inventory.serializers import StockBatchSerializer  # noqa: F401
 
@@ -26,6 +28,11 @@ ZERO = Decimal("0.00")
 
 
 class CashierSerializer(serializers.ModelSerializer):
+    # OneToOne in the DB: keep the uniqueness check the auto-generated field
+    # carried, on every row (all_objects) since the constraint is global.
+    user = TenantUserField(
+        validators=[UniqueValidator(queryset=Cashier.all_objects.all())]
+    )
     user_name = serializers.CharField(source="user.username", read_only=True)
 
     class Meta:

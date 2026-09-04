@@ -91,3 +91,59 @@ def test_stats_rollup_and_endpoint(db_clean):
     assert _client(doctor, a).get(
         "/api/analytics/platform/prescriptions/"
     ).status_code == 403
+
+
+def test_pharmacy_tenant_sees_only_patient_linked_orders(db_clean):
+    """A pharmacy tenant's list carries only the orders sent for a patient."""
+    pharm = Tenant.objects.create(name="Rx", slug="rx-only",
+                                  kind=Tenant.Kind.PHARMACY)
+    hosp = Tenant.objects.create(name="Gen", slug="gen-hosp",
+                                 kind=Tenant.Kind.HOSPITAL)
+    drug = Medication.objects.create(generic_name="Amoxicillin")
+
+    for tenant in (pharm, hosp):
+        patient = Patient.objects.create(tenant=tenant, first_name="Ada",
+                                         last_name="Obi")
+        Prescription.all_objects.create(tenant=tenant, patient=patient,
+                                        medication=drug, dose="500 mg")
+        Prescription.all_objects.create(tenant=tenant, medication=drug,
+                                        dose="250 mg")  # no patient
+
+    def _slugs(tenant):
+        user = User.objects.create_user(
+            phone=f"0803000{tenant.id:04d}", password="x", tenant=tenant,
+            role=Role.PHARMACIST,
+        )
+        body = _client(user, tenant).get("/api/prescriptions/").json()
+        return [r["dose"] for r in (body["results"] if isinstance(body, dict) else body)]
+
+    assert _slugs(pharm) == ["500 mg"]          # the unassigned order is hidden
+    assert sorted(_slugs(hosp)) == ["250 mg", "500 mg"]
+
+
+@pytest.mark.parametrize("role", [Role.NURSE, Role.MIDWIFE, Role.CHEW])
+def test_nursing_cadres_write_orders_too(db_clean, role):
+    """Nurses, midwives and CHEWs prescribe: in a task-shifted service they are
+    often the only clinician at the facility, so the order is theirs to write."""
+    a = Tenant.objects.create(name="A", slug="a")
+    user = User.objects.create_user(phone="08030000201", password="x",
+                                    tenant=a, role=role,
+                                    license_number=f"LIC-{role}")
+    drug = Medication.objects.create(generic_name="Artemether")
+
+    written = _client(user, a).post("/api/prescriptions/", {
+        "medication": drug.id, "dose": "500 mg", "frequency": "twice daily",
+        "duration_days": 3,
+    }, format="json")
+    assert written.status_code == 201, written.content
+    assert Prescription.all_objects.get(pk=written.json()["id"]).reporter_id == user.id
+
+
+def test_public_role_cannot_write_orders(db_clean):
+    a = Tenant.objects.create(name="A", slug="a")
+    user = User.objects.create_user(phone="08030000202", password="x",
+                                    tenant=a, role=Role.PUBLIC)
+    drug = Medication.objects.create(generic_name="Artemether")
+    r = _client(user, a).post("/api/prescriptions/",
+                              {"medication": drug.id}, format="json")
+    assert r.status_code == 403, r.content

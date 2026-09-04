@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../main.dart';
+import '../config.dart';
 import '../l10n/app_localizations.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
@@ -26,6 +27,24 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscure = true;
   String? _error;
 
+  // Signup only: which organization the new account joins. Nobody has a tenant
+  // to detect before they have an account, so they pick one. Signing in needs
+  // none — the token names the user's own organization.
+  List<Map<String, dynamic>> _orgs = [];
+  String? _orgSlug;
+
+  Future<void> _loadOrgs() async {
+    if (_orgs.isNotEmpty) return;
+    try {
+      final rows = await api.organizations();
+      if (!mounted) return;
+      setState(() {
+        _orgs = rows;
+        _orgSlug ??= rows.isEmpty ? null : rows.first['slug'] as String?;
+      });
+    } catch (_) {/* offline: the register button reports the failure */}
+  }
+
   @override
   void dispose() {
     _phone.dispose();
@@ -42,6 +61,13 @@ class _LoginScreenState extends State<LoginScreen> {
     });
     try {
       if (_registerMode) {
+        if (_orgSlug == null) {
+          setState(() => _error = 'Choose the organization you are joining.');
+          showError(context, _error!);
+          return;
+        }
+        // The register call is tenant-scoped: bind the chosen one first.
+        await setTenant(_orgSlug!);
         await api.register(_phone.text.trim(), _email.text.trim(), _pass.text,
             username: _username.text.trim());
       }
@@ -143,8 +169,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                 selected: {_registerMode},
                                 onSelectionChanged: _busy
                                     ? null
-                                    : (s) =>
-                                        setState(() => _registerMode = s.first),
+                                    : (s) {
+                                        setState(() => _registerMode = s.first);
+                                        if (s.first) _loadOrgs();
+                                      },
                               ),
                               const SizedBox(height: 20),
                               // Registration always creates a public account,
@@ -172,6 +200,25 @@ class _LoginScreenState extends State<LoginScreen> {
                                 autocorrect: false,
                               ),
                               if (_registerMode) ...[
+                                const SizedBox(height: 12),
+                                DropdownButtonFormField<String>(
+                                  initialValue: _orgSlug,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Organization',
+                                    prefixIcon: Icon(Icons.apartment_outlined),
+                                  ),
+                                  items: [
+                                    for (final o in _orgs)
+                                      DropdownMenuItem(
+                                        value: o['slug'] as String,
+                                        child: Text(
+                                            '${o['name']} (${o['kind']})'),
+                                      ),
+                                  ],
+                                  onChanged: _busy
+                                      ? null
+                                      : (v) => setState(() => _orgSlug = v),
+                                ),
                                 const SizedBox(height: 12),
                                 TextField(
                                   controller: _username,

@@ -33,8 +33,11 @@ const Api = (() => {
     }
   }
 
-  function headers(json, auth = true) {
-    const h = { 'X-Tenant-ID': tenant };
+  function headers(json, auth = true, withTenant = true) {
+    // Sign-in is the one call sent with no tenant: the stored slug may belong
+    // to whoever used this browser last, and the server resolves the user's
+    // own organization (or the host's) instead.
+    const h = withTenant ? { 'X-Tenant-ID': tenant } : {};
     if (json) h['Content-Type'] = 'application/json';
     if (auth && access) h['Authorization'] = 'Bearer ' + access;
     return h;
@@ -85,7 +88,7 @@ const Api = (() => {
   async function request(method, path, opts = {}) {
     const init = () => ({
       method,
-      headers: headers(opts.body !== undefined, opts.auth !== false),
+      headers: headers(opts.body !== undefined, opts.auth !== false, !opts.noTenant),
       body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
     });
     let res = await fetch(url(path, opts.query), init());
@@ -146,13 +149,17 @@ const Api = (() => {
     async login(identifier, password) {
       const field = PHONE_RE.test(identifier.replace(/\s/g, '')) ? 'phone' : 'license_number';
       const data = await request('POST', '/api/auth/token/', {
-        body: { [field]: identifier, password }, auth: false,
+        body: { [field]: identifier, password }, auth: false, noTenant: true,
       });
       access = data.access;
       refresh = data.refresh;
       localStorage.setItem('access', access);
       localStorage.setItem('refresh', refresh);
       me = null;
+      // The token names the user's organization; every later call carries it.
+      // Super-admins come back with none and keep whatever slug was set.
+      if (data.tenant) { tenant = data.tenant; localStorage.setItem('tenant_slug', tenant); }
+      return data.role;
     },
 
     async logout() {

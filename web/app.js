@@ -126,6 +126,7 @@ const RESOURCES = {
   'facility-metrics':  { title: 'Facility Metrics',   group: 'Reports', report: true },
   'insurance-claims':  { title: 'Insurance Claims',   group: 'Reports', report: true },
   'appointments':      { title: 'Appointments',       group: 'Reports', report: true },
+  'prescriptions':     { title: 'Prescriptions',      group: 'Reports', report: true },
   'pharmacy-items':         { title: 'Stock Items',     group: 'Pharmacy', path: 'pharmacy/items',           roles: 'admin', search: true },
   'pharmacy-batches':       { title: 'Stock Batches',   group: 'Pharmacy', path: 'pharmacy/batches',         roles: 'staff', search: true, readOnly: true },
   'pharmacy-movements':     { title: 'Stock Ledger',    group: 'Pharmacy', path: 'pharmacy/movements',       roles: 'staff', readOnly: true },
@@ -154,12 +155,18 @@ const RESOURCES = {
                                         { name: 'pay', label: 'Allocate remittance', ask: 'amount', adminOnly: true, when: ['submitted', 'approved'] },
                                         { name: 'cancel', label: 'Cancel batch', danger: true, when: ['draft', 'submitted', 'approved'] }] },
   'users':             { title: 'Users',              group: 'Admin' },
-  'tenants':           { title: 'Tenants',            group: 'Admin', superOnly: true, tenantActions: true },
+  'tenants-hospitals': { title: 'Hospitals',          group: 'Admin', path: 'tenants/hospitals',  superOnly: true, tenantActions: true },
+  'tenants-pharmacies':{ title: 'Pharmacies',         group: 'Admin', path: 'tenants/pharmacies', superOnly: true, tenantActions: true },
 };
 
 // A resource's API path, which is the slug unless the registry overrides it
 // (the pharmacy module nests everything under /api/pharmacy/).
 const rpath = (slug, suffix = '') => `/api/${RESOURCES[slug]?.path || slug}/${suffix}`;
+
+// The tenant lists are split by kind (/api/tenants/hospitals/), but a single
+// tenant still lives at /api/tenants/<id>/ — strip the kind segment for detail.
+const rdetail = (slug, suffix) => slug.startsWith('tenants-')
+  ? `/api/tenants/${suffix}` : rpath(slug, suffix);
 
 // M2M PK-list fields (catalog serializers). OPTIONS metadata can't tell
 // many-related from single-related, so name them.
@@ -219,7 +226,7 @@ const PLATFORM = [
 let ME = null; // current user object
 
 function navHtml() {
-  const iconFor = (slug, r) => slug === 'users' ? 'users' : slug === 'tenants' ? 'shield'
+  const iconFor = (slug, r) => slug === 'users' ? 'users' : slug.startsWith('tenants') ? 'shield'
     : r.group === 'Reports' ? 'file' : r.group === 'Pharmacy' ? 'pill' : 'book';
   const groups = {};
   for (const [slug, r] of Object.entries(RESOURCES)) {
@@ -245,6 +252,10 @@ function navHtml() {
       `<a href="#/pharmacy" data-route="/pharmacy">${ico('pill')}Counter</a>` +
       `<a href="#/pharmacy/sell" data-route="/pharmacy/sell">${ico('pill')}Dispense</a>` +
       groups.Pharmacy.join('') + `</div>`;
+  }
+  if (isClinicalStaff()) {
+    html += `<div class="nav-group"><h4>Clinical</h4>` +
+      `<a href="#/clinical" data-route="/clinical">${ico('activity')}Ward</a></div>`;
   }
   html += `<div class="nav-group"><h4>Analytics</h4><a href="#/analytics" data-route="/analytics">${ico('chart')}Tenant Analytics</a>`;
   if (ME?.role === 'super_admin') html += `<a href="#/platform" data-route="/platform">${ico('chart')}Platform Analytics</a>`;
@@ -576,18 +587,26 @@ function viewLogin() {
     e.preventDefault();
     const fd = new FormData(e.target);
     try {
-      await Api.login(fd.get('identifier'), fd.get('password'));
+      const role = await Api.login(fd.get('identifier'), fd.get('password'));
       ME = null;
-      location.hash = '#/';
+      location.hash = homeHash(role);
     } catch (err) { toast(err.message, true); }
   };
 }
 
-function viewRegister() {
+async function viewRegister() {
   authChrome();
+  // Nobody has a tenant to detect before they have an account, so they pick
+  // one; the list is the live organizations the server will accept.
+  let orgs = [];
+  try { orgs = await Api.public('/api/auth/register/organizations/'); } catch { /* offline */ }
+  const orgField = orgs.length
+    ? `<label>Organization<select name="tenant" required>${orgs.map((o) =>
+        `<option value="${esc(o.slug)}"${o.slug === Api.tenant ? ' selected' : ''}>${esc(o.name)} (${esc(o.kind)})</option>`).join('')}</select></label>`
+    : `<label>Organization (tenant slug)<input name="tenant" value="${esc(Api.tenant)}" required></label>`;
   render(authShell('Create account', 'Join your organization', `
     <form id="f">
-      <label>Organization (tenant slug)<input name="tenant" value="${esc(Api.tenant)}" required></label>
+      ${orgField}
       <label>Display name (optional)<input name="username"></label>
       <label>Phone<input name="phone" placeholder="08031234567" required></label>
       <label>Email<input name="email" type="email" required></label>
@@ -619,6 +638,7 @@ async function viewOnboarding() {
     <form id="f">
       <label>Organization name<input name="org_name" required></label>
       <label>Slug (short id, e.g. "my-clinic")<input name="org_slug" required pattern="[a-z0-9-]+"></label>
+      <label>Organization type<select name="org_kind"><option value="pharmacy">Pharmacy</option><option value="hospital">Hospital</option></select></label>
       <label>Address<input name="org_address" required></label>
       <label>Contact<input name="org_contact" required></label>
       ${jOpts ? `<label>Jurisdiction<select name="jurisdiction"><option value="">—</option>${jOpts}</select></label>` : ''}
@@ -669,7 +689,7 @@ async function viewHome() {
     ['#/r/case-reports', 'file', 'Case Reports', 'File and browse case reports'],
     ['#/analytics', 'chart', 'Analytics', 'Tenant dashboards and stats'],
   ];
-  if (ME.role === 'super_admin') tiles.push(['#/platform', 'chart', 'Platform', 'Cross-tenant analytics'], ['#/r/tenants', 'shield', 'Tenants', 'Approve and manage organizations']);
+  if (ME.role === 'super_admin') tiles.push(['#/platform', 'chart', 'Platform', 'Cross-tenant analytics'], ['#/r/tenants-hospitals', 'shield', 'Hospitals', 'Approve and manage hospitals'], ['#/r/tenants-pharmacies', 'shield', 'Pharmacies', 'Approve and manage pharmacies']);
   const [health, dash] = await Promise.all([
     Api.public('/api/health/').then((h) => `API: ${h.status} · DB: ${h.db}`, () => 'API unreachable'),
     Api.get('/api/analytics/tenant/').catch(() => null),
@@ -807,7 +827,7 @@ async function viewList(slug) {
     const pages = count != null ? Math.max(1, Math.ceil(count / 25)) : 1;
     render(`
       <div class="page-head"><h2>${esc(res.title)}</h2>
-        ${(canWrite || res.createOnly) && slug !== 'tenants' ? `<a class="btn" href="#/r/${slug}/new">+ New</a>` : ''}
+        ${(canWrite || res.createOnly) && !slug.startsWith('tenants') ? `<a class="btn" href="#/r/${slug}/new">+ New</a>` : ''}
       </div>
       <form id="search-form" class="toolbar">
         <input name="q" placeholder="${res.search ? 'Search…' : 'Filter by search…'}" value="${esc(st.search)}">
@@ -847,7 +867,7 @@ async function viewDetail(slug, id) {
   spinner();
   const canWrite = canWriteRes(slug, res);
   try {
-    const obj = await Api.get(rpath(slug, `${id}/`));
+    const obj = await Api.get(rdetail(slug, `${id}/`));
     let actions = `<a class="btn ghost" href="#/r/${slug}">&larr; ${esc(res.title)}</a>`;
     if (canWrite) {
       actions += `<a class="btn" href="#/r/${slug}/${id}/edit">Edit</a>
@@ -909,7 +929,7 @@ async function viewDetail(slug, id) {
           body[key] = picked;
         }
         try {
-          const r = await Api.post(rpath(slug, `${id}/${b.dataset.pa}/`), body);
+          const r = await Api.post(rdetail(slug, `${id}/${b.dataset.pa}/`), body);
           toast(r?.message || 'Done.');
           viewDetail(slug, id);
         } catch (e) { toast(e.message, true); }
@@ -918,26 +938,26 @@ async function viewDetail(slug, id) {
     if (canWrite) {
       $('#del').onclick = async () => {
         if (!confirm('Delete this record? This cannot be undone.')) return;
-        try { await Api.del(rpath(slug, `${id}/`)); toast('Deleted.'); location.hash = `#/r/${slug}`; }
+        try { await Api.del(rdetail(slug, `${id}/`)); toast('Deleted.'); location.hash = `#/r/${slug}`; }
         catch (e) { toast(e.message, true); }
       };
     }
     for (const b of document.querySelectorAll('[data-to]')) {
       b.onclick = async () => {
         const note = prompt(`Note for transition to "${b.dataset.to}" (optional):`) ?? '';
-        try { await Api.post(rpath(slug, `${id}/transition/`), { to: b.dataset.to, note }); toast('Status updated.'); viewDetail(slug, id); }
+        try { await Api.post(rdetail(slug, `${id}/transition/`), { to: b.dataset.to, note }); toast('Status updated.'); viewDetail(slug, id); }
         catch (e) { toast(e.message, true); }
       };
     }
     for (const b of document.querySelectorAll('[data-ta]')) {
       b.onclick = async () => {
-        try { const r = await Api.post(rpath(slug, `${id}/${b.dataset.ta}/`)); toast(r?.message || 'Done.'); viewDetail(slug, id); }
+        try { const r = await Api.post(rdetail(slug, `${id}/${b.dataset.ta}/`)); toast(r?.message || 'Done.'); viewDetail(slug, id); }
         catch (e) { toast(e.message, true); }
       };
     }
     if (res.workflow && $('#history')) {
       try {
-        const hist = await Api.get(rpath(slug, `${id}/history/`));
+        const hist = await Api.get(rdetail(slug, `${id}/history/`));
         $('#history').innerHTML = hist.length ? tableHtml(hist) : '<p class="muted">No history.</p>';
       } catch { /* history is optional sugar */ }
     }
@@ -951,10 +971,10 @@ async function viewForm(slug, id) {
   if (!await ensureChrome()) return;
   spinner();
   try {
-    const metaPath = id ? rpath(slug, `${id}/`) : rpath(slug);
+    const metaPath = id ? rdetail(slug, `${id}/`) : rpath(slug);
     const [meta, current] = await Promise.all([
       Api.options(metaPath),
-      id ? Api.get(rpath(slug, `${id}/`)) : Promise.resolve({}),
+      id ? Api.get(rdetail(slug, `${id}/`)) : Promise.resolve({}),
     ]);
     const fields = meta?.actions?.PUT || meta?.actions?.POST;
     if (!fields) return errorBox(new Error('You do not have permission to edit this resource.'));
@@ -972,7 +992,7 @@ async function viewForm(slug, id) {
       e.preventDefault();
       const body = collectForm(e.target, fields);
       try {
-        const saved = id ? await Api.patch(rpath(slug, `${id}/`), body)
+        const saved = id ? await Api.patch(rdetail(slug, `${id}/`), body)
           : await Api.post(rpath(slug), body);
         toast('Saved.');
         location.hash = `#/r/${slug}/${saved?.id ?? id ?? ''}`;
@@ -1295,6 +1315,51 @@ async function viewAnalytics(registry, prefix, key) {
   load();
 }
 
+/* ------------------------------------------------------------- clinical */
+
+// The nursing cadres: they file reports rather than sell or administer, so
+// their landing screen is the reporting workload, not the tenant KPIs.
+const CLINICAL_ROLES = new Set(['nurse', 'midwife', 'chew']);
+const isClinicalStaff = () => CLINICAL_ROLES.has(ME?.role);
+
+// What each cadre files most; the first entry is their "+ New" button.
+const CLINICAL_WORK = {
+  nurse:   ['case-reports', 'prescriptions', 'immunizations', 'lab-results', 'appointments'],
+  midwife: ['vital-events', 'prescriptions', 'immunizations', 'case-reports', 'appointments'],
+  chew:    ['chw-reports', 'prescriptions', 'immunizations', 'case-reports', 'adverse-reactions'],
+};
+
+/* The ward's own home: how much of each report exists, and the latest few of
+   the one this cadre files most. Counts come from the list endpoints' own
+   pagination — no dashboard endpoint to keep in step with the registry. */
+async function viewClinical() {
+  if (!await ensureChrome()) return;
+  if (!isClinicalStaff() && ME?.role !== 'super_admin') {
+    return errorBox(new Error('Clinical staff only.'));
+  }
+  spinner();
+  const slugs = CLINICAL_WORK[ME.role] || CLINICAL_WORK.nurse;
+  const lists = await Promise.all(slugs.map((slug) =>
+    Api.list(rpath(slug), { ordering: '-created_at' }).catch(() => null)));
+  const tile = (slug, list) => `<a class="tile linktile kpi-tile" href="#/r/${slug}">
+    <span class="tile-label">${esc(RESOURCES[slug].title)}</span>
+    <span class="tile-val">${esc(list ? fmtVal(list.count ?? list.rows.length) : '—')}</span></a>`;
+  const [primary] = slugs;
+  const recent = lists[0]?.rows?.slice(0, 5) || [];
+  render(`
+    <div class="page-head"><h2>Clinical</h2>
+      <a class="btn" href="#/r/${primary}/new">+ ${esc(RESOURCES[primary].title.replace(/s$/, ''))}</a></div>
+    <div class="tiles">${slugs.map((slug, i) => tile(slug, lists[i])).join('')}</div>
+    <div class="card"><h3>Latest ${esc(RESOURCES[primary].title.toLowerCase())}</h3>
+      ${recent.length ? tableHtml(recent, (r) => `#/r/${primary}/${r.id}`)
+        : '<p class="muted">Nothing filed yet.</p>'}
+    </div>
+    <h3>File a report</h3>
+    <div class="tiles">${slugs.map((slug) =>
+      `<a class="tile linktile" href="#/r/${slug}/new"><span class="tile-label">New</span>
+        <span class="tile-val">${esc(RESOURCES[slug].title)}</span></a>`).join('')}</div>`);
+}
+
 /* ------------------------------------------------------------- pharmacy */
 
 const PHARMACY_ADMIN_ROLES = new Set(['super_admin', 'tenant_admin']);
@@ -1540,17 +1605,24 @@ const routes = [
   [/^\/interaction-check$/, viewInteractionCheck],
   [/^\/notifiable$/, viewNotifiable],
   [/^\/graph\/([a-z]+)\/(\d+)$/, (m) => viewGraph(m[1], m[2])],
+  [/^\/clinical$/, viewClinical],
   [/^\/pharmacy$/, viewPharmacy],
   [/^\/pharmacy\/sell$/, viewSell],
   [/^\/analytics(?:\/([a-z-]+))?$/, (m) => viewAnalytics(ANALYTICS, '/analytics', m[1])],
   [/^\/platform(?:\/([a-z-]+))?$/, (m) => viewAnalytics(PLATFORM, '/platform', m[1])],
 ];
 
+/* Where a role starts work: the platform owner on cross-tenant analytics, the
+   counter on the counter, everyone else on the tenant dashboard. */
+const homeHash = (role) => role === 'super_admin' ? '#/platform'
+  : role === 'pharmacist' ? '#/pharmacy'
+  : CLINICAL_ROLES.has(role) ? '#/clinical' : '#/';
+
 function route() {
   const path = location.hash.slice(1) || '/';
   const isAuthRoute = /^\/(login|register|onboarding)$/.test(path);
   if (!Api.isLoggedIn && !isAuthRoute) { location.hash = '#/login'; return; }
-  if (Api.isLoggedIn && isAuthRoute) { location.hash = '#/'; return; }
+  if (Api.isLoggedIn && isAuthRoute) { location.hash = homeHash(ME?.role); return; }
   for (const [re, view] of routes) {
     const m = path.match(re);
     if (m) return view(m);

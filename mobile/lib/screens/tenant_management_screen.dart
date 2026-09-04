@@ -8,7 +8,8 @@ import '../shared/widgets/skeleton_cards.dart';
 import '../shared/widgets/snack.dart';
 
 /// Super-admin tenant administration — CRUD over /api/tenants/.
-/// List every organization, create/edit, and approve/reject/suspend.
+/// Hospitals and pharmacies are listed separately (the kind-scoped list
+/// endpoints); create/edit and approve/reject/suspend still hit /api/tenants/.
 class TenantManagementScreen extends StatefulWidget {
   const TenantManagementScreen({super.key});
 
@@ -18,14 +19,15 @@ class TenantManagementScreen extends StatefulWidget {
 
 class _TenantManagementScreenState extends State<TenantManagementScreen> {
   late Future<List<dynamic>> _future;
+  String _kind = 'hospitals'; // 'hospitals' | 'pharmacies'
 
   @override
   void initState() {
     super.initState();
-    _future = api.getList('/api/tenants/');
+    _future = api.getList('/api/tenants/$_kind/');
   }
 
-  void _reload() => setState(() => _future = api.getList('/api/tenants/'));
+  void _reload() => setState(() => _future = api.getList('/api/tenants/$_kind/'));
 
   Future<void> _post(String path, String ok) async {
     try {
@@ -41,7 +43,10 @@ class _TenantManagementScreenState extends State<TenantManagementScreen> {
   Future<void> _openForm({Map<String, dynamic>? tenant}) async {
     final saved = await showDialog<bool>(
       context: context,
-      builder: (_) => _TenantForm(tenant: tenant),
+      builder: (_) => _TenantForm(
+        tenant: tenant,
+        defaultKind: _kind == 'hospitals' ? 'hospital' : 'pharmacy',
+      ),
     );
     if (saved == true) _reload();
   }
@@ -55,9 +60,24 @@ class _TenantManagementScreenState extends State<TenantManagementScreen> {
         onPressed: () => _openForm(),
         backgroundColor: EnhancedTheme.accentPurple,
         icon: const Icon(Icons.add),
-        label: const Text('New tenant'),
+        label: Text(_kind == 'hospitals' ? 'New hospital' : 'New pharmacy'),
       ),
-      body: RefreshIndicator(
+      body: Column(children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'hospitals', label: Text('Hospitals')),
+              ButtonSegment(value: 'pharmacies', label: Text('Pharmacies')),
+            ],
+            selected: {_kind},
+            onSelectionChanged: (s) {
+              _kind = s.first;
+              _reload();
+            },
+          ),
+        ),
+        Expanded(child: RefreshIndicator(
         onRefresh: () async {
           _reload();
           await _future;
@@ -73,7 +93,7 @@ class _TenantManagementScreenState extends State<TenantManagementScreen> {
                 const SizedBox(height: 80),
                 EmptyState(
                   icon: Icons.error_outline,
-                  title: 'Could not load tenants',
+                  title: 'Could not load $_kind',
                   message: '${snap.error}',
                   color: EnhancedTheme.errorRed,
                 ),
@@ -81,11 +101,11 @@ class _TenantManagementScreenState extends State<TenantManagementScreen> {
             }
             final rows = snap.data!.cast<Map<String, dynamic>>();
             if (rows.isEmpty) {
-              return ListView(children: const [
-                SizedBox(height: 80),
+              return ListView(children: [
+                const SizedBox(height: 80),
                 EmptyState(
                   icon: Icons.apartment_outlined,
-                  title: 'No tenants yet',
+                  title: 'No $_kind yet',
                   message: 'Create the first organization.',
                 ),
               ]);
@@ -106,7 +126,8 @@ class _TenantManagementScreenState extends State<TenantManagementScreen> {
             );
           },
         ),
-      ),
+      )),
+      ]),
     );
   }
 }
@@ -233,7 +254,8 @@ class _Act extends StatelessWidget {
 /// Create (no id) or edit (id present) a tenant. Pops `true` on save.
 class _TenantForm extends StatefulWidget {
   final Map<String, dynamic>? tenant;
-  const _TenantForm({this.tenant});
+  final String defaultKind;
+  const _TenantForm({this.tenant, required this.defaultKind});
 
   @override
   State<_TenantForm> createState() => _TenantFormState();
@@ -249,6 +271,7 @@ class _TenantFormState extends State<_TenantForm> {
       TextEditingController(text: '${widget.tenant?['address'] ?? ''}');
   late final TextEditingController _contact =
       TextEditingController(text: '${widget.tenant?['contact'] ?? ''}');
+  late String _kind = '${widget.tenant?['kind'] ?? widget.defaultKind}';
   bool _busy = false;
 
   bool get _isEdit => widget.tenant != null;
@@ -259,6 +282,7 @@ class _TenantFormState extends State<_TenantForm> {
     final body = {
       'name': _name.text.trim(),
       'slug': _slug.text.trim(),
+      'kind': _kind,
       'address': _address.text.trim(),
       'contact': _contact.text.trim(),
     };
@@ -310,6 +334,15 @@ class _TenantFormState extends State<_TenantForm> {
                 decoration: const InputDecoration(labelText: 'Slug'),
                 validator: (v) =>
                     (v == null || v.trim().isEmpty) ? 'Required' : null,
+              ),
+              DropdownButtonFormField<String>(
+                initialValue: _kind,
+                decoration: const InputDecoration(labelText: 'Type'),
+                items: const [
+                  DropdownMenuItem(value: 'hospital', child: Text('Hospital')),
+                  DropdownMenuItem(value: 'pharmacy', child: Text('Pharmacy')),
+                ],
+                onChanged: (v) => setState(() => _kind = v ?? _kind),
               ),
               TextFormField(
                 controller: _address,

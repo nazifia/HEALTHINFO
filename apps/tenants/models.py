@@ -45,6 +45,10 @@ class Jurisdiction(models.Model):
 
 
 class Tenant(models.Model):
+    class Kind(models.TextChoices):
+        PHARMACY = "pharmacy"
+        HOSPITAL = "hospital"
+
     class Status(models.TextChoices):
         ACTIVE = "active"
         SUSPENDED = "suspended"
@@ -56,6 +60,12 @@ class Tenant(models.Model):
 
     name = models.CharField(max_length=200)
     slug = models.SlugField(unique=True)
+    # What kind of facility this is. Super-admin lists them separately; the
+    # modules a tenant uses are unchanged by it. PHARMACY by default because
+    # every tenant predating this field signed up through the pharmacy flow.
+    kind = models.CharField(
+        max_length=20, choices=Kind.choices, default=Kind.PHARMACY, db_index=True
+    )
     address = models.TextField(blank=True)
     contact = models.CharField(max_length=120, blank=True)
     logo = models.URLField(blank=True)
@@ -80,7 +90,9 @@ class Tenant(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return self.name
+        # Kind included: this string is the label in every tenant picker, and
+        # "St Mary's" alone doesn't say whether it's the hospital or its shop.
+        return f"{self.name} ({self.kind})"
 
 
 class TenantManager(models.Manager):

@@ -27,7 +27,12 @@ def _resolve_tenant(request):
 
 # Routes a pending/rejected tenant may still hit (so its admin can log in and
 # see the status). Prefix match.
-_SUBSCRIPTION_GATE_ALLOW = ("/api/auth/token/",)
+_SUBSCRIPTION_GATE_ALLOW = (
+    "/api/auth/token/",
+    # The signup picker: it lists the organizations you may join, so a
+    # stale slug from the last user must not block reading it.
+    "/api/auth/register/organizations/",
+)
 
 
 class TenantMiddleware:
