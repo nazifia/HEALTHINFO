@@ -57,7 +57,7 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
     return RefreshIndicator(
       onRefresh: () async {
         final f = _loadAll();
-        setState(() => _future = f);
+        setState(() { _future = f; });
         await f;
       },
       child: FutureBuilder<List<Map<String, dynamic>>>(

@@ -684,7 +684,7 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
       final moved = (result['moved'] as Map).values
           .fold<int>(0, (sum, n) => sum + (n as int));
       _say('Merged $wanted — $moved record(s) moved here');
-      setState(() => _future = api.get('/api/patients/$id/history/'));
+      setState(() { _future = api.get('/api/patients/$id/history/'); });
     } catch (e) {
       _say('$e');
     }

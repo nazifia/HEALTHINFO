@@ -50,7 +50,7 @@ class _IdsrScreenState extends State<IdsrScreen> {
     return ((data['summary'] as List?) ?? []).cast<Map<String, dynamic>>();
   }
 
-  void _reload() => setState(() => _future = _load());
+  void _reload() => setState(() { _future = _load(); });
 
   @override
   Widget build(BuildContext context) {
