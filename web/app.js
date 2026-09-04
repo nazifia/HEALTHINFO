@@ -828,26 +828,35 @@ function canWriteRes(slug, res) {
   return res.report ? Api.roleCanReport(ME.role) : Api.roleCanWrite(ME.role);
 }
 
-const listState = {}; // per-resource {page, search} kept across visits
+const listState = {}; // per-resource {page, search, seq} kept across visits
+// True while the list search box is being typed in: the list re-renders on
+// every keystroke, so the caret has to be put back afterwards.
+let listTyping = false;
 
 async function viewList(slug) {
   const res = RESOURCES[slug];
   if (!res) return errorBox(new Error('Unknown resource: ' + slug));
   if (!await ensureChrome()) return;
-  const st = (listState[slug] ||= { page: 1, search: '' });
-  spinner();
+  const st = (listState[slug] ||= { page: 1, search: '', seq: 0 });
+  clearTimeout(st.timer);  // this render supersedes a keystroke still pending
+  const wasTyping = listTyping;
+  listTyping = false;
+  if (!wasTyping) spinner();  // typing keeps the rows on screen until the new ones land
   const canWrite = canWriteRes(slug, res);
   try {
     const query = { page: st.page };
     if (st.search) query.search = st.search;
+    const seq = ++st.seq;
     const { rows, count } = await Api.list(rpath(slug), query);
+    if (seq !== st.seq) return;  // a later keystroke already asked
     const pages = count != null ? Math.max(1, Math.ceil(count / 25)) : 1;
     render(`
       <div class="page-head"><h2>${esc(res.title)}</h2>
         ${(canWrite || res.createOnly) && !slug.startsWith('tenants') ? `<a class="btn" href="#/r/${slug}/new">+ New</a>` : ''}
       </div>
       <form id="search-form" class="toolbar">
-        <input name="q" placeholder="${res.search ? 'Search…' : 'Filter by search…'}" value="${esc(st.search)}">
+        <input name="q" autocomplete="off"
+               placeholder="${res.search ? 'Search…' : 'Filter by search…'}" value="${esc(st.search)}">
         <button>Search</button>
       </form>
       ${res.report ? reportSummaryHtml(slug, rows) : ''}
@@ -857,12 +866,25 @@ async function viewList(slug) {
         <span>Page ${st.page}${count != null ? ` of ${pages} (${count})` : ''}</span>
         <button id="next" ${st.page >= pages ? 'disabled' : ''}>Next &rarr;</button>
       </div>`);
-    $('#search-form').onsubmit = (e) => {
-      e.preventDefault();
-      st.search = new FormData(e.target).get('q').trim();
+    // Results follow the typing (300ms after the last keystroke); the button
+    // and Enter still work for anyone who reaches for them.
+    const box = $('#search-form').q;
+    if (wasTyping) {
+      box.focus();
+      box.setSelectionRange(box.value.length, box.value.length);
+    }
+    const run = () => {
+      clearTimeout(st.timer);
+      st.search = box.value.trim();
       st.page = 1;
       viewList(slug);
     };
+    box.oninput = () => {
+      listTyping = true;
+      clearTimeout(st.timer);
+      st.timer = setTimeout(run, 300);
+    };
+    $('#search-form').onsubmit = (e) => { e.preventDefault(); run(); };
     $('#prev').onclick = () => { st.page--; viewList(slug); };
     $('#next').onclick = () => { st.page++; viewList(slug); };
   } catch (e) { errorBox(e); }
@@ -1507,6 +1529,20 @@ async function viewSell() {
     <p><b>Total: ${money(basket.reduce((a, b) => a + b.price * b.quantity, 0))}</b></p>`
     : '<p class="muted">Nothing added yet.</p>';
 
+  // Patient state lives outside draw(): adding or removing a basket line
+  // re-renders the form, and the pharmacist should not have to find the
+  // patient again (and must never have a picked patient silently dropped).
+  let patient = null;      // the chosen row, or null for a walk-in
+  let patientQuery = '';   // what is in the search box
+  let schemes = [];        // active enrollments for `patient`
+  let schemeId = '';
+
+  const hitHtml = (p) =>
+    `<b>${esc(p.full_name || p.first_name)}</b> · ${esc(p.hospital_number || '')}`;
+
+  const schemeOptions = () => '<option value="">—</option>' + schemes.map((r) =>
+    `<option value="${r.id}"${String(r.id) === schemeId ? ' selected' : ''}>${esc(r.hmo_name)} · ${esc(r.member_number)} (${r.effective_coverage}%)</option>`).join('');
+
   const draw = () => {
     render(`
       <div class="page-head"><h2>Dispense</h2>
@@ -1520,13 +1556,14 @@ async function viewSell() {
       <div class="card"><h3>Sale</h3><div id="basket">${basketHtml()}</div></div>
       <form id="checkout" class="card form-card">
         <label>Patient (optional — leave blank for a walk-in)
-          <input name="patient_search" placeholder="Name or hospital number…"></label>
-        <div id="patient-hit" class="muted"></div>
+          <input name="patient_search" placeholder="Name, hospital number or phone…"
+                 autocomplete="off" value="${esc(patientQuery)}"></label>
+        <div id="patient-hit" class="muted">${patient ? hitHtml(patient) : ''}</div>
         <label>Payment<select name="payment_method">
           <option value="cash">Cash</option><option value="card">Card</option>
           <option value="transfer">Transfer</option><option value="hmo">HMO / scheme</option>
         </select></label>
-        <label>Scheme membership<select name="enrollment"><option value="">—</option></select></label>
+        <label>Scheme membership<select name="enrollment">${schemeOptions()}</select></label>
         <div class="actions"><button class="btn">Complete sale</button></div>
       </form>`);
 
@@ -1546,42 +1583,62 @@ async function viewSell() {
       b.onclick = () => { basket.splice(Number(b.dataset.drop), 1); draw(); };
     }
 
-    // Patient lookup fills the scheme dropdown. One card is picked for the
-    // pharmacist; two or more, and they say which one is being billed.
-    let patientId = null;
+    // Patient lookup runs as the pharmacist types (250ms after the last
+    // keystroke). One match binds itself; several are listed to be picked,
+    // because billing the wrong record is worse than one more click.
     const search = $('#checkout').patient_search;
-    search.onchange = async () => {
-      patientId = null;
-      $('#checkout').enrollment.innerHTML = '<option value="">—</option>';
-      const q = search.value.trim();
-      if (!q) return ($('#patient-hit').textContent = '');
+    const hit = () => $('#patient-hit');
+    let timer;
+    let latest = 0;  // only the newest reply may paint
+
+    const bind = async (p) => {
+      const id = ++latest;  // a picked patient outranks a lookup still in flight
+      patient = p;
+      hit().innerHTML = hitHtml(p);
+      const en = await Api.list('/api/pharmacy/enrollments/',
+                                { patient: p.id, is_active: true });
+      if (id !== latest) return;  // the pharmacist has typed on since
+      schemes = en.rows;
+      schemeId = schemes.length === 1 ? String(schemes[0].id) : '';
+      $('#checkout').enrollment.innerHTML = schemeOptions();
+    };
+
+    const lookup = async () => {
+      patient = null;
+      schemes = [];
+      schemeId = '';
+      $('#checkout').enrollment.innerHTML = schemeOptions();
+      const q = patientQuery.trim();
+      if (!q) return (hit().textContent = '');
+      const id = ++latest;
+      hit().textContent = 'Searching…';
       try {
         const { rows } = await Api.list('/api/patients/', { search: q, page_size: 5 });
-        if (!rows.length) return ($('#patient-hit').textContent = 'No patient found.');
-        // Never guess between two people: billing the wrong record is worse
-        // than making the pharmacist type the hospital number.
-        if (rows.length > 1) {
-          $('#patient-hit').textContent =
-            `${rows.length} patients match — search the hospital number.`;
-          return;
+        if (id !== latest) return;  // a later keystroke already asked
+        if (!rows.length) return (hit().textContent = 'No patient found.');
+        if (rows.length === 1) return bind(rows[0]);
+        hit().innerHTML = '<span class="muted">Which patient?</span><div class="chips">'
+          + rows.map((r, i) => `<button type="button" class="chip pick" data-hit="${i}">${hitHtml(r)}</button>`).join('')
+          + '</div>';
+        for (const b of hit().querySelectorAll('[data-hit]')) {
+          b.onclick = () => bind(rows[Number(b.dataset.hit)]);
         }
-        const p = rows[0];
-        patientId = p.id;
-        $('#patient-hit').textContent = `${p.full_name || p.first_name} · ${p.hospital_number}`;
-        const en = await Api.list('/api/pharmacy/enrollments/', { patient: p.id, is_active: true });
-        const sel = $('#checkout').enrollment;
-        sel.innerHTML = '<option value="">—</option>' + en.rows.map((r) =>
-          `<option value="${r.id}">${esc(r.hmo_name)} · ${esc(r.member_number)} (${r.effective_coverage}%)</option>`).join('');
-        if (en.rows.length === 1) sel.value = String(en.rows[0].id);
-      } catch (err) { $('#patient-hit').textContent = err.message; }
+      } catch (err) { if (id === latest) hit().textContent = err.message; }
     };
+
+    search.oninput = () => {
+      patientQuery = search.value;
+      clearTimeout(timer);
+      timer = setTimeout(lookup, 250);
+    };
+    $('#checkout').enrollment.onchange = (e) => { schemeId = e.target.value; };
 
     $('#checkout').onsubmit = async (e) => {
       e.preventDefault();
       if (!basket.length) return toast('Add at least one item.', true);
-      // A typed-but-unresolved patient means the lookup never landed; selling
-      // it as a walk-in would quietly lose the billing.
-      if (search.value.trim() && !patientId) {
+      // A typed-but-unresolved patient means no single match was picked;
+      // selling it as a walk-in would quietly lose the billing.
+      if (patientQuery.trim() && !patient) {
         return toast('Pick the patient first — the lookup has no single match.', true);
       }
       const fd = new FormData(e.target);
@@ -1589,7 +1646,7 @@ async function viewSell() {
         payment_method: fd.get('payment_method'),
         items: basket.map((b) => ({ item: b.item, quantity: b.quantity, discount: b.discount })),
       };
-      if (patientId) body.patient = patientId;
+      if (patient) body.patient = patient.id;
       if (fd.get('enrollment')) body.enrollment = Number(fd.get('enrollment'));
       try {
         const sale = await Api.post('/api/pharmacy/sales/', body);
