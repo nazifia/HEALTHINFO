@@ -8,7 +8,7 @@ import '../shared/widgets/snack.dart';
 import 'pharmacy_kit.dart';
 import 'report_scaffold.dart';
 
-/// Prescriptions — GET /api/prescriptions/.
+/// Counter scripts — GET /api/prescriptions/scripts/.
 ///
 /// The counter's script: a named prescriber, a list of drugs, and a line-by-
 /// line record of what has actually been handed over. Status is never set by
@@ -24,7 +24,7 @@ class PrescriptionsScreen extends StatelessWidget {
       builder: (context, snap) {
         final role = snap.data;
         return ReportListScreen(
-          path: '/api/prescriptions/',
+          path: '/api/prescriptions/scripts/',
           searchHint: 'Patient, phone, doctor or diagnosis…',
           fabLabel: 'Write up a script',
           showFab: isPharmacyStaff(role),
@@ -125,7 +125,7 @@ class _RxSheetState extends State<RxSheet> {
   bool _busy = false;
 
   Future<void> _refresh() async {
-    final fresh = await api.get('/api/prescriptions/${_rx['id']}/');
+    final fresh = await api.get('/api/prescriptions/scripts/${_rx['id']}/');
     if (mounted) {
       setState(() {
         _rx = (fresh as Map).cast<String, dynamic>();
@@ -138,7 +138,7 @@ class _RxSheetState extends State<RxSheet> {
     setState(() => _busy = true);
     await runAction(
       context,
-      '/api/prescriptions/${_rx['id']}/$action/',
+      '/api/prescriptions/scripts/${_rx['id']}/$action/',
       body: action == 'dispense' && _picked.isNotEmpty
           ? {'lines': _picked.toList()}
           : null,
@@ -243,9 +243,26 @@ class _RxSheetState extends State<RxSheet> {
   }
 }
 
+/// Write a script for one patient, off their own record rather than the
+/// counter's list. The patient rides along on the script, so what the counter
+/// dispenses off it lands in that patient's history instead of a name string.
+Future<bool> writeScriptFor(
+    BuildContext context, Map<String, dynamic> patient) async {
+  final saved = await showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => _RxForm(patient: patient),
+  );
+  return saved == true;
+}
+
 /// Write up a paper script: who it is for, who wrote it, and the drugs on it.
 class _RxForm extends StatefulWidget {
-  const _RxForm();
+  /// Set when the script is being written from a patient's record — their
+  /// name and phone fill the form and the script is filed against them.
+  final Map<String, dynamic>? patient;
+  const _RxForm({this.patient});
 
   @override
   State<_RxForm> createState() => _RxFormState();
@@ -261,6 +278,16 @@ class _RxFormState extends State<_RxForm> {
   String _category = '';
   bool _saving = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    final p = widget.patient;
+    if (p != null) {
+      _name.text = '${p['full_name'] ?? ''}';
+      _phone.text = '${p['phone'] ?? ''}';
+    }
+  }
 
   @override
   void dispose() {
@@ -332,13 +359,14 @@ class _RxFormState extends State<_RxForm> {
     });
     try {
       await api.post(
-        '/api/prescriptions/',
+        '/api/prescriptions/scripts/',
         prescriptionBody(
           customerName: _name.text,
           customerPhone: _phone.text,
           lines: _lines,
           prescriberId: _prescriber?['id'] as int?,
           customerId: _customer?['id'] as int?,
+          patientId: widget.patient?['id'] as int?,
           diagnosis: _diagnosis.text,
           consultationCategory: _category,
         ),
@@ -356,8 +384,11 @@ class _RxFormState extends State<_RxForm> {
     final fee = _prescriber == null
         ? 0.0
         : consultationFee(_prescriber!, _category);
+    final patient = widget.patient;
     return ReportFormSheet(
-      title: 'Write up a script',
+      title: patient == null
+          ? 'Write up a script'
+          : 'Prescribe for ${patient['full_name']}',
       saving: _saving,
       error: _error,
       submitLabel: 'Save script',
@@ -367,11 +398,19 @@ class _RxFormState extends State<_RxForm> {
           Expanded(
             child: TextField(
               controller: _name,
-              decoration: const InputDecoration(
-                  labelText: 'Patient name', hintText: 'Walk-in'),
+              decoration: InputDecoration(
+                labelText: 'Patient name',
+                hintText: 'Walk-in',
+                helperText: patient == null
+                    ? null
+                    : 'Filed against ${patient['hospital_number']}',
+              ),
             ),
           ),
-          TextButton(onPressed: _pickCustomer, child: const Text('Find')),
+          // Finding a counter customer is how a walk-in gets a name on the
+          // script; a patient's record already carries one.
+          if (patient == null)
+            TextButton(onPressed: _pickCustomer, child: const Text('Find')),
         ]),
         const SizedBox(height: 12),
         TextField(

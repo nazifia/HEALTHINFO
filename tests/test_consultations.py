@@ -9,7 +9,7 @@ from apps.accounts.models import Role, User
 
 from apps.analytics.models import Appointment, CaseReport, Consultation, VitalEvent
 from apps.analytics.stats import consultation_stats
-from apps.catalog.models import Disease
+from apps.catalog.models import Disease, Medication
 from apps.patients.models import Patient
 from apps.tenants.current import clear_current_tenant, set_current_tenant
 from apps.tenants.models import Tenant
@@ -286,3 +286,28 @@ def test_api_names_the_diagnosis_of_the_linked_case(api, patient):
         {"patient": patient.id, "chief_complaint": "Cough"}, format="json",
     ).json()
     assert "case_report_disease" not in undiagnosed
+
+
+def test_prescribing_off_a_visit_files_the_order_against_its_case(api, patient):
+    """The app's Prescribe link on a consultation writes a drug order that keeps
+    the diagnosis the visit reached."""
+    disease = Disease.objects.create(name="Malaria")
+    case = CaseReport.objects.create(patient=patient, disease=disease)
+    drug = Medication.objects.create(generic_name="Artemether")
+    consultation = api.post(
+        "/api/consultations/",
+        {"patient": patient.id, "chief_complaint": "Fever", "case_report": case.id},
+        format="json",
+    ).json()
+    api.post(f"/api/consultations/{consultation['id']}/close/",
+             {"disposition": "home"}, format="json")
+
+    written = api.post(
+        "/api/prescriptions/",
+        {"patient": patient.id, "medication": drug.id, "dose": "80 mg",
+         "frequency": "twice daily", "case_report": case.id},
+        format="json",
+    )
+    assert written.status_code == 201
+    assert written.json()["case_report"] == case.id
+    assert written.json()["medication_name"] == "Artemether"

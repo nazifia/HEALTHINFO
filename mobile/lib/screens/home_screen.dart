@@ -28,6 +28,7 @@ import 'pharmacy_orders_screen.dart';
 import 'pharmacy_reports_screen.dart';
 import 'branches_screen.dart';
 import 'customers_screen.dart';
+import 'drug_orders_screen.dart';
 import 'prescriptions_screen.dart';
 import 'prescribers_screen.dart';
 import 'hospitals_screen.dart';
@@ -106,6 +107,7 @@ final _catalogGroup = _Group('Catalog', [
 const _recordsGroup = _Group('Clinical records', [
   _Section('Patients', Icons.people_outline, PatientsScreen()),
   _Section('Consultations', Icons.medical_information_outlined, ConsultationsScreen()),
+  _Section('Drug orders', Icons.medication_outlined, DrugOrdersScreen()),
   _Section('Case reports', Icons.assignment_outlined, CasesScreen()),
   _Section('Adverse reactions', Icons.medication_liquid_outlined, AdrScreen()),
   _Section('Lab results', Icons.science_outlined, LabResultsScreen()),
