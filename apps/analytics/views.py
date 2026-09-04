@@ -1,3 +1,4 @@
+from django.db.models import Q
 from django.utils.dateparse import parse_date
 from rest_framework import viewsets
 from rest_framework.exceptions import NotFound, ValidationError
@@ -10,6 +11,7 @@ from apps.accounts.permissions import (
     IsSuperAdmin,
     IsTenantMember,
     ReadOnlyOrReportRole,
+    sees_whole_tenant,
 )
 from apps.tenants.models import Tenant
 
@@ -72,6 +74,22 @@ def _range(request):
         parse_date(request.query_params.get("from", "") or ""),
         parse_date(request.query_params.get("to", "") or ""),
     )
+
+
+def own_reports(qs, user):
+    """Narrow a tenant's reports to the ones this user filed.
+
+    A clinician reads their own case load, not the facility's whole book;
+    pharmacy staff and tenant admins are unchanged (see sees_whole_tenant),
+    because dispensing and auditing both need every row.
+
+    Rows with no reporter stay visible to all of them: the FK is SET_NULL, so
+    that is what a report becomes when the staff member who filed it leaves,
+    and the clinical record has to outlive the person who wrote it.
+    """
+    if sees_whole_tenant(user):
+        return qs
+    return qs.filter(Q(reporter=user) | Q(reporter__isnull=True))
 
 
 class TenantDashboardView(APIView):
@@ -166,7 +184,7 @@ class CaseReportViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         # Re-run the tenant-scoped manager per request (frozen-queryset gotcha).
-        return CaseReport.objects.all()
+        return own_reports(CaseReport.objects.all(), self.request.user)
 
     def perform_create(self, serializer):
         serializer.save(reporter=self.request.user)
@@ -181,7 +199,7 @@ class AdverseDrugReactionViewSet(viewsets.ModelViewSet):
     ordering_fields = ("created_at", "severity")
 
     def get_queryset(self):
-        return AdverseDrugReaction.objects.all()
+        return own_reports(AdverseDrugReaction.objects.all(), self.request.user)
 
     def perform_create(self, serializer):
         serializer.save(reporter=self.request.user)
@@ -202,7 +220,7 @@ class _ReportViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         # Re-run the tenant-scoped manager per request (frozen-queryset gotcha).
-        return self.model.objects.all()
+        return own_reports(self.model.objects.all(), self.request.user)
 
     def perform_create(self, serializer):
         serializer.save(reporter=self.request.user)

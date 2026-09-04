@@ -1,9 +1,15 @@
+from django.db.models import Q
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
-from apps.accounts.permissions import IsClinicalStaff, IsTenantAdmin, IsTenantMember
+from apps.accounts.permissions import (
+    IsClinicalStaff,
+    IsTenantAdmin,
+    IsTenantMember,
+    sees_whole_tenant,
+)
 
 from .models import Patient, PatientAccessLog
 from .serializers import PatientAccessLogSerializer, PatientSerializer
@@ -29,6 +35,33 @@ def _history_sources():
     }
 
 
+def visible_patients(user):
+    """The patients `user` may read, inside the tenant already bound.
+
+    A clinician sees the records they are actually working on: the patients
+    they registered, plus any patient they have filed a record against. Roles
+    that run the facility rather than a caseload (see sees_whole_tenant) keep
+    the full registry.
+
+    Unclaimed rows stay visible to everyone clinical. registered_by is NULL for
+    patients imported ahead of go-live and for those whose registering staff
+    member has since left (the FK is SET_NULL), and a patient nobody can open
+    is worse than one too many people can.
+
+    ponytail: one OR'd query across the record types, all indexed on the FK.
+    Materialize the patient ids into a join table only if a clinician ever
+    accumulates enough records for this to show up in a query plan.
+    """
+    qs = Patient.objects.all()
+    if sees_whole_tenant(user):
+        return qs
+    scope = Q(registered_by=user) | Q(registered_by__isnull=True)
+    for model, _serializer in _history_sources().values():
+        accessor = model._meta.get_field("patient").remote_field.get_accessor_name()
+        scope |= Q(**{f"{accessor}__reporter": user})
+    return qs.filter(scope).distinct()
+
+
 class PatientViewSet(viewsets.ModelViewSet):
     """Tenant-scoped patient registry. Clinical staff only — this is the one
     endpoint that returns identifying data, so plain tenant members can't read it.
@@ -44,7 +77,9 @@ class PatientViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         # Re-run the tenant-scoped manager per request (frozen-queryset gotcha).
-        qs = Patient.objects.all().prefetch_related("chronic_conditions")
+        qs = visible_patients(self.request.user).prefetch_related(
+            "chronic_conditions"
+        )
         # Merged duplicates are tombstones: still reachable by id or by asking
         # for ?status=merged, but out of the way of everyday lists and searches.
         if self.action == "list" and "status" not in self.request.query_params:
@@ -153,6 +188,11 @@ class PatientViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"])
     def history(self, request, pk=None):
         """Everything filed against this patient, grouped by record type.
+
+        Deliberately the whole timeline, not just this clinician's entries: the
+        gate is get_object(), so they already had to be on the patient's care.
+        A half-history is how a repeat prescription gets written over an
+        allergy someone else recorded.
 
         ponytail: one query per record type (8), each tenant-scoped and indexed
         on the FK. Fold into a union only if a patient ever accumulates enough

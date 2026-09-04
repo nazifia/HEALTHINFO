@@ -1,6 +1,6 @@
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 
-from .models import Role
+from .models import LICENSED_ROLES, Role
 
 # Roles allowed to create/edit content. Public + nurse are read-mostly here;
 # nurse contribution would go through the (future) draft workflow, not direct write.
@@ -10,6 +10,21 @@ WRITE_ROLES = {Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.DOCTOR, Role.PHARMACIST
 # midwife, CHEW) — reporting cases is core clinical work — unlike catalog
 # authoring which stays in WRITE_ROLES.
 REPORT_ROLES = WRITE_ROLES | {Role.NURSE, Role.MIDWIFE, Role.CHEW}
+
+
+def sees_whole_tenant(user):
+    """True when this user reads their tenant's records in full.
+
+    Clinicians — the licensed cadres — are narrowed to their own patients and
+    the records they filed themselves: a doctor at a hospital has no business
+    listing the whole registry. Everyone else keeps the full tenant view,
+    because their job needs it: a pharmacist dispenses scripts other people
+    wrote, and a tenant admin has to be able to audit the lot.
+
+    Tenant scoping still runs underneath this. It only ever narrows a tenant's
+    own rows, it never widens them to another tenant's.
+    """
+    return not (user.is_authenticated and user.role in LICENSED_ROLES)
 
 
 class IsTenantMember(BasePermission):
