@@ -100,6 +100,14 @@ class CaseReport(PatientLinkedModel, TenantOwnedModel):
     # poolable centrally without identifying anyone. Drives hotspot maps.
     region = models.CharField(max_length=120, blank=True)
     notes = models.TextField(blank=True)
+    # The counter row this was captured from ("rx:12"). NULL — not "" — when a
+    # person filed the case by hand: NULLs never collide in a unique index on
+    # any backend, so the constraint below can be plain rather than partial
+    # (MySQL has no partial index). apps.analytics.capture keys on it so one
+    # script filled over several visits stays one case.
+    source_ref = models.CharField(
+        max_length=100, null=True, blank=True, default=None
+    )
 
     class Meta:
         ordering = ("-created_at", "-id")
@@ -107,6 +115,12 @@ class CaseReport(PatientLinkedModel, TenantOwnedModel):
             models.Index(fields=["tenant", "created_at"]),
             models.Index(fields=["tenant", "disease"]),
             models.Index(fields=["tenant", "region"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "source_ref"],
+                name="analytics_case_one_row_per_source",
+            ),
         ]
 
     def __str__(self):
@@ -514,12 +528,26 @@ class Prescription(PatientLinkedModel, TenantOwnedModel):
     dispensed_at = models.DateTimeField(null=True, blank=True)
     region = models.CharField(max_length=120, blank=True)
     notes = models.TextField(blank=True)
+    # The dispensing row this was captured from ("rxline:8", "dispense:44").
+    # NULL when a clinician wrote the order here directly — see CaseReport for
+    # why NULL and not "". apps.analytics.capture keys on it: one drug handed
+    # over is one row, whichever route it came down, and the constraint below
+    # makes that the database's rule rather than the capture code's.
+    source_ref = models.CharField(
+        max_length=100, null=True, blank=True, default=None
+    )
 
     class Meta:
         ordering = ("-created_at", "-id")
         indexes = [
             models.Index(fields=["tenant", "status", "created_at"]),
             models.Index(fields=["tenant", "medication"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "source_ref"],
+                name="analytics_rx_one_row_per_source",
+            ),
         ]
 
     def __str__(self):
