@@ -111,4 +111,31 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get medicalDisclaimer =>
       'For information only. Not a substitute for professional medical advice.';
+
+  @override
+  String get navCatalog => 'Catalog';
+
+  @override
+  String get navClinicalRecords => 'Clinical records';
+
+  @override
+  String get navTools => 'Tools';
+
+  @override
+  String get navReports => 'Reports';
+
+  @override
+  String get navPharmacy => 'Pharmacy';
+
+  @override
+  String get navAdministration => 'Administration';
+
+  @override
+  String get navAccount => 'Account';
+
+  @override
+  String get navExpandAll => 'Expand all';
+
+  @override
+  String get navCollapseAll => 'Collapse all';
 }

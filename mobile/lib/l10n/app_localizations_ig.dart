@@ -111,4 +111,31 @@ class AppLocalizationsIg extends AppLocalizations {
   @override
   String get medicalDisclaimer =>
       'For information only. Not a substitute for professional medical advice.';
+
+  @override
+  String get navCatalog => 'Ndepụta';
+
+  @override
+  String get navClinicalRecords => 'Ndekọ ụlọ ọgwụ';
+
+  @override
+  String get navTools => 'Ngwá ọrụ';
+
+  @override
+  String get navReports => 'Akụkọ';
+
+  @override
+  String get navPharmacy => 'Ụlọ ahịa ọgwụ';
+
+  @override
+  String get navAdministration => 'Nchịkwa';
+
+  @override
+  String get navAccount => 'Akaụntụ';
+
+  @override
+  String get navExpandAll => 'Mepee ha niile';
+
+  @override
+  String get navCollapseAll => 'Mechie ha niile';
 }

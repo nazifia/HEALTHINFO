@@ -18,5 +18,14 @@
   "langEnglish": "English",
   "langHausa": "Hausa",
   "langYoruba": "Yorùbá",
-  "langIgbo": "Igbo"
+  "langIgbo": "Igbo",
+  "navCatalog": "Àkójọpọ̀",
+  "navClinicalRecords": "Àkọsílẹ̀ ìwòsàn",
+  "navTools": "Àwọn irinsẹ́",
+  "navReports": "Àwọn ìròyìn",
+  "navPharmacy": "Ilé ìtajà oògùn",
+  "navAdministration": "Ìṣàkóso",
+  "navAccount": "Àkántì",
+  "navExpandAll": "Ṣí gbogbo rẹ̀",
+  "navCollapseAll": "Pa gbogbo rẹ̀"
 }

@@ -18,5 +18,14 @@
   "langEnglish": "English",
   "langHausa": "Hausa",
   "langYoruba": "Yorùbá",
-  "langIgbo": "Igbo"
+  "langIgbo": "Igbo",
+  "navCatalog": "Jerin bayanai",
+  "navClinicalRecords": "Bayanan asibiti",
+  "navTools": "Kayan aiki",
+  "navReports": "Rahotanni",
+  "navPharmacy": "Kantin magani",
+  "navAdministration": "Gudanarwa",
+  "navAccount": "Asusu",
+  "navExpandAll": "Buɗe duka",
+  "navCollapseAll": "Rufe duka"
 }
