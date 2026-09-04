@@ -107,6 +107,14 @@ class User(AbstractUser):
 
     objects = UserManager()
 
+    def save(self, *args, **kwargs):
+        # One shape for the licence whatever wrote the row — the API
+        # serializer, the Django admin, a management command. Sign-in looks the
+        # number up already normalized (see normalize_license), so a row saved
+        # with its separators still on it could never be signed in to.
+        self.license_number = normalize_license(self.license_number)
+        super().save(*args, **kwargs)
+
     @property
     def requires_license(self):
         """True when this user signs in with a licence number, not a phone."""

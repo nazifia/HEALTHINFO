@@ -99,3 +99,18 @@ def test_admin_cannot_create_licensed_user_without_license(tenant):
     )
     assert good.status_code == 201, good.content
     assert User.objects.get(phone="+2348036666666").license_number == "CHPRBN77"
+
+
+def test_a_license_written_straight_to_the_row_still_signs_in(db):
+    """The seed and the Django admin write the licence as the regulator prints
+    it. Sign-in looks it up normalized, so the row has to be stored that way
+    however it was written."""
+    t = Tenant.objects.create(name="Clinic", slug="clinic")
+    try:
+        make_user(t, "+2348031000090", Role.DOCTOR, "demo-doctor-002")
+        assert User.objects.get(phone="+2348031000090").license_number == \
+            "DEMODOCTOR002"
+        r = token(license_number="DEMO-DOCTOR-002", password=PASSWORD)
+        assert r.status_code == 200, r.content
+    finally:
+        clear_current_tenant()
