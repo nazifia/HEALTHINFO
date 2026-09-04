@@ -6,6 +6,7 @@ import 'report_scaffold.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/empty_state.dart';
+import '../shared/export_csv.dart';
 import '../shared/widgets/searchable_dropdown.dart';
 import '../shared/widgets/snack.dart';
 
@@ -66,13 +67,33 @@ class _CasesScreenState extends State<CasesScreen>
     super.build(context);
     return Scaffold(
       backgroundColor: Colors.transparent,
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'fab_cases',
-        onPressed: _openForm,
-        backgroundColor: EnhancedTheme.primaryTeal,
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('Report case',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // The whole tenant's case reports as the CSV the analysts ask for
+          // (/api/analytics/cases/export/) — the list above is a page, the
+          // file is the lot.
+          FloatingActionButton.small(
+            heroTag: 'fab_cases_export',
+            onPressed: () => exportCsv(context,
+                path: '/api/analytics/cases/export/',
+                filename: 'case_reports.csv'),
+            backgroundColor: EnhancedTheme.accentCyan,
+            tooltip: 'Export CSV',
+            child: const Icon(Icons.file_download_outlined, color: Colors.white),
+          ),
+          const SizedBox(height: 10),
+          FloatingActionButton.extended(
+            heroTag: 'fab_cases',
+            onPressed: _openForm,
+            backgroundColor: EnhancedTheme.primaryTeal,
+            icon: const Icon(Icons.add, color: Colors.white),
+            label: const Text('Report case',
+                style:
+                    TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+          ),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: () async {

@@ -236,6 +236,22 @@ class Api {
     return jsonDecode(r.body);
   }
 
+  /// Authenticated GET returning the raw body bytes. Retries once after refresh
+  /// on 401, exactly as [get] does.
+  ///
+  /// For the endpoints that answer a file rather than JSON — the CSV exports —
+  /// so the bytes reach the share sheet without going through jsonDecode.
+  Future<List<int>> getBytes(String path, [Map<String, String>? query]) async {
+    var r = await http.get(_uri(path, query), headers: _headers());
+    if (r.statusCode == 401 && await _refreshAccess()) {
+      r = await http.get(_uri(path, query), headers: _headers());
+    }
+    if (r.statusCode != 200) {
+      throw ApiException('GET $path failed (${r.statusCode})', r.body);
+    }
+    return r.bodyBytes;
+  }
+
   /// Authenticated POST returning decoded JSON. Retries once after refresh on 401.
   ///
   /// [body] is usually a map, but a few endpoints take a bare JSON list — the

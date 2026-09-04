@@ -49,6 +49,7 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
         _load('/api/analytics/platform/facility/', '/api/analytics/facility/'),
         _load('/api/analytics/platform/insurance/', '/api/analytics/insurance/'),
         _load('/api/analytics/platform/appointments/', '/api/analytics/appointments/'),
+        _load('/api/analytics/platform/prescriptions/', '/api/analytics/prescriptions/'),
       ]);
 
   @override
@@ -77,7 +78,8 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
               ),
             ]);
           }
-          final [lab, imm, vital, stock, chw, facility, insurance, appt] = snap.data!;
+          final [lab, imm, vital, stock, chw, facility, insurance, appt, rx] =
+              snap.data!;
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             children: [
@@ -215,6 +217,27 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
                 heading: 'By status',
                 icon: Icons.event_available_outlined,
                 rows: (appt['by_status'] as List?) ?? [],
+                labelKey: 'status',
+              ),
+
+              // ── Prescribing & dispensing ──
+              _SectionTitle('Prescribing & dispensing', Icons.description_outlined),
+              _Metric(
+                value: _pct(rx['dispense_rate']),
+                label: 'Orders actually dispensed',
+                sub: '${rx['dispensed'] ?? 0} of ${rx['total'] ?? 0} prescriptions'
+                    ' — cancelled ones excluded',
+              ),
+              _Breakdown(
+                heading: 'Most prescribed',
+                icon: Icons.medication_outlined,
+                rows: (rx['top_medications'] as List?) ?? [],
+                labelKey: 'medication__generic_name',
+              ),
+              _Breakdown(
+                heading: 'By status',
+                icon: Icons.fact_check_outlined,
+                rows: (rx['by_status'] as List?) ?? [],
                 labelKey: 'status',
               ),
             ],

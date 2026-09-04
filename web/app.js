@@ -225,6 +225,12 @@ const PLATFORM = [
 
 let ME = null; // current user object
 
+// Collapsed nav groups persist across reloads; <details> does the open/close itself.
+const NAV_CLOSED = new Set(JSON.parse(localStorage.getItem('navClosed') || '[]'));
+const navGroup = (name, links) =>
+  `<details class="nav-group"${NAV_CLOSED.has(name) ? '' : ' open'} data-group="${name}">` +
+  `<summary>${esc(name)}</summary>${links}</details>`;
+
 function navHtml() {
   const iconFor = (slug, r) => slug === 'users' ? 'users' : slug.startsWith('tenants') ? 'shield'
     : r.group === 'Reports' ? 'file' : r.group === 'Pharmacy' ? 'pill' : 'book';
@@ -244,23 +250,22 @@ function navHtml() {
     `<a href="#/notifiable" data-route="/notifiable">${ico('flag')}Notifiable Cases</a>`,
   ];
   let html = `<a href="#/" data-route="/" class="nav-home">${ico('home')}Home</a>`;
-  html += `<div class="nav-group"><h4>Tools</h4>${tools.join('')}</div>`;
-  html += `<div class="nav-group"><h4>Catalog</h4>${groups.Catalog.join('')}</div>`;
-  html += `<div class="nav-group"><h4>Reports</h4>${groups.Reports.join('')}</div>`;
+  html += navGroup('Tools', tools.join(''));
+  html += navGroup('Catalog', groups.Catalog.join(''));
+  html += navGroup('Reports', groups.Reports.join(''));
   if (groups.Pharmacy?.length) {
-    html += `<div class="nav-group"><h4>Pharmacy</h4>` +
+    html += navGroup('Pharmacy',
       `<a href="#/pharmacy" data-route="/pharmacy">${ico('pill')}Counter</a>` +
       `<a href="#/pharmacy/sell" data-route="/pharmacy/sell">${ico('pill')}Dispense</a>` +
-      groups.Pharmacy.join('') + `</div>`;
+      groups.Pharmacy.join(''));
   }
   if (isClinicalStaff()) {
-    html += `<div class="nav-group"><h4>Clinical</h4>` +
-      `<a href="#/clinical" data-route="/clinical">${ico('activity')}Ward</a></div>`;
+    html += navGroup('Clinical', `<a href="#/clinical" data-route="/clinical">${ico('activity')}Ward</a>`);
   }
-  html += `<div class="nav-group"><h4>Analytics</h4><a href="#/analytics" data-route="/analytics">${ico('chart')}Tenant Analytics</a>`;
-  if (ME?.role === 'super_admin') html += `<a href="#/platform" data-route="/platform">${ico('chart')}Platform Analytics</a>`;
-  html += `</div>`;
-  if (groups.Admin?.length) html += `<div class="nav-group"><h4>Admin</h4>${groups.Admin.join('')}</div>`;
+  let analytics = `<a href="#/analytics" data-route="/analytics">${ico('chart')}Tenant Analytics</a>`;
+  if (ME?.role === 'super_admin') analytics += `<a href="#/platform" data-route="/platform">${ico('chart')}Platform Analytics</a>`;
+  html += navGroup('Analytics', analytics);
+  if (groups.Admin?.length) html += navGroup('Admin', groups.Admin.join(''));
   return html;
 }
 
@@ -271,12 +276,24 @@ async function ensureChrome() {
   }
   $('#topbar').hidden = false;
   $('#sidebar').hidden = false;
-  $('#tenant-badge').textContent = Api.tenant;
+  const badge = $('#tenant-badge');
+  badge.textContent = Api.tenant || 'no organization';
+  // A super-admin hops between organizations, so their badge is the way back
+  // out of the one they opened. Everyone else is stuck to their own tenant.
+  badge.classList.toggle('clickable', ME?.role === 'super_admin');
+  badge.title = ME?.role === 'super_admin' ? 'Leave this organization' : '';
+  badge.onclick = ME?.role === 'super_admin' ? () => {
+    Api.tenant = '';
+    location.hash = '#/platform';
+    location.reload();
+  } : null;
   $('#user-badge').textContent = `${ME.phone || ME.username || 'me'} · ${ME.role}`;
   $('#sidebar').innerHTML = navHtml();
   const route = location.hash.slice(1) || '/';
   for (const a of document.querySelectorAll('#sidebar a')) {
-    a.classList.toggle('active', route === a.dataset.route || (a.dataset.route !== '/' && route.startsWith(a.dataset.route)));
+    const on = route === a.dataset.route || (a.dataset.route !== '/' && route.startsWith(a.dataset.route));
+    a.classList.toggle('active', on);
+    if (on) a.closest('.nav-group')?.setAttribute('open', '');
   }
   return true;
 }
@@ -884,12 +901,16 @@ async function viewDetail(slug, id) {
     }
     let tenantHtml = '';
     if (res.tenantActions) {
+      // "Open as" scopes every later call to this organization: a super-admin
+      // belongs to none, so without it their session sees no tenant data at all.
       tenantHtml = `<div class="card"><h3>Subscription: ${esc(obj.subscription_status)} · Status: ${esc(obj.status)}</h3>
         <div class="actions">
+          <button class="btn" id="open-as" data-slug="${esc(obj.slug)}">Open as this organization</button>
+          <button class="btn ghost" id="open-log">Who opened this</button>
           <button class="btn" data-ta="approve">Approve</button>
           <button class="btn" data-ta="reject">Reject</button>
           <button class="btn danger" data-ta="suspend">Suspend / Reactivate</button>
-        </div></div>`;
+        </div><div id="open-log-out"></div></div>`;
     }
     // Module actions (dispensing, claims, orders): each POSTs to its own
     // endpoint; ``ask`` collects the one value the endpoint needs.
@@ -947,6 +968,25 @@ async function viewDetail(slug, id) {
         const note = prompt(`Note for transition to "${b.dataset.to}" (optional):`) ?? '';
         try { await Api.post(rdetail(slug, `${id}/transition/`), { to: b.dataset.to, note }); toast('Status updated.'); viewDetail(slug, id); }
         catch (e) { toast(e.message, true); }
+      };
+    }
+    if ($('#open-as')) {
+      $('#open-as').onclick = async () => {
+        // Record the visit before switching: the trail is the point, and a
+        // switch the server never heard about leaves none.
+        try { await Api.post(`/api/tenants/${id}/open/`); }
+        catch (e) { return toast(e.message, true); }
+        Api.tenant = $('#open-as').dataset.slug;
+        toast(`Working in ${Api.tenant}.`);
+        location.hash = '#/';
+      };
+      $('#open-log').onclick = async () => {
+        try {
+          const rows = await Api.get(`/api/tenants/${id}/access-log/`);
+          $('#open-log-out').innerHTML = rows.length
+            ? tableHtml(rows.map((r) => ({ who: r.user_phone || `#${r.user}`, when: r.created_at })))
+            : '<p class="muted">Nobody has opened this organization yet.</p>';
+        } catch (e) { toast(e.message, true); }
       };
     }
     for (const b of document.querySelectorAll('[data-ta]')) {
@@ -1632,6 +1672,12 @@ function route() {
 
 window.addEventListener('hashchange', () => { vizTip().hidden = true; route(); });
 $('#nav-toggle').onclick = () => $('#sidebar').classList.toggle('open');
+$('#sidebar').addEventListener('toggle', e => {
+  const g = e.target.dataset?.group;
+  if (!g) return;
+  e.target.open ? NAV_CLOSED.delete(g) : NAV_CLOSED.add(g);
+  localStorage.setItem('navClosed', JSON.stringify([...NAV_CLOSED]));
+}, true);
 $('#theme-toggle').onclick = () => {
   const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
   localStorage.theme = t;

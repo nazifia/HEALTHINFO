@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../main.dart';
+import '../config.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/glass_card.dart';
@@ -10,6 +11,10 @@ import '../shared/widgets/snack.dart';
 /// Super-admin tenant administration — CRUD over /api/tenants/.
 /// Hospitals and pharmacies are listed separately (the kind-scoped list
 /// endpoints); create/edit and approve/reject/suspend still hit /api/tenants/.
+///
+/// Also the tenant switcher: a super-admin belongs to no organization, so
+/// until they open one every tenant-scoped screen answers empty. Opening one
+/// POSTs /open/ first, which writes the audit row naming who went where.
 class TenantManagementScreen extends StatefulWidget {
   const TenantManagementScreen({super.key});
 
@@ -40,6 +45,65 @@ class _TenantManagementScreenState extends State<TenantManagementScreen> {
     }
   }
 
+  Future<void> _openAs(Map<String, dynamic> t) async {
+    try {
+      await api.post('/api/tenants/${t['id']}/open/');
+      await setTenant('${t['slug']}');
+      if (!mounted) return;
+      showSuccess(context, 'Working in ${t['name']}.');
+      setState(() {});
+    } catch (e) {
+      if (mounted) showError(context, '$e');
+    }
+  }
+
+  Future<void> _leave() async {
+    await setTenant('');
+    if (!mounted) return;
+    showSuccess(context, 'Left the organization.');
+    setState(() {});
+  }
+
+  Future<void> _showAccessLog(Map<String, dynamic> t) async {
+    List<dynamic> rows;
+    try {
+      rows = await api.getList('/api/tenants/${t['id']}/access-log/');
+    } catch (e) {
+      if (mounted) showError(context, '$e');
+      return;
+    }
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text('Who opened ${t['name']}'),
+        content: SizedBox(
+          width: 360,
+          child: rows.isEmpty
+              ? const Text('Nobody has opened this organization yet.')
+              : ListView(
+                  shrinkWrap: true,
+                  children: [
+                    for (final r in rows.cast<Map<String, dynamic>>())
+                      ListTile(
+                        dense: true,
+                        leading: const Icon(Icons.person_outline, size: 18),
+                        title: Text('${r['user_phone'] ?? r['user'] ?? '—'}'),
+                        subtitle: Text('${r['created_at'] ?? ''}'),
+                      ),
+                  ],
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _openForm({Map<String, dynamic>? tenant}) async {
     final saved = await showDialog<bool>(
       context: context,
@@ -63,6 +127,22 @@ class _TenantManagementScreenState extends State<TenantManagementScreen> {
         label: Text(_kind == 'hospitals' ? 'New hospital' : 'New pharmacy'),
       ),
       body: Column(children: [
+        if (tenantSlug.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: GlassCard(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(children: [
+                const Icon(Icons.business_outlined, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text('Working in $tenantSlug',
+                      style: TextStyle(color: context.labelColor)),
+                ),
+                TextButton(onPressed: _leave, child: const Text('Leave')),
+              ]),
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           child: SegmentedButton<String>(
@@ -115,6 +195,8 @@ class _TenantManagementScreenState extends State<TenantManagementScreen> {
               itemCount: rows.length,
               itemBuilder: (_, i) => _TenantCard(
                 t: rows[i],
+                onOpenAs: () => _openAs(rows[i]),
+                onAccessLog: () => _showAccessLog(rows[i]),
                 onEdit: () => _openForm(tenant: rows[i]),
                 onApprove: () =>
                     _post('/api/tenants/${rows[i]['id']}/approve/', 'Approved.'),
@@ -134,9 +216,11 @@ class _TenantManagementScreenState extends State<TenantManagementScreen> {
 
 class _TenantCard extends StatelessWidget {
   final Map<String, dynamic> t;
-  final VoidCallback onEdit, onApprove, onReject, onSuspend;
+  final VoidCallback onOpenAs, onAccessLog, onEdit, onApprove, onReject, onSuspend;
   const _TenantCard({
     required this.t,
+    required this.onOpenAs,
+    required this.onAccessLog,
     required this.onEdit,
     required this.onApprove,
     required this.onReject,
@@ -189,6 +273,10 @@ class _TenantCard extends StatelessWidget {
           Wrap(
             spacing: 6,
             children: [
+              _Act(icon: Icons.login, label: 'Open as', onTap: onOpenAs,
+                  color: EnhancedTheme.accentPurple),
+              _Act(icon: Icons.history, label: 'Who opened', onTap: onAccessLog,
+                  color: EnhancedTheme.primaryTeal),
               if (sub != 'approved')
                 _Act(icon: Icons.check, label: 'Approve', onTap: onApprove,
                     color: EnhancedTheme.successGreen),
