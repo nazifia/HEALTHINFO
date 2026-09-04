@@ -127,4 +127,93 @@ void main() {
     ]);
     expect(body.containsKey('expected_date'), isFalse);
   });
+
+  test('a script offers nothing once it is dispensed or void', () {
+    expect(rxActions('pending', 'pharmacist'), ['dispense', 'cancel']);
+    expect(rxActions('partial', 'pharmacist'), ['dispense', 'cancel']);
+    expect(rxActions('dispensed', 'tenant_admin'), isEmpty);
+    expect(rxActions('cancelled', 'tenant_admin'), isEmpty);
+    // Non-pharmacy roles get no buttons at all.
+    expect(rxActions('pending', 'nurse'), isEmpty);
+  });
+
+  test('a script never sends the consultation fee it was quoted', () {
+    final body = prescriptionBody(
+      customerName: '  ',
+      lines: [
+        const RxLineDraft(
+            name: 'Amoxicillin', quantity: 15, itemId: 3, dosage: '1 tds'),
+      ],
+      prescriberId: 8,
+      consultationCategory: 'b',
+    );
+    // A blank name is a walk-in, not an empty string on the record.
+    expect(body['customer_name'], 'Walk-in');
+    // The band travels; the money it implies is the server's to snapshot.
+    expect(body['consultation_category'], 'B');
+    expect(body.containsKey('consultation_fee'), isFalse);
+    expect((body['medications'] as List).first, {
+      'name': 'Amoxicillin',
+      'quantity': 15,
+      'item': 3,
+      'dosage': '1 tds',
+    });
+  });
+
+  test('a consultation band prices off the prescriber row', () {
+    final doctor = {
+      'consultation_fees': {'A': '1500.00', 'B': '2500.00'},
+    };
+    expect(consultationFee(doctor, 'b'), 2500);
+    // Anything outside A-E costs nothing, same as the server.
+    expect(consultationFee(doctor, 'Z'), 0);
+    expect(consultationFee(doctor, ''), 0);
+  });
+
+  test('a wallet movement only carries a method when money arrived', () {
+    final topUp = walletBody('500', method: 'transfer', note: ' ');
+    expect(topUp['method'], 'transfer');
+    // Blank notes are dropped rather than stored as whitespace.
+    expect(topUp.containsKey('note'), isFalse);
+    // Nothing crossed the counter on a deduction, so no method does either.
+    expect(walletBody('500', topUp: false).containsKey('method'), isFalse);
+  });
+
+  test('a wallet short of the bill pays what it can and owes the rest', () {
+    expect(walletSplit('1000', '250'), (paid: 250.0, credit: 0.0));
+    expect(walletSplit('100', '250'), (paid: 100.0, credit: 150.0));
+    // An empty wallet funds nothing; the whole bill becomes debt.
+    expect(walletSplit(null, '250'), (paid: 0.0, credit: 250.0));
+  });
+
+  test('applying a stocktake is the admin\'s, counting is not', () {
+    expect(stockCheckActions('pending', 'pharmacist'), ['count', 'cancel']);
+    expect(stockCheckActions('in_progress', 'pharmacist'),
+        ['count', 'cancel']);
+    expect(stockCheckActions('in_progress', 'tenant_admin'),
+        ['count', 'complete', 'cancel']);
+    expect(stockCheckActions('completed', 'tenant_admin'), isEmpty);
+  });
+
+  test('only the admin moves stock between stores; anyone receives it', () {
+    expect(transferActions('pending', 'pharmacist'), isEmpty);
+    expect(transferActions('pending', 'tenant_admin'), ['approve', 'reject']);
+    expect(transferActions('approved', 'pharmacist'), ['receive']);
+    expect(transferActions('received', 'tenant_admin'), isEmpty);
+  });
+
+  test('only the dispenser withdraws a basket, only a cashier takes one', () {
+    expect(
+        paymentRequestActions('pending', 'pharmacist',
+            mine: true, cashier: false),
+        ['complete', 'cancel']);
+    expect(
+        paymentRequestActions('pending', 'pharmacist',
+            mine: false, cashier: true),
+        ['accept', 'reject', 'complete']);
+    expect(
+        paymentRequestActions('completed', 'tenant_admin',
+            mine: true, cashier: true),
+        isEmpty);
+  });
 }

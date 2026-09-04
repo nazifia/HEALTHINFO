@@ -24,18 +24,25 @@ class Api {
     'pharmacist',
   };
 
-  String? _role;
+  Map<String, dynamic>? _me;
 
-  /// Current user's role, fetched once from /api/users/me/ then cached.
+  /// Current user, fetched once from /api/users/me/ then cached.
   /// ponytail: cache lives for the session; cleared on logout.
-  Future<String?> myRole() async {
-    if (_role != null) return _role;
+  Future<Map<String, dynamic>?> me() async {
+    if (_me != null) return _me;
     try {
       final r = await get('/api/users/me/');
-      _role = (r as Map)['role']?.toString();
+      _me = (r as Map).cast<String, dynamic>();
     } catch (_) {}
-    return _role;
+    return _me;
   }
+
+  /// Current user's role — what the screens gate on.
+  Future<String?> myRole() async => (await me())?['role']?.toString();
+
+  /// Current user's id, for "did I raise this?" checks on rows that name a
+  /// user (a payment request's dispenser, a sale's server).
+  Future<int?> myId() async => (await me())?['id'] as int?;
 
   bool roleCanWrite(String? role) => writeRoles.contains(role);
 
@@ -71,7 +78,7 @@ class Api {
     }
     _access = null;
     _refresh = null;
-    _role = null;
+    _me = null;
     final p = await SharedPreferences.getInstance();
     await p.remove(_kAccess);
     await p.remove(_kRefresh);
@@ -204,7 +211,10 @@ class Api {
   }
 
   /// Authenticated POST returning decoded JSON. Retries once after refresh on 401.
-  Future<dynamic> post(String path, [Map<String, dynamic>? body]) async {
+  ///
+  /// [body] is usually a map, but a few endpoints take a bare JSON list — the
+  /// stocktake's count sheet, for one — so anything encodable travels.
+  Future<dynamic> post(String path, [Object? body]) async {
     final headers = _headers(json: true);
     final payload = jsonEncode(body ?? {});
     var r = await http.post(_uri(path), headers: headers, body: payload);

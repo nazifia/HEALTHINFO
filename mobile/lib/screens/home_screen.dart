@@ -24,6 +24,19 @@ import 'pharmacy_till_screen.dart';
 import 'pharmacy_claims_screen.dart';
 import 'pharmacy_suppliers_screen.dart';
 import 'pharmacy_orders_screen.dart';
+import 'pharmacy_reports_screen.dart';
+import 'branches_screen.dart';
+import 'customers_screen.dart';
+import 'prescriptions_screen.dart';
+import 'prescribers_screen.dart';
+import 'stock_checks_screen.dart';
+import 'transfers_screen.dart';
+import 'expenses_screen.dart';
+import 'payment_requests_screen.dart';
+import 'cashiers_screen.dart';
+import 'commissions_screen.dart';
+import 'notifications_screen.dart';
+import 'dispensing_log_screen.dart';
 import 'chw_reports_screen.dart';
 import 'facility_metrics_screen.dart';
 import 'insurance_claims_screen.dart';
@@ -107,13 +120,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   static const _pharmacySections = [
     _Section('Pharmacy counter', Icons.local_pharmacy_outlined,
         PharmacyCounterScreen()),
+    _Section('Prescriptions', Icons.description_outlined,
+        PrescriptionsScreen()),
+    _Section('Payment requests', Icons.pending_actions_outlined,
+        PaymentRequestsScreen()),
     _Section('Stock items', Icons.inventory_outlined, PharmacyStockScreen()),
+    _Section('Stock checks', Icons.fact_check_outlined, StockChecksScreen()),
+    _Section('Transfers', Icons.swap_horiz_outlined, TransfersScreen()),
     _Section('Sales', Icons.point_of_sale_outlined, PharmacySalesScreen()),
+    _Section('Returns', Icons.undo_outlined, ReturnsScreen()),
+    _Section('Dispensing log', Icons.medication_outlined,
+        DispensingLogScreen()),
     _Section('Cash drawer', Icons.point_of_sale_outlined, PharmacyTillScreen()),
+    _Section('Expenses', Icons.receipt_outlined, ExpensesScreen()),
+    _Section('Customers', Icons.people_alt_outlined, CustomersScreen()),
+    _Section('Prescribers', Icons.badge_outlined, PrescribersScreen()),
     _Section('HMO claims', Icons.request_quote_outlined, PharmacyClaimsScreen()),
     _Section('Suppliers', Icons.local_shipping_outlined,
         PharmacySuppliersScreen()),
-    _Section('Purchase orders', Icons.receipt_outlined, PharmacyOrdersScreen()),
+    _Section('Purchase orders', Icons.receipt_long_outlined,
+        PharmacyOrdersScreen()),
+    _Section('Pharmacy reports', Icons.assessment_outlined,
+        PharmacyReportsScreen()),
+    _Section('Alerts', Icons.notifications_none_outlined,
+        NotificationsScreen()),
+    _Section('Branches', Icons.storefront_outlined, BranchesScreen()),
+    _Section('Cashiers', Icons.badge_outlined, CashiersScreen()),
+    _Section('Staff commissions', Icons.percent_outlined, CommissionsScreen()),
   ];
 
   @override
