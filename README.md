@@ -158,6 +158,33 @@ anonymous walk-ins.
 A weekly Celery beat task (`weekly_tenant_report`, Mondays 04:00) emails each
 tenant admin their rollup + any outbreak alerts.
 
+### Capture: the counter feeds the data centre
+Hospitals and pharmacies do the work in the operational apps, so what they
+diagnose and dispense used to reach surveillance only if somebody re-typed it
+as a report. `apps.analytics.capture` files it as it happens, on a signal from
+every route a drug can leave the shelf (a till sale, a cashier completing a
+payment request, a script ticked off at the counter):
+
+- **the diagnosis** on a counter script becomes a `CaseReport`, matched to a
+  catalog disease by name or ICD-10 code and keeping the written text in
+  `notes` when nothing matches — an unmatched diagnosis is still a case the
+  centre hears about;
+- **the medications used** become dispensed `analytics.Prescription` rows,
+  linked back to that case. Only items that match the drug catalog qualify —
+  gloves and table water cross the same counter.
+- a **hospital** order its own clinician already wrote (`Sale.prescription`) is
+  marked dispensed rather than filed a second time.
+
+There is no second store to ship to: a captured row is tenant-scoped like every
+other analytics row, so the tenant's dashboard reads it through `objects` and
+central pools it through `all_objects`, up the jurisdiction chain into the IDSR
+summary. Capturing once puts it in both. Each row carries a `source_ref` naming
+the counter row behind it — unique per tenant, so a script filled at the till and
+ticked off at the counter stays one case and one drug instead of doubling the
+national count, and a raced double-capture is refused by the database rather
+than by the capture code. Hand-filed rows carry no source at all (NULL, so the
+plain unique index works on every backend, MySQL included).
+
 ## Pharmacy (stock, sales, HMO claims)
 Operational pharmacy for one facility, tenant-scoped like everything else.
 `StockReport` in analytics stays what it was — a de-identified snapshot for

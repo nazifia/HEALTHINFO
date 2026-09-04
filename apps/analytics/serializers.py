@@ -34,7 +34,8 @@ class CaseReportSerializer(serializers.ModelSerializer):
     class Meta:
         model = CaseReport
         exclude = ("tenant",)
-        read_only_fields = ("reporter", "created_at", "updated_at")
+        # source_ref is provenance written by capture, never by a client.
+        read_only_fields = ("reporter", "source_ref", "created_at", "updated_at")
 
     def validate_region(self, value):
         return _validate_region(value)
@@ -176,7 +177,8 @@ class PrescriptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Prescription
         exclude = ("tenant",)
-        read_only_fields = ("reporter", "created_at", "updated_at")
+        # source_ref is provenance written by capture, never by a client.
+        read_only_fields = ("reporter", "source_ref", "created_at", "updated_at")
 
     def validate_region(self, value):
         return _validate_region(value)
