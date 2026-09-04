@@ -84,8 +84,15 @@ class Api {
     await p.remove(_kRefresh);
   }
 
-  Map<String, String> _headers({bool auth = true, bool json = false}) {
-    final h = <String, String>{'X-Tenant-ID': tenantSlug};
+  Map<String, String> _headers({
+    bool auth = true,
+    bool json = false,
+    bool tenant = true,
+  }) {
+    // Sign-in is the one call sent with no tenant: the stored slug may belong
+    // to whoever used this device last, and the server resolves the user's own
+    // organization (or the host's) instead.
+    final h = tenant ? <String, String>{'X-Tenant-ID': tenantSlug} : <String, String>{};
     if (json) h['Content-Type'] = 'application/json';
     if (auth && _access != null) h['Authorization'] = 'Bearer $_access';
     return h;
@@ -109,7 +116,7 @@ class Api {
         : 'license_number';
     final r = await http.post(
       _uri('/api/auth/token/'),
-      headers: _headers(auth: false, json: true),
+      headers: _headers(auth: false, json: true, tenant: false),
       body: jsonEncode({field: identifier, 'password': password}),
     );
     if (r.statusCode != 200) {
@@ -119,6 +126,25 @@ class Api {
     _access = data['access'] as String?;
     _refresh = data['refresh'] as String?;
     await _saveTokens();
+    // The token names the user's organization; every later call carries it.
+    // Super-admins come back with none and keep whatever slug was set.
+    final slug = (data['tenant'] as String?) ?? '';
+    if (slug.isNotEmpty) await setTenant(slug);
+  }
+
+  /// GET /api/auth/register/organizations/ — public signup picker.
+  ///
+  /// Someone without an account has no tenant to detect, so they choose one.
+  /// Sent with no tenant header: the stored slug may be another user's.
+  Future<List<Map<String, dynamic>>> organizations() async {
+    final r = await http.get(
+      _uri('/api/auth/register/organizations/'),
+      headers: _headers(auth: false, tenant: false),
+    );
+    if (r.statusCode != 200) {
+      throw ApiException('Could not load organizations (${r.statusCode})', r.body);
+    }
+    return (jsonDecode(r.body) as List).cast<Map<String, dynamic>>();
   }
 
   /// POST /api/auth/register/

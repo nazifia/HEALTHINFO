@@ -9,7 +9,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 
 from config.responses import success
 
-from apps.tenants.models import Jurisdiction
+from apps.tenants.models import Jurisdiction, Tenant
 
 from .models import Role, User
 from .permissions import IsTenantMember
@@ -26,6 +26,20 @@ class LoginView(TokenObtainPairView):
 
 class RegisterViewSet(viewsets.ViewSet):
     permission_classes = [AllowAny]
+
+    @action(detail=False, methods=["get"])
+    def organizations(self, request):
+        """Public picker for signup: which organization am I joining?
+
+        Someone without an account has no tenant to detect, so they choose one.
+        Only live organizations are listed — a suspended or unapproved tenant
+        can't be signed in to anyway.
+        """
+        rows = Tenant.objects.filter(
+            status=Tenant.Status.ACTIVE,
+            subscription_status=Tenant.SubscriptionStatus.APPROVED,
+        ).values("slug", "name", "kind").order_by("name")
+        return Response(list(rows))
 
     def create(self, request):
         s = RegisterSerializer(data=request.data, context={"request": request})

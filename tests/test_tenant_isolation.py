@@ -64,3 +64,66 @@ def test_global_rows_visible_to_every_tenant(tenants):
     # B sees only global (no private rows of its own yet).
     set_current_tenant(b)
     assert set(Disease.objects.values_list("name", flat=True)) == {"Measles"}
+
+
+# --- Sign-in and staff references are scoped too -----------------------------
+# The manager only scopes rows that carry a tenant. User does not, so the two
+# places that turn caller input into a user — the token endpoint and any
+# writable FK to User — are checked here.
+
+PASSWORD = "s3curepass99"
+
+
+def _staff(tenant, phone, role):
+    from apps.accounts.models import User
+
+    u = User.objects.create(phone=phone, tenant=tenant, role=role)
+    u.set_password(PASSWORD)
+    u.save()
+    return u
+
+
+def test_login_refused_on_another_tenants_host(tenants):
+    from rest_framework.test import APIClient
+
+    from apps.accounts.models import Role
+
+    a, b = tenants
+    _staff(a, "08031234567", Role.PHARMACIST)
+    client = APIClient()
+
+    ok = client.post("/api/auth/token/", {"phone": "234567", "password": PASSWORD},
+                     format="json", HTTP_X_TENANT_ID=a.slug)
+    assert ok.status_code == 200, ok.content
+    # Same credentials against tenant B: no token, same opaque message.
+    denied = client.post("/api/auth/token/", {"phone": "234567", "password": PASSWORD},
+                         format="json", HTTP_X_TENANT_ID=b.slug)
+    assert denied.status_code == 401, denied.content
+
+
+def test_same_phone_suffix_allowed_in_different_tenants(tenants):
+    from apps.accounts.models import Role
+    from apps.accounts.serializers import UserSerializer
+
+    a, b = tenants
+    _staff(a, "08031111111", Role.PHARMACIST)
+    s = UserSerializer(data={"phone": "08091111111", "role": Role.PHARMACIST,
+                             "tenant": b.id, "password": PASSWORD})
+    assert s.is_valid(), s.errors
+
+
+def test_cashier_cannot_name_another_tenants_user(tenants):
+    from apps.accounts.models import Role
+    from apps.pos.serializers import CashierSerializer
+
+    a, b = tenants
+    outsider = _staff(b, "08037654321", Role.PHARMACIST)
+
+    set_current_tenant(a)
+    s = CashierSerializer(data={"user": outsider.id, "name": "Ade"})
+    assert not s.is_valid()
+    assert "user" in s.errors
+
+    insider = _staff(a, "08031234567", Role.PHARMACIST)
+    s = CashierSerializer(data={"user": insider.id, "name": "Ade"})
+    assert s.is_valid(), s.errors

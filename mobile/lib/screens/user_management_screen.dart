@@ -291,7 +291,8 @@ class _UserFormState extends State<_UserForm> {
                     const DropdownMenuItem(value: null, child: Text('— none (platform) —')),
                     for (final t in tenants)
                       DropdownMenuItem(
-                          value: t['id'] as int, child: Text('${t['name']}')),
+                          value: t['id'] as int,
+                          child: Text('${t['name']} · ${t['kind'] ?? ''}')),
                   ],
                   onChanged: (v) => setState(() => _tenantId = v),
                 ),

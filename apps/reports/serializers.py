@@ -2,10 +2,13 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
+from apps.accounts.serializers import TenantUserField
+
 from .models import CommissionConfig
 
 
 class CommissionConfigSerializer(serializers.ModelSerializer):
+    user = TenantUserField()
     user_name = serializers.CharField(source="user.username", read_only=True)
 
     class Meta:

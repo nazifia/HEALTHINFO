@@ -108,3 +108,53 @@ def test_member_cannot_create_user(db, client):
         format="json",
     )
     assert resp.status_code == 403
+
+
+def test_kind_scoped_lists_are_separate(db, client):
+    Tenant.objects.create(name="Gen Hosp", slug="gen", kind=Tenant.Kind.HOSPITAL)
+    Tenant.objects.create(name="Corner Rx", slug="rx", kind=Tenant.Kind.PHARMACY)
+    client.force_authenticate(_super(db))
+
+    hosp = client.get("/api/tenants/hospitals/")
+    pharm = client.get("/api/tenants/pharmacies/")
+    assert hosp.status_code == pharm.status_code == 200
+    assert [r["slug"] for r in hosp.json()["results"]] == ["gen"]
+    assert [r["slug"] for r in pharm.json()["results"]] == ["rx"]
+    # both still show up in the combined list
+    assert {"gen", "rx"} <= {r["slug"] for r in client.get("/api/tenants/").json()["results"]}
+
+
+def test_kind_lists_gated_to_super_admin(db, client):
+    t = Tenant.objects.create(name="Mem", slug="mem3")
+    member = User.objects.create_user(
+        phone="08030000009", password="x", role=Role.DOCTOR, tenant=t,
+    )
+    client.force_authenticate(member)
+    assert client.get("/api/tenants/hospitals/").status_code == 403
+
+
+def test_backfill_guesses_hospitals_by_name(db):
+    from django.core.management import call_command
+
+    hosp = Tenant.objects.create(name="Ikeja General Hospital", slug="ikeja")
+    shop = Tenant.objects.create(name="Corner Chemist", slug="corner")
+    assert hosp.kind == Tenant.Kind.PHARMACY  # migrated in on the default
+
+    call_command("backfill_tenant_kind")  # dry run changes nothing
+    hosp.refresh_from_db()
+    assert hosp.kind == Tenant.Kind.PHARMACY
+
+    call_command("backfill_tenant_kind", "--apply")
+    hosp.refresh_from_db()
+    shop.refresh_from_db()
+    assert hosp.kind == Tenant.Kind.HOSPITAL
+    assert shop.kind == Tenant.Kind.PHARMACY  # no hospital word, left alone
+
+
+def test_backfill_sets_named_slugs(db):
+    from django.core.management import call_command
+
+    t = Tenant.objects.create(name="St Mary's", slug="stmary")
+    call_command("backfill_tenant_kind", "stmary", "--kind", "hospital", "--apply")
+    t.refresh_from_db()
+    assert t.kind == Tenant.Kind.HOSPITAL
