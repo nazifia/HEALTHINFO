@@ -141,8 +141,8 @@ class PatientSerializer(NamedRelationsMixin, serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {"allow_duplicate": [
                         f"{twin.full_name} with this date of birth is already "
-                        f"registered as {twin.hospital_number}. Send "
-                        f"allow_duplicate=true to register them anyway."
+                        f"registered as {twin.hospital_number}. Register "
+                        f"anyway only if this is a different person."
                     ]}
                 )
         # An NHIA patient is only NHIA if the scheme can be billed — the
