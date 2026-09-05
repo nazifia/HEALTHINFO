@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../api.dart';
 import '../main.dart';
 import '../nigeria.dart';
 import '../pharmacy.dart';
@@ -250,7 +251,6 @@ class _FormState extends State<_Form> {
   final _first = TextEditingController();
   final _last = TextEditingController();
   final _other = TextEditingController();
-  final _hospitalNumber = TextEditingController();
   final _phone = TextEditingController();
   final _address = TextEditingController();
   final _allergies = TextEditingController();
@@ -291,7 +291,6 @@ class _FormState extends State<_Form> {
     _first.text = '${e['first_name'] ?? ''}';
     _last.text = '${e['last_name'] ?? ''}';
     _other.text = '${e['other_names'] ?? ''}';
-    _hospitalNumber.text = '${e['hospital_number'] ?? ''}';
     _phone.text = '${e['phone'] ?? ''}';
     _address.text = '${e['address'] ?? ''}';
     _allergies.text = '${e['allergies'] ?? ''}';
@@ -308,7 +307,7 @@ class _FormState extends State<_Form> {
 
   @override
   void dispose() {
-    for (final c in [_first, _last, _other, _hospitalNumber, _phone, _address,
+    for (final c in [_first, _last, _other, _phone, _address,
                      _allergies, _nhis, _kinName, _kinPhone, _kinRelationship,
                      _notes]) {
       c.dispose();
@@ -345,6 +344,31 @@ class _FormState extends State<_Form> {
 
   String get _dobText => _dateText(_dob);
 
+  Future<dynamic> _send(Map<String, dynamic> body) => _isEdit
+      ? api.patch('/api/patients/${widget.existing!['id']}/', body)
+      : api.post('/api/patients/', body);
+
+  /// The registry already holds this name and date of birth. Namesakes are
+  /// common, so reception decides; only they can see both people.
+  Future<bool> _confirmDuplicate(String message) async {
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Already registered?'),
+        content: Text(message),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Register anyway')),
+        ],
+      ),
+    );
+    return go == true;
+  }
+
   Future<void> _submit() async {
     final problem = patientFormError(
       firstName: _first.text,
@@ -361,11 +385,10 @@ class _FormState extends State<_Form> {
       _error = null;
     });
     try {
-      final body = {
+      final Map<String, dynamic> body = {
         'first_name': _first.text.trim(),
         'last_name': _last.text.trim(),
         'other_names': _other.text.trim(),
-        'hospital_number': _hospitalNumber.text.trim(),
         'patient_type': _patientType,
         'sex': _sex,
         'date_of_birth': _dob == null ? null : _dobText,
@@ -387,10 +410,14 @@ class _FormState extends State<_Form> {
         'consent_given': _consent,
         'notes': _notes.text.trim(),
       };
-      if (_isEdit) {
-        await api.patch('/api/patients/${widget.existing!['id']}/', body);
-      } else {
-        await api.post('/api/patients/', body);
+      try {
+        await _send(body);
+      } on ApiException catch (e) {
+        // The backend refuses a same-names, same-date-of-birth registration
+        // until it is told the twin is a different person. Ask, then resend.
+        if (!e.body.contains('allow_duplicate')) rethrow;
+        if (!await _confirmDuplicate(e.friendly)) return;
+        await _send({...body, 'allow_duplicate': true});
       }
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
@@ -428,14 +455,6 @@ class _FormState extends State<_Form> {
         TextField(
           controller: _other,
           decoration: const InputDecoration(labelText: 'Other names'),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _hospitalNumber,
-          decoration: const InputDecoration(
-            labelText: 'Hospital number',
-            helperText: 'Leave blank to generate one from the patient type',
-          ),
         ),
         const SizedBox(height: 12),
         SearchableDropdown<String>(
@@ -483,7 +502,10 @@ class _FormState extends State<_Form> {
           controller: _phone,
           keyboardType: TextInputType.phone,
           decoration: const InputDecoration(
-              labelText: 'Phone', hintText: '08031234567'),
+            labelText: 'Phone',
+            hintText: '08031234567',
+            helperText: 'Becomes the hospital number when it is free',
+          ),
         ),
         const SizedBox(height: 12),
         Row(children: [
