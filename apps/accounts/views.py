@@ -98,7 +98,13 @@ class UserViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         if user.is_super_admin:
-            return User.objects.all()
+            # Inside an organization a super admin reads it and nothing else:
+            # the staff list follows the tenant they opened. Only outside one
+            # (no tenant on the request) is the platform-wide list theirs.
+            tenant = getattr(self.request, "tenant", None)
+            if tenant is None:
+                return User.objects.all()
+            return User.objects.filter(tenant=tenant)
         # Tenant-scoped: only see users of your own tenant.
         return User.objects.filter(tenant=user.tenant)
 

@@ -127,11 +127,11 @@ class Api {
     _refresh = data['refresh'] as String?;
     await _saveTokens();
     // The token names the user's organization; every later call carries it.
-    // Super-admins come back with none and keep whatever slug was set.
+    // A super-admin comes back with none, and that empty slug is stored too:
+    // they start outside every organization instead of inheriting the slug of
+    // whoever used this device last, and they open one deliberately.
     final slug = (data['tenant'] as String?) ?? '';
-    if (slug.isNotEmpty) {
-      await setTenant(slug, name: (data['tenant_name'] as String?) ?? '');
-    }
+    await setTenant(slug, name: (data['tenant_name'] as String?) ?? '');
   }
 
   /// GET /api/auth/register/organizations/ — public signup picker.

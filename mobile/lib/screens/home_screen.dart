@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../main.dart';
+import '../config.dart';
 import '../pharmacy.dart';
 import '../resources.dart';
 import '../l10n/app_localizations.dart';
@@ -214,12 +215,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _Section('Staff commissions', Icons.percent_outlined, CommissionsScreen()),
   ]);
 
+  // The organization switcher. A super-admin keeps it inside an organization
+  // too — it is the way back out to the platform views.
+  static const _tenantsSection =
+      _Section('Tenants', Icons.apartment_outlined, TenantManagementScreen());
+
+  // Staff administration. Kept inside an organization too: the list is
+  // tenant-scoped there, so it is that organization's staff.
+  static const _usersSection =
+      _Section('Users', Icons.manage_accounts_outlined, UserManagementScreen());
+
   // Central-only cross-tenant views. Hidden from non-super-admins.
   static const _platformGroup = _Group('Administration', [
     _Section('Platform', Icons.admin_panel_settings_outlined,
         SuperAdminDashboardScreen()),
-    _Section('Tenants', Icons.apartment_outlined, TenantManagementScreen()),
-    _Section('Users', Icons.manage_accounts_outlined, UserManagementScreen()),
+    _tenantsSection,
+    _usersSection,
     _accessLogSection,
     _Section('Collated reports', Icons.bar_chart_outlined,
         CollatedReportsScreen()),
@@ -236,6 +247,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     super.initState();
     _loadClosed();
     _loadRole();
+    tenantChanged.addListener(_loadRole);
+  }
+
+  @override
+  void dispose() {
+    tenantChanged.removeListener(_loadRole);
+    super.dispose();
   }
 
   Future<void> _loadClosed() async {
@@ -267,6 +285,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     setState(() {
       _groups = gs;
       _flat = _flatten(gs);
+      // The menu can shrink (a super-admin entering an organization loses the
+      // cross-tenant block), so an index into the old, longer list would fall out
+      // of range.
+      if (_index >= _flat.length) _index = 0;
     });
   }
 
@@ -275,7 +297,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (!mounted) return;
     final pharmacy = isPharmacyStaff(role) ? [_pharmacyGroup] : <_Group>[];
     if (role == 'super_admin') {
-      _setGroups([_platformGroup, ...pharmacy, ..._baseGroups]);
+      // Inside a clinic or a pharmacy a super-admin works as that
+      // organization: the cross-tenant block goes away and every screen left
+      // reads that tenant only. The API refuses the platform rollups here
+      // too, so this is the menu telling the truth, not the control.
+      _setGroups(tenantSlug.isEmpty
+          ? [_platformGroup, ...pharmacy, ..._baseGroups]
+          : [
+              const _Group('Administration', [
+                _tenantsSection,
+                _usersSection,
+                _accessLogSection,
+              ]),
+              ...pharmacy,
+              ..._baseGroups,
+            ]);
       return;
     }
     if (role == 'tenant_admin') {

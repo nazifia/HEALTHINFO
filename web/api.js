@@ -162,13 +162,13 @@ const Api = (() => {
       localStorage.setItem('refresh', refresh);
       me = null;
       // The token names the user's organization; every later call carries it.
-      // Super-admins come back with none and keep whatever slug was set.
-      if (data.tenant) {
-        tenant = data.tenant;
-        localStorage.setItem('tenant_slug', tenant);
-        tenantName = data.tenant_name || '';
-        localStorage.setItem('tenant_name', tenantName);
-      }
+      // A super-admin comes back with none, and that empty slug is stored too:
+      // they start outside every organization instead of inheriting the slug
+      // of whoever used this browser last, and they open one deliberately.
+      tenant = data.tenant || '';
+      localStorage.setItem('tenant_slug', tenant);
+      tenantName = data.tenant_name || '';
+      localStorage.setItem('tenant_name', tenantName);
       return data.role;
     },
 
