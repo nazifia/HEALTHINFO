@@ -1,8 +1,7 @@
 {
   "projects": {
     "default": "healthinfoapp2",
-    "healthinfoapp": "healthinfoapp",
-    "healthinfoweb": "healthinfoweb"
+    "healthinfoapp": "healthinfoapp"
   },
   "targets": {},
   "etags": {}
