@@ -2019,6 +2019,11 @@ function route() {
   const isAuthRoute = /^\/(login|register|onboarding)$/.test(path);
   if (!Api.isLoggedIn && !isAuthRoute) { location.hash = '#/login'; return; }
   if (Api.isLoggedIn && isAuthRoute) { location.hash = homeHash(ME?.role); return; }
+  // Inside an organization there is no platform view — the API refuses the
+  // cross-tenant rollups there — so a stale #/platform hash (a bookmark, the
+  // back button, a reload after opening a clinic) lands on that organization's
+  // dashboard instead of a page of errors.
+  if (Api.tenant && /^\/platform(?:\/|$)/.test(path)) { location.hash = '#/'; return; }
   for (const [re, view] of routes) {
     const m = path.match(re);
     if (m) return view(m);
