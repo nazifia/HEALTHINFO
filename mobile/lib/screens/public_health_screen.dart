@@ -6,6 +6,7 @@ import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/bar_chart.dart';
+import '../shared/stats_rows.dart';
 
 /// Public-health analytics: the analysis side of the four collection feeds —
 /// AMR, immunization coverage, vital-stats mortality and pharmacy shortages.
@@ -228,11 +229,32 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
                 sub: '${rx['dispensed'] ?? 0} of ${rx['total'] ?? 0} prescriptions'
                     ' — cancelled ones excluded',
               ),
+              // Says how much of the prescribing the two breakdowns below
+              // actually cover. Reading them as the whole picture when most
+              // orders carry no diagnosis is the way this section misleads.
+              _Metric(
+                value: _pct(rx['linked_rate']),
+                label: 'Orders with a diagnosis recorded',
+                sub: '${rx['linked'] ?? 0} of ${rx['total'] ?? 0} orders link '
+                    'back to a case — the rest sit under "—" below',
+              ),
               _Breakdown(
                 heading: 'Most prescribed',
                 icon: Icons.medication_outlined,
                 rows: (rx['top_medications'] as List?) ?? [],
                 labelKey: 'medication__generic_name',
+              ),
+              _Breakdown(
+                heading: 'By diagnosis',
+                icon: Icons.coronavirus_outlined,
+                rows: (rx['by_diagnosis'] as List?) ?? [],
+                labelKey: 'diagnosis',
+              ),
+              _Breakdown(
+                heading: 'Prescribed for each diagnosis',
+                icon: Icons.medical_information_outlined,
+                rows: diagnosisPairRows(rx['by_diagnosis_medication']),
+                labelKey: 'pair',
               ),
               _Breakdown(
                 heading: 'By status',
