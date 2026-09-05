@@ -1398,8 +1398,21 @@ function collectForm(form, fields) {
 
 /* ------------------------------------------------------- patient type-ahead */
 
-const patientHitHtml = (p) =>
-  `<b>${esc(p.full_name || p.first_name || '')}</b> · ${esc(p.hospital_number || '')}`;
+const patientHitHtml = (p) => {
+  // What the registry already holds about them. Shown so the details are read
+  // off the record instead of being asked for again, and so an allergy is in
+  // front of whoever is about to prescribe.
+  const bits = [
+    p.age == null ? '' : `${p.age}y`,
+    p.sex, p.blood_group, p.genotype, p.region,
+  ].filter((v) => String(v ?? '').trim() !== '');
+  const allergies = String(p.allergies ?? '').trim();
+  const chronic = (p.chronic_condition_names || []).join(', ');
+  return `<b>${esc(p.full_name || p.first_name || '')}</b> · ${esc(p.hospital_number || '')}`
+    + (bits.length ? `<br><span class="muted">${esc(bits.join(' · '))}</span>` : '')
+    + (chronic ? `<br><span class="muted">Chronic: ${esc(chronic)}</span>` : '')
+    + (allergies ? `<br><span class="err">Allergies: ${esc(allergies)}</span>` : '');
+};
 
 /* Search the registry as the user types (250ms after the last keystroke) and
  * report the resolved patient — or null while nothing is resolved — through
@@ -1438,7 +1451,10 @@ function wirePatientField(form) {
   if (!box) return;
   const hidden = form.elements.patient;
   const out = form.querySelector('#patient-hit');
-  const picker = patientPicker(box, out, (p) => { hidden.value = p ? p.id : ''; });
+  const picker = patientPicker(box, out, (p) => {
+    hidden.value = p ? p.id : '';
+    if (p) carryPatientFields(form, p);
+  });
   // A record that already names a patient — an edit, or a form opened from the
   // patient — shows who that is rather than an id nobody can read.
   if (hidden.value) {
@@ -1446,6 +1462,20 @@ function wirePatientField(form) {
       box.value = p.full_name || '';
       picker.bind(p);
     }, () => { out.textContent = `Patient #${hidden.value}`; });
+  }
+}
+
+/* Fields the patient's own record already answers, so linking a patient fills
+ * them instead of asking again. A value already typed stands: the visit can be
+ * somewhere other than where the patient lives. */
+function carryPatientFields(form, patient) {
+  for (const name of ['region']) {
+    const elm = form.elements[name];
+    const value = String(patient[name] ?? '').trim();
+    if (!elm || !value || String(elm.value ?? '').trim() !== '') continue;
+    elm.value = value;
+    // A <select> ignores a value it has no option for; leave it blank then.
+    if (elm.tagName === 'SELECT' && elm.value !== value) elm.value = '';
   }
 }
 

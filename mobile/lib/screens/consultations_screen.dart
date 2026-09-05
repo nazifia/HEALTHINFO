@@ -429,6 +429,77 @@ class _Vital extends StatelessWidget {
   }
 }
 
+/// What the linked patient's record already says. Read-only: it saves the
+/// clinician re-typing what registration captured, and warns about allergies
+/// and chronic conditions before the drugs are written.
+class _PatientDetails extends StatelessWidget {
+  final Map<String, dynamic> patient;
+  const _PatientDetails({required this.patient});
+
+  @override
+  Widget build(BuildContext context) {
+    final age = patient['age'];
+    final sex = '${patient['sex'] ?? ''}'.trim();
+    final allergies = '${patient['allergies'] ?? ''}'.trim();
+    final chronic = (patient['chronic_condition_names'] as List?)
+            ?.map((c) => '$c')
+            .where((c) => c.isNotEmpty)
+            .toList() ??
+        const <String>[];
+    final chips = <String, String>{
+      if (age != null) 'age': '$age',
+      if (sex.isNotEmpty) 'sex': sex,
+      for (final f in const {
+        'blood_group': 'blood',
+        'genotype': 'genotype',
+        'nhis_number': 'NHIS',
+        'region': 'region',
+      }.entries)
+        if ('${patient[f.key] ?? ''}'.trim().isNotEmpty)
+          f.value: '${patient[f.key]}'.trim(),
+    };
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: EnhancedTheme.primaryTeal.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('${patient['full_name'] ?? 'Patient'} · '
+              '${patient['hospital_number'] ?? ''}',
+              style: TextStyle(
+                  color: context.labelColor, fontWeight: FontWeight.w700)),
+          if (chips.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final c in chips.entries)
+                  _Vital(label: c.key, value: c.value),
+              ],
+            ),
+          ],
+          if (allergies.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text('Allergies: $allergies',
+                style: const TextStyle(
+                    color: EnhancedTheme.errorRed, fontWeight: FontWeight.w600)),
+          ],
+          if (chronic.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text('Chronic: ${chronic.join(', ')}',
+                style: TextStyle(color: context.labelColor, fontSize: 12)),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 /// Ends the encounter — POST /api/consultations/{id}/close/. Separate from the
 /// edit form because closing also settles the booking and the case report, and
 /// the API only does that through this action.
@@ -562,6 +633,9 @@ class _FormState extends State<_Form> {
   String _region = '';
   int? _patientId;
   String? _patientLabel;
+  // The linked patient's own row. What is already on file — region, age, sex,
+  // allergies, chronic conditions — is shown, not asked for again.
+  Map<String, dynamic>? _patient;
   int? _caseReportId;
   int? _appointmentId;
   // The diagnosis. It is stored on the case report, not on the consultation —
@@ -616,7 +690,29 @@ class _FormState extends State<_Form> {
       });
     }
     _loadDiseases();
-    if (_patientId != null) _loadCases(_patientId!);
+    if (_patientId != null) {
+      _loadCases(_patientId!);
+      _loadPatient(_patientId!);
+    }
+  }
+
+  /// The linked patient's record. Only fetched when editing: picking a patient
+  /// already hands the form the whole row.
+  Future<void> _loadPatient(int id) async {
+    try {
+      final row = await api.get('/api/patients/$id/');
+      if (mounted) setState(() => _applyPatient(row as Map<String, dynamic>));
+    } catch (_) {
+      // Details are context, not input — the form stands without them.
+    }
+  }
+
+  /// Carry the patient's details into the form. Their region fills this
+  /// visit's, unless the visit already has one — an encounter can be somewhere
+  /// other than where the patient lives, and that entry wins.
+  void _applyPatient(Map<String, dynamic> row) {
+    _patient = row;
+    if (_region.isEmpty) _region = '${row['region'] ?? ''}';
   }
 
   Future<void> _loadDiseases() async {
@@ -748,6 +844,7 @@ class _FormState extends State<_Form> {
         PatientPicker(
           initialId: _patientId,
           initialLabel: _patientLabel,
+          onPicked: (row) => setState(() => _applyPatient(row)),
           onChanged: (id) => setState(() {
             _patientId = id;
             // The rows offered below are that patient's, so a changed patient
@@ -755,9 +852,14 @@ class _FormState extends State<_Form> {
             _caseReportId = null;
             _appointmentId = null;
             _cases = const [];
+            _patient = null;
             if (id != null) _loadCases(id);
           }),
         ),
+        if (_patient != null) ...[
+          const SizedBox(height: 12),
+          _PatientDetails(patient: _patient!),
+        ],
         const SizedBox(height: 12),
         // The diagnosis. Saving it files a case report — the row the outcome,
         // the prescriptions and the surveillance rollups all hang off.
@@ -850,6 +952,9 @@ class _FormState extends State<_Form> {
         _vitalRow('respiratory_rate', 'oxygen_saturation'),
         _vitalRow('weight_kg', 'height_cm'),
         RegionPicker(
+            // Rebuilt when the patient changes, so their region shows as the
+            // filled-in value rather than staying on the old dropdowns.
+            key: ValueKey('region-$_patientId-$_region'),
             initial: _region.isEmpty ? null : _region,
             onChanged: (r) => _region = r),
         const SizedBox(height: 12),

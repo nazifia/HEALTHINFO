@@ -19,8 +19,9 @@ let listCalls = 0;
 let reply = [];              // rows the next /api/patients/ lookup answers with
 const esc = (v) => String(v ?? '');
 const Api = { list: async () => (listCalls++, { rows: await reply }) };
-const load = new Function('esc', 'Api', `${src.slice(from, to)}; return { patientPicker };`);
-const { patientPicker } = load(esc, Api);
+const load = new Function('esc', 'Api',
+  `${src.slice(from, to)}; return { patientPicker, carryPatientFields, patientHitHtml };`);
+const { patientPicker, carryPatientFields, patientHitHtml } = load(esc, Api);
 
 const el = () => ({ value: '', textContent: '', innerHTML: '', querySelectorAll: () => [] });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -69,6 +70,24 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   await wait(320);
   assert.strictEqual(picked, null);
   assert.strictEqual(out.textContent, '');
+
+  // A linked patient fills what the registry already answers, and never
+  // overwrites what was typed.
+  const form = { elements: { region: { value: '', tagName: 'INPUT' } } };
+  carryPatientFields(form, { region: 'Ikeja, Lagos' });
+  assert.strictEqual(form.elements.region.value, 'Ikeja, Lagos');
+  carryPatientFields(form, { region: 'Bauchi, Bauchi' });
+  assert.strictEqual(form.elements.region.value, 'Ikeja, Lagos',
+      'a value already on the form was overwritten');
+  carryPatientFields({ elements: {} }, { region: 'Ikeja, Lagos' });  // no field: no throw
+
+  // The hit line carries the details the form would otherwise ask for.
+  const hit = patientHitHtml({
+    full_name: 'Ade Bello', age: 34, sex: 'female', blood_group: 'O+',
+    allergies: 'penicillin', chronic_condition_names: ['Asthma'],
+  });
+  assert.ok(hit.includes('34y') && hit.includes('O+'), 'details missing from the hit line');
+  assert.ok(hit.includes('penicillin') && hit.includes('Asthma'));
 
   console.log('patient picker: ok');
 })();
