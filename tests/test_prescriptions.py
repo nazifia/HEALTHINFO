@@ -93,6 +93,42 @@ def test_stats_rollup_and_endpoint(db_clean):
     ).status_code == 403
 
 
+def test_stats_collate_diagnosis_with_prescribed_drugs(db_clean):
+    from apps.analytics.stats import case_report_stats, prescription_stats
+    from apps.tenants.current import set_current_tenant
+
+    a = Tenant.objects.create(name="A", slug="a")
+    set_current_tenant(a)
+    malaria = Disease.objects.create(name="Malaria", icd10_code="B54")
+    act = Medication.objects.create(generic_name="Artemether")
+    para = Medication.objects.create(generic_name="Paracetamol")
+    case = CaseReport.objects.create(disease=malaria)
+
+    Prescription.objects.create(medication=act, case_report=case,
+                                status="dispensed")
+    Prescription.objects.create(medication=act, case_report=case,
+                                status="prescribed")
+    Prescription.objects.create(medication=para, case_report=case,
+                                status="partially_dispensed")
+    # No diagnosis recorded — counted, never dropped.
+    Prescription.objects.create(medication=para, status="prescribed")
+
+    stats = prescription_stats()
+    assert stats["linked"] == 3
+    assert stats["linked_rate"] == round(3 / 4, 4)
+    pairs = stats["by_diagnosis_medication"]
+    assert pairs[0] == {"diagnosis": "Malaria", "icd10_code": "B54",
+                        "medication": "Artemether", "count": 2, "dispensed": 1}
+    assert {"diagnosis": "—", "icd10_code": "", "medication": "Paracetamol",
+            "count": 1, "dispensed": 0} in pairs
+    assert {"diagnosis": "Malaria", "count": 3} in stats["by_diagnosis"]
+
+    # The case rollup reaches the other way: what was prescribed for it.
+    assert case_report_stats()["top_prescribed"][0] == {
+        "medication": "Artemether", "count": 2, "dispensed": 1
+    }
+
+
 def test_pharmacy_tenant_sees_only_patient_linked_orders(db_clean):
     """A pharmacy tenant's list carries only the orders sent for a patient."""
     pharm = Tenant.objects.create(name="Rx", slug="rx-only",

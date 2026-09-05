@@ -12,6 +12,7 @@ from django.db.models import (
     DurationField,
     ExpressionWrapper,
     F,
+    Q,
     Sum,
 )
 from django.db.models.functions import TruncDay, TruncWeek
@@ -41,6 +42,10 @@ from .models import (
 )
 
 _OBJECT_MODELS = {"disease": Disease, "medication": Medication}
+
+# An order that reached the patient. A partial fill counts: some of the drug
+# was handed over, so the prescription is not an unfilled one.
+_RX_FILLED = (Prescription.Status.DISPENSED, Prescription.Status.PARTIAL)
 
 
 def apply_range(qs, start=None, end=None):
@@ -208,6 +213,72 @@ def _fold_region_to_state(region_rows):
     ]
 
 
+def _prescriptions_for(reports):
+    """Orders written for a set of case reports.
+
+    ``reports`` is already scoped — tenant-scoped for a tenant rollup, unscoped
+    for the platform one — so joining through it carries that scope over and
+    the unscoped manager is safe here.
+    """
+    return Prescription.all_objects.filter(case_report__in=reports)
+
+
+def _prescribed_for(reports, limit=10):
+    """What was actually prescribed against these diagnoses.
+
+    Reads the orders, not ``CaseReport.medications``: the M2M records only that
+    a drug was involved in the case, while a Prescription is the order that was
+    written, with a status saying whether it was dispensed.
+    """
+    rows = (
+        _prescriptions_for(reports)
+        .values("medication__generic_name")
+        .annotate(
+            count=Count("id"),
+            dispensed=Count("id", filter=Q(status__in=_RX_FILLED)),
+        )
+        .order_by("-count")[:limit]
+    )
+    return [
+        {"medication": r["medication__generic_name"], "count": r["count"],
+         "dispensed": r["dispensed"]}
+        for r in rows
+    ]
+
+
+def _diagnosis_pairs(rx, limit=20):
+    """Prescribed drugs collated under the diagnosis they were written for.
+
+    Orders with no linked case report are kept under "—" rather than dropped:
+    a drug written with no recorded reason is a gap worth seeing, and hiding it
+    would make the pair counts add up to less than the total.
+
+    The ICD-10 code rides along because the disease *name* is spelled
+    differently per tenant; the code is the join key that keeps a central
+    "what is prescribed for this diagnosis" total correct.
+    """
+    rows = (
+        rx.values(
+            "case_report__disease__name",
+            "case_report__disease__icd10_code",
+            "medication__generic_name",
+        )
+        .annotate(
+            count=Count("id"),
+            dispensed=Count("id", filter=Q(status__in=_RX_FILLED)),
+        )
+        .order_by("-count")[:limit]
+    )
+    return [
+        {"diagnosis": r["case_report__disease__name"] or "—",
+         "icd10_code": r["case_report__disease__icd10_code"] or "",
+         "medication": r["medication__generic_name"],
+         "count": r["count"],
+         "dispensed": r["dispensed"]}
+        for r in rows
+    ]
+
+
 def _case_breakdown(reports):
     """Counts grouped by the dimensions an analyst slices on."""
     def by(field):
@@ -233,6 +304,9 @@ def _case_breakdown(reports):
             .order_by("-count")[:10]
         ),
         "case_trend": _series(reports, days=90, bucket="week"),
+        # The other half of the same picture: what was prescribed against these
+        # diagnoses, so a case rollup no longer stops at the diagnosis.
+        "top_prescribed": _prescribed_for(reports),
     }
 
 
@@ -754,18 +828,33 @@ def prescription_stats(start=None, end=None, platform=False):
 
     ``dispense_rate`` is over orders that were meant to be filled — cancelled
     ones are excluded, and a partial fill counts as dispensed.
+
+    ``by_diagnosis`` and ``by_diagnosis_medication`` collate the orders under
+    the diagnosis they were written for, so the report answers "what is
+    prescribed for this condition", not just "what is prescribed".
     """
     rx = apply_range(_manager(Prescription, platform).all(), start, end)
     fillable = rx.exclude(status=Prescription.Status.CANCELLED)
-    dispensed = fillable.filter(
-        status__in=(Prescription.Status.DISPENSED, Prescription.Status.PARTIAL)
-    ).count()
+    dispensed = fillable.filter(status__in=_RX_FILLED).count()
     due = fillable.count()
+    total = rx.count()
+    linked = rx.exclude(case_report__disease=None).count()
     out = {
-        "total": rx.count(),
+        "total": total,
         "dispensed": dispensed,
         "dispense_rate": round(dispensed / due, 4) if due else None,
         "top_medications": _grouped(rx, "medication__generic_name", 10),
+        # Prescribing collated against the reason it was written for.
+        # ``linked`` is the share of orders that carry a diagnosis at all:
+        # below 1, the pair rows describe only part of the prescribing.
+        "by_diagnosis": [
+            {"diagnosis": r["case_report__disease__name"] or "—",
+             "count": r["count"]}
+            for r in _grouped(rx, "case_report__disease__name", 20)
+        ],
+        "by_diagnosis_medication": _diagnosis_pairs(rx),
+        "linked": linked,
+        "linked_rate": round(linked / total, 4) if total else None,
         "by_status": _grouped(rx, "status"),
         "by_region": _grouped(rx, "region"),
         "trend": _series(rx, days=90, bucket="week"),

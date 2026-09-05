@@ -6,6 +6,7 @@ import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/bar_chart.dart';
+import '../shared/stats_rows.dart';
 
 /// Collated case reports rollup.
 /// Super-admins get the cross-tenant platform view (/api/analytics/platform/cases/);
@@ -129,6 +130,12 @@ class _CollatedReportsScreenState extends State<CollatedReportsScreen> {
                 icon: Icons.coronavirus_outlined,
                 rows: (d['top_diseases'] as List?) ?? [],
                 labelKey: 'disease__name',
+              ),
+              _Breakdown(
+                heading: 'Prescribed for these cases',
+                icon: Icons.medication_outlined,
+                rows: prescribedRows(d['top_prescribed']),
+                labelKey: 'medication',
               ),
               if (byRegionState.isNotEmpty)
                 _Breakdown(
