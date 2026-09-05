@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from config.serializers import NamedRelationsMixin
+
 from .models import (
     AdverseDrugReaction,
     Appointment,
@@ -26,7 +28,7 @@ def _validate_region(value):
     return value
 
 
-class CaseReportSerializer(serializers.ModelSerializer):
+class CaseReportSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     # reporter + tenant set server-side, never client-supplied. M2M managers are
     # tenant-scoped, so DRF rejects any symptom/medication/disease from another tenant.
@@ -168,7 +170,7 @@ class AppointmentSerializer(serializers.ModelSerializer):
         return _validate_region(value)
 
 
-class PrescriptionSerializer(serializers.ModelSerializer):
+class PrescriptionSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
     medication_name = serializers.CharField(
@@ -185,7 +187,7 @@ class PrescriptionSerializer(serializers.ModelSerializer):
         return _validate_region(value)
 
 
-class ConsultationSerializer(serializers.ModelSerializer):
+class ConsultationSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
     # The diagnosis this visit reached. It lives on the case report — this is a

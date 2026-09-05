@@ -3,11 +3,12 @@ from rest_framework import serializers
 
 from apps.accounts.models import normalize_phone
 from apps.analytics.nigeria import valid_regions
+from config.serializers import NamedRelationsMixin
 
 from .models import Patient, PatientAccessLog
 
 
-class PatientSerializer(serializers.ModelSerializer):
+class PatientSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     full_name = serializers.CharField(read_only=True)
     age = serializers.IntegerField(read_only=True)
     age_group = serializers.CharField(read_only=True)

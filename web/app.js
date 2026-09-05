@@ -577,14 +577,16 @@ function tableHtml(rows, linkFor, rowAction) {
   return `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
+// A key whose row already carries a resolved column - one prefixed with the key
+// and ending in `_name(s)`, `_reference` or `_number` - is the bare pk behind a
+// name, and tells a reader nothing the named column doesn't.
+const namedElsewhere = (keys, k) => keys.some((o) => o !== k && o.startsWith(`${k}_`)
+  && /_(names?|reference|number)$/.test(o));
+
 // First rows' keys, favoring identity/status columns, capped for readability.
-// A foreign key whose row already carries a resolved column - one prefixed with
-// the key and ending in `_name`, `_reference` or `_number` - is dropped: the
-// bare pk tells a reader nothing the named column doesn't.
 function pickColumns(row) {
   const keys = Object.keys(row);
-  const resolved = (k) => keys.some((o) => o !== k && o.startsWith(`${k}_`)
-    && /_(name|reference|number)$/.test(o));
+  const resolved = (k) => namedElsewhere(keys, k);
   const first = keys.filter((k) => ['id', 'reference', 'status', 'name', 'generic_name', 'title', 'phone', 'slug'].includes(k));
   // null is a scalar here, not an object — a column empty on the sampled row
   // (an unbatched claim's batch) still belongs in the table.
@@ -953,8 +955,10 @@ function dlHtml(obj) {
   // table — as JSON they are unreadable exactly where the detail matters.
   const cell = (k, v) => Array.isArray(v) && v.length && typeof v[0] === 'object'
     ? tableHtml(v) : cellHtml(k, v);
-  return `<dl class="detail">${Object.entries(obj).map(([k, v]) =>
-    `<dt>${esc(label(k))}</dt><dd>${cell(k, v)}</dd>`).join('')}</dl>`;
+  const keys = Object.keys(obj);
+  return `<dl class="detail">${Object.entries(obj)
+    .filter(([k]) => !namedElsewhere(keys, k))
+    .map(([k, v]) => `<dt>${esc(label(k))}</dt><dd>${cell(k, v)}</dd>`).join('')}</dl>`;
 }
 
 async function viewDetail(slug, id) {

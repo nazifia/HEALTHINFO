@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from config.serializers import NamedRelationsMixin
+
 from .models import (
     Article,
     Disease,
@@ -18,7 +20,7 @@ class SymptomSerializer(serializers.ModelSerializer):
         exclude = ("tenant",)
 
 
-class DiseaseSerializer(serializers.ModelSerializer):
+class DiseaseSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     # M2M PK lists. The related managers are tenant-scoped, so DRF will reject
     # any symptom/medication id that belongs to another tenant.
     class Meta:
@@ -46,25 +48,25 @@ class DrugInteractionSerializer(serializers.ModelSerializer):
         exclude = ("tenant",)
 
 
-class SpecialtySerializer(serializers.ModelSerializer):
+class SpecialtySerializer(NamedRelationsMixin, serializers.ModelSerializer):
     class Meta:
         model = Specialty
         exclude = ("tenant",)
 
 
-class ProcedureSerializer(serializers.ModelSerializer):
+class ProcedureSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     class Meta:
         model = Procedure
         exclude = ("tenant",)
 
 
-class LabTestSerializer(serializers.ModelSerializer):
+class LabTestSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     class Meta:
         model = LabTest
         exclude = ("tenant",)
 
 
-class ArticleSerializer(serializers.ModelSerializer):
+class ArticleSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     class Meta:
         model = Article
         exclude = ("tenant",)
