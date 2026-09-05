@@ -160,7 +160,9 @@ const RESOURCES = {
   // The encounter itself. Closing settles the booking and the case report with
   // it, so it goes through the action rather than a PATCH of status.
   'consultations':     { title: 'Visits',             group: 'Clinical', report: true, fileFrom: ['prescriptions', 'case-reports'],
-                          actions: [{ name: 'close', label: 'Close visit', ask: 'follow_up_on,notes',
+                          actions: [{ name: 'diagnose', label: 'Record diagnosis', ask: 'diagnosis',
+                                      choose: 'severity:mild,moderate,severe,critical', when: ['open'] },
+                                    { name: 'close', label: 'Close visit', ask: 'follow_up_on,notes',
                                       choose: 'disposition:home,follow_up,admitted,referred,deceased', when: ['open'] }] },
   'users':             { title: 'Users',              group: 'Admin', adminOnly: true },
   // The audit trail of who read which patient record. Tenant admins only, and

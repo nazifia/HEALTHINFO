@@ -9,6 +9,10 @@ re-typed the day's work as a report.
 
 This module captures the two facts worth collating — **the diagnosis** and
 **the medications used** — as they happen, for hospitals and pharmacies alike.
+A pharmacy's counter feeds it on a signal, as a script is written and as its
+drugs go out; a hospital's clinician feeds it from the visit, where the
+diagnosis they reach is filed as they reach it (``capture_consultation``, wired
+to the consultation's ``diagnose`` action).
 
 There is no second store to ship to. A captured row is tenant-scoped like every
 other analytics row: the tenant's own dashboard reads it through ``objects``,
@@ -119,8 +123,14 @@ def mark_dispensed(order):
 
 def capture_medication(*, tenant_id, medication, source_ref, patient=None,
                        case_report=None, reporter=None, dose="",
-                       duration_days=None, notes=""):
-    """Record one drug handed over as a dispensed order. Idempotent per source.
+                       duration_days=None, notes="",
+                       status=Prescription.Status.DISPENSED):
+    """Record one drug ordered or handed over. Idempotent per source.
+
+    ``status`` is what the operational row says now: a script line written but
+    not yet filled is ``PRESCRIBED``, and the same line reaching the counter is
+    ``DISPENSED``. The move only ever runs forward — a row already dispensed is
+    never walked back to prescribed by a later save of the line it came from.
 
     A unique (tenant, source_ref) constraint backs the get_or_create, so two
     concurrent dispenses of one line cannot race a second row past it: the
@@ -138,14 +148,26 @@ def capture_medication(*, tenant_id, medication, source_ref, patient=None,
             "duration_days": duration_days,
             "notes": notes,
             "region": _region(patient),
-            "status": Prescription.Status.DISPENSED,
+            "status": status,
         },
     )
-    return order if created else mark_dispensed(order)
+    if created or status != Prescription.Status.DISPENSED:
+        return order
+    return mark_dispensed(order)
 
 
-def capture_prescription_line(line, *, user=None):
-    """A script line ticked off at the counter: its diagnosis and its drug."""
+def capture_prescription_line(line, *, user=None, dispensed=None):
+    """A drug on a counter script: its diagnosis, its drug, and where it got to.
+
+    Filed when the line is written, not only when it is ticked off. A patient
+    who was prescribed a drug the shelf did not have is the stockout the centre
+    is looking for, and a line that never reaches the counter would otherwise
+    leave no trace of having been ordered at all.
+
+    ``dispensed`` overrides the line's own tick for the route that sells a
+    script's drug at the till without ticking the line off: the drug left the
+    shelf, whatever the counter copy of the script still says.
+    """
     rx = line.prescription
     tenant_id = line.tenant_id or rx.tenant_id
     medication = medication_for(tenant_id, line.item, line.name)
@@ -158,7 +180,55 @@ def capture_prescription_line(line, *, user=None):
         reporter=line.dispensed_by or user or rx.created_by,
         dose=line.dosage, duration_days=_duration_days(line.duration),
         notes=line.instructions,
+        status=(Prescription.Status.DISPENSED
+                if (line.is_dispensed if dispensed is None else dispensed)
+                else Prescription.Status.PRESCRIBED),
     )
+
+
+def capture_consultation(consultation, diagnosis, *, reporter=None, severity=""):
+    """File the diagnosis a clinician reached on a visit as a case report.
+
+    The hospital's half of what the counter already does: free text in, a
+    catalog disease matched out, and the written text kept in ``notes`` when
+    nothing matches — an unmatched diagnosis is still a case the centre hears
+    about.
+
+    One visit is one case. A case already linked to the consultation is this
+    visit's diagnosis however it got there — a client that filed one itself
+    included — so re-diagnosing corrects that case rather than filing a second
+    one the rollups would count as a second patient. ``severity`` sets the
+    severity of a case filed here; a case that already exists keeps the
+    severity whoever filed it recorded.
+    """
+    text = (diagnosis or "").strip()
+    if not text:
+        return None
+    tenant_id = consultation.tenant_id
+    case = consultation.case_report
+    if case is None:
+        defaults = {
+            "disease": disease_for(tenant_id, text),
+            "patient": consultation.patient,
+            "patient_age_group": consultation.patient_age_group,
+            "patient_sex": consultation.patient_sex,
+            "reporter": reporter or consultation.reporter,
+            "region": consultation.region or _region(consultation.patient),
+            "notes": text,
+        }
+        if severity:
+            defaults["severity"] = severity
+        case, created = CaseReport.all_objects.get_or_create(
+            tenant_id=tenant_id, source_ref=f"consult:{consultation.pk}",
+            defaults=defaults,
+        )
+        if created:
+            return case
+    if case.notes != text:
+        case.disease = disease_for(tenant_id, text)
+        case.notes = text
+        case.save(update_fields=["disease", "notes", "updated_at"])
+    return case
 
 
 def _rx_line_for(sale, item_id):
@@ -192,7 +262,7 @@ def capture_dispense(log):
     if line is not None:
         # Same drug, same script: both routes key on the line, so ticking it off
         # at the counter and selling it at the till collapse onto one row.
-        return capture_prescription_line(line, user=log.user)
+        return capture_prescription_line(line, user=log.user, dispensed=True)
     return capture_medication(
         tenant_id=tenant_id, medication=medication,
         source_ref=f"dispense:{log.pk}", patient=sale.patient,

@@ -193,6 +193,12 @@ class ConsultationSerializer(serializers.ModelSerializer):
     case_report_disease = serializers.CharField(
         source="case_report.disease.name", read_only=True
     )
+    # What the clinician actually wrote. A diagnosis the catalog has never heard
+    # of matches no disease, so without this a client would show a visit with no
+    # diagnosis at all where one was recorded in plain words.
+    case_report_notes = serializers.CharField(
+        source="case_report.notes", read_only=True
+    )
     # Derived from the vitals on the row, never sent by a client.
     bmi = serializers.FloatField(read_only=True)
     blood_pressure = serializers.CharField(read_only=True)

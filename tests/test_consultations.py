@@ -311,3 +311,105 @@ def test_prescribing_off_a_visit_files_the_order_against_its_case(api, patient):
     assert written.status_code == 201
     assert written.json()["case_report"] == case.id
     assert written.json()["medication_name"] == "Artemether"
+
+
+def test_diagnosing_a_visit_files_the_case_for_the_centre(api, patient):
+    """The clinician writes the diagnosis; the case report files itself.
+
+    The hospital's half of what the counter already does — nobody re-types the
+    day's diagnoses as surveillance reports.
+    """
+    Disease.objects.create(name="Malaria")
+    created = api.post(
+        "/api/consultations/",
+        {"patient": patient.id, "chief_complaint": "Fever"}, format="json",
+    ).json()
+    url = f"/api/consultations/{created['id']}/"
+
+    body = api.post(url + "diagnose/",
+                    {"diagnosis": "Malaria, uncomplicated"}, format="json").json()
+
+    assert body["case_report_disease"] == "Malaria"     # matched the catalog
+    # The written words travel too: a client shows what was recorded even when
+    # the catalog carries nothing by that name.
+    assert body["case_report_notes"] == "Malaria, uncomplicated"
+    case = CaseReport.all_objects.get(pk=body["case_report"])
+    assert case.notes == "Malaria, uncomplicated"       # kept what was written
+    assert case.patient_id == patient.id
+    assert case.source_ref == f"consult:{created['id']}"
+
+    # Correcting the wording corrects that case; it does not file a second one.
+    corrected = api.post(url + "diagnose/", {"diagnosis": "Typhoid fever"},
+                         format="json").json()
+    assert corrected["case_report_notes"] == "Typhoid fever"
+    assert "case_report_disease" not in corrected  # nothing in the catalog
+    case.refresh_from_db()
+    assert case.notes == "Typhoid fever"
+    assert case.disease_id is None                      # nothing in the catalog
+    assert CaseReport.all_objects.filter(patient=patient).count() == 1
+
+
+def test_a_diagnosis_is_recorded_before_the_note_is_signed(api, patient):
+    created = api.post(
+        "/api/consultations/",
+        {"patient": patient.id, "chief_complaint": "Fever"}, format="json",
+    ).json()
+    url = f"/api/consultations/{created['id']}/"
+    blank = api.post(url + "diagnose/", {"diagnosis": "  "}, format="json")
+    assert blank.status_code == 400
+
+    api.post(url + "close/", {"disposition": "home"}, format="json")
+    late = api.post(url + "diagnose/", {"diagnosis": "Malaria"}, format="json")
+    assert late.status_code == 400
+    assert "before closing it" in late.json()["message"]
+
+
+def test_drugs_written_off_a_visit_carry_its_diagnosis(api, patient):
+    """An order written from anywhere — the patient record, a ward round — is
+    filed against the diagnosis of the visit the patient is in."""
+    drug = Medication.objects.create(generic_name="Artemether")
+    visit = api.post(
+        "/api/consultations/",
+        {"patient": patient.id, "chief_complaint": "Fever"}, format="json",
+    ).json()
+    api.post(f"/api/consultations/{visit['id']}/diagnose/",
+             {"diagnosis": "Malaria"}, format="json")
+
+    order = api.post(
+        "/api/prescriptions/",
+        {"patient": patient.id, "medication": drug.id, "dose": "80 mg"},
+        format="json",
+    ).json()
+
+    consultation = Consultation.all_objects.get(pk=visit["id"])
+    assert order["case_report"] == consultation.case_report_id
+
+    # No open visit, no diagnosis to borrow: the order stands on its own rather
+    # than picking up a case from some earlier day.
+    api.post(f"/api/consultations/{visit['id']}/close/",
+             {"disposition": "home"}, format="json")
+    loose = api.post(
+        "/api/prescriptions/",
+        {"patient": patient.id, "medication": drug.id}, format="json",
+    ).json()
+    assert loose["case_report"] is None
+
+
+def test_a_visit_already_carrying_a_case_keeps_it(api, patient):
+    """A client that filed the case itself has already named this visit's
+    diagnosis. Correcting it corrects that case — two cases for one visit is
+    two patients as far as the rollups are concerned."""
+    case = CaseReport.objects.create(patient=patient, severity="severe")
+    created = api.post(
+        "/api/consultations/",
+        {"patient": patient.id, "chief_complaint": "Fever", "case_report": case.id},
+        format="json",
+    ).json()
+
+    api.post(f"/api/consultations/{created['id']}/diagnose/",
+             {"diagnosis": "Malaria"}, format="json")
+
+    case.refresh_from_db()
+    assert case.notes == "Malaria"
+    assert case.severity == "severe"  # not overwritten by the default
+    assert CaseReport.all_objects.filter(patient=patient).count() == 1

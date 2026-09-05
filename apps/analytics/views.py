@@ -16,6 +16,7 @@ from apps.accounts.permissions import (
 )
 from apps.tenants.models import Tenant
 
+from .capture import capture_consultation
 from .export import case_reports_csv, csv_response
 from .idsr import SUMMARY_COLUMNS, platform_idsr_report, tenant_idsr_report
 from .models import (
@@ -330,6 +331,37 @@ class ConsultationViewSet(_ReportViewSet):
         instance.delete()
 
     @action(detail=True, methods=["post"])
+    def diagnose(self, request, pk=None):
+        """Record what the visit found: ``{"diagnosis": "Malaria"}``.
+
+        The clinician writes the diagnosis in their own words and the case
+        report the centre collates is filed and linked from it — matched to a
+        catalog disease where the text names one, keeping the text either way.
+        This is the hospital's half of what the counter already does on its own
+        (see apps.analytics.capture): a diagnosis reaches surveillance because
+        it was reached, not because somebody typed it a second time as a report.
+
+        Re-diagnosing corrects the visit's case rather than filing another.
+        ``severity`` is optional and only sets a new case's severity.
+        """
+        consultation = self.get_object()
+        if consultation.status == Consultation.Status.CLOSED:
+            raise ValidationError(
+                "A closed consultation is a signed clinical note. Record the "
+                "diagnosis before closing it."
+            )
+        case = capture_consultation(
+            consultation, request.data.get("diagnosis", ""),
+            reporter=request.user, severity=request.data.get("severity", ""),
+        )
+        if case is None:
+            raise ValidationError("A diagnosis is required.")
+        if consultation.case_report_id != case.pk:
+            consultation.case_report = case
+            consultation.save(update_fields=["case_report", "updated_at"])
+        return Response(self.get_serializer(consultation).data)
+
+    @action(detail=True, methods=["post"])
     def close(self, request, pk=None):
         """End the encounter: ``{"disposition": ..., "follow_up_on": ...}``.
 
@@ -379,6 +411,24 @@ class PrescriptionViewSet(_ReportViewSet):
         if tenant is not None and tenant.kind == Tenant.Kind.PHARMACY:
             qs = qs.filter(patient__isnull=False)
         return qs
+
+    def perform_create(self, serializer):
+        """Write the order against the diagnosis of the visit it came out of.
+
+        A caller that knows the case sends it. One that doesn't — an order
+        written off the patient record, on a ward round, from a client that
+        never loaded the consultation — would otherwise file drugs the centre
+        can see no reason for. The patient's open visit is that reason.
+        """
+        data = serializer.validated_data
+        case = data.get("case_report")
+        if case is None and data.get("patient") is not None:
+            visit = Consultation.objects.filter(
+                patient=data["patient"], status=Consultation.Status.OPEN,
+                case_report__isnull=False,
+            ).first()
+            case = visit.case_report if visit is not None else None
+        serializer.save(reporter=self.request.user, case_report=case)
 
 
 class _StatsView(APIView):
