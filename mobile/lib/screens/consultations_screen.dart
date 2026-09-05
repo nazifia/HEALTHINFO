@@ -159,8 +159,13 @@ class _Card extends StatelessWidget {
     final complaint = '${row['chief_complaint'] ?? ''}'.trim();
     final patient = '${row['patient_name'] ?? ''}'.trim();
     final bp = '${row['blood_pressure'] ?? ''}'.trim();
-    // The diagnosis lives on the linked case report; the API sends its name.
-    final diagnosis = '${row['case_report_disease'] ?? ''}'.trim();
+    // The diagnosis lives on the linked case report. The API sends the catalog
+    // name where the text matched one, and the written text either way — a
+    // diagnosis the catalog does not carry is still what the visit found.
+    final written = '${row['case_report_notes'] ?? ''}'.trim();
+    final diagnosis = '${row['case_report_disease'] ?? ''}'.trim().isEmpty
+        ? written
+        : '${row['case_report_disease']}'.trim();
     final abnormal =
         (row['abnormal_vitals'] as List?)?.cast<String>() ?? const <String>[];
     return GlassCard(
@@ -258,40 +263,107 @@ class _Card extends StatelessWidget {
                 style: TextStyle(color: context.hintColor, fontSize: 12)),
           ],
           const SizedBox(height: 8),
-          Row(children: [
-            Expanded(
-              child: RegionEditChip(
-                path: '/api/consultations/${row['id']}/',
-                current: '${row['region'] ?? ''}'.trim(),
-                onSaved: reload,
-              ),
-            ),
-            FutureBuilder<String?>(
-              future: api.myRole(),
-              builder: (context, snap) {
-                if (!api.roleCanReport(snap.data)) return const SizedBox.shrink();
-                return Row(mainAxisSize: MainAxisSize.min, children: [
-                  // Drugs outlive the visit: a closed note is signed, but the
-                  // patient still leaves with a prescription, so this stays
-                  // available either side of the close.
+          RegionEditChip(
+            path: '/api/consultations/${row['id']}/',
+            current: '${row['region'] ?? ''}'.trim(),
+            onSaved: reload,
+          ),
+          FutureBuilder<String?>(
+            future: api.myRole(),
+            builder: (context, snap) {
+              if (!api.roleCanReport(snap.data)) return const SizedBox.shrink();
+              // A Wrap, not a Row: three actions do not fit one phone line.
+              return Wrap(spacing: 4, children: [
+                // The diagnosis goes on the note while it is still open — a
+                // closed note is signed and the API refuses one after that.
+                if (isOpen)
                   TextButton.icon(
-                    icon: const Icon(Icons.medication_outlined, size: 18),
-                    label: const Text('Prescribe'),
-                    onPressed: () => _prescribe(context),
+                    icon: const Icon(Icons.assignment_outlined, size: 18),
+                    label: Text(written.isEmpty ? 'Diagnose' : 'Re-diagnose'),
+                    onPressed: () => _diagnose(context),
                   ),
-                  if (isOpen)
-                    TextButton.icon(
-                      icon: const Icon(Icons.task_alt, size: 18),
-                      label: const Text('Close'),
-                      onPressed: () => _close(context),
-                    ),
-                ]);
-              },
-            ),
-          ]),
+                // Drugs outlive the visit: a closed note is signed, but the
+                // patient still leaves with a prescription, so this stays
+                // available either side of the close.
+                TextButton.icon(
+                  icon: const Icon(Icons.medication_outlined, size: 18),
+                  label: const Text('Prescribe'),
+                  onPressed: () => _prescribe(context),
+                ),
+                if (isOpen)
+                  TextButton.icon(
+                    icon: const Icon(Icons.task_alt, size: 18),
+                    label: const Text('Close'),
+                    onPressed: () => _close(context),
+                  ),
+              ]);
+            },
+          ),
         ],
       ),
     );
+  }
+
+  /// Record what the visit found, in the clinician's own words.
+  ///
+  /// One call: the server matches the text to a catalog disease where it names
+  /// one, files the case report the centre collates and links it to this visit
+  /// (POST /api/consultations/{id}/diagnose/). Free text on purpose — a
+  /// diagnosis the catalog has never heard of is still a case, and a picker
+  /// that only offers the catalog is a diagnosis that goes unreported.
+  Future<void> _diagnose(BuildContext context) async {
+    final text =
+        TextEditingController(text: '${row['case_report_notes'] ?? ''}'.trim());
+    var severity = _severities.first;
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Record diagnosis'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(
+            controller: text,
+            autofocus: true,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(
+              labelText: 'Diagnosis',
+              helperText: 'Written as you would write it. Matched where it can be.',
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Only sets the severity of a case filed here; one already on file
+          // keeps the severity whoever filed it recorded.
+          StatefulBuilder(
+            builder: (_, setSheet) => DropdownButtonFormField<String>(
+              initialValue: severity,
+              decoration: const InputDecoration(labelText: 'Severity'),
+              items: [
+                for (final s in _severities)
+                  DropdownMenuItem(value: s, child: Text(s)),
+              ],
+              onChanged: (v) => setSheet(() => severity = v ?? severity),
+            ),
+          ),
+        ]),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Save')),
+        ],
+      ),
+    );
+    final wanted = text.text.trim();
+    if (go != true || wanted.isEmpty) return;
+    try {
+      await api.post('/api/consultations/${row['id']}/diagnose/',
+          {'diagnosis': wanted, 'severity': severity});
+      reload();
+      if (context.mounted) showSuccess(context, 'Diagnosis recorded.');
+    } catch (e) {
+      if (context.mounted) showError(context, '$e');
+    }
   }
 
   Future<void> _close(BuildContext context) async {

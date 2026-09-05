@@ -11,7 +11,7 @@ import logging
 
 from django.db.models.signals import post_save
 
-from .capture import capture_dispense, capture_prescription_line
+from .capture import capture_diagnosis, capture_dispense, capture_prescription_line
 
 logger = logging.getLogger(__name__)
 
@@ -28,17 +28,28 @@ def _on_dispensed(sender, instance, created, **kwargs):
         _safely(capture_dispense, instance)
 
 
+def _on_rx(sender, instance, **kwargs):
+    # A diagnosis written at the counter is a case whether or not the script is
+    # ever filled: a patient who could not afford the drugs still had malaria,
+    # and the centre counts the case, not the sale. No-ops on a script with
+    # nothing written on it.
+    _safely(capture_diagnosis, instance)
+
+
 def _on_rx_line(sender, instance, **kwargs):
-    # Fires on every save of a line; only a dispensed one is a fact to report.
-    if instance.is_dispensed:
-        _safely(capture_prescription_line, instance)
+    # Fires on every save of a line. A line reports what was prescribed when it
+    # is written and moves to dispensed when it goes out, so the centre sees
+    # what was ordered next to what actually left the shelf.
+    _safely(capture_prescription_line, instance)
 
 
 def connect():
     from apps.pos.models import DispensingLog
-    from apps.prescriptions.models import PrescriptionItem
+    from apps.prescriptions.models import Prescription, PrescriptionItem
 
     post_save.connect(_on_dispensed, sender=DispensingLog,
                       dispatch_uid="analytics.capture_dispense")
+    post_save.connect(_on_rx, sender=Prescription,
+                      dispatch_uid="analytics.capture_rx_diagnosis")
     post_save.connect(_on_rx_line, sender=PrescriptionItem,
                       dispatch_uid="analytics.capture_rx_line")

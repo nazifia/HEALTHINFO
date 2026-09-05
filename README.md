@@ -158,22 +158,39 @@ anonymous walk-ins.
 A weekly Celery beat task (`weekly_tenant_report`, Mondays 04:00) emails each
 tenant admin their rollup + any outbreak alerts.
 
-### Capture: the counter feeds the data centre
+### Capture: the counter and the consulting room feed the data centre
 Hospitals and pharmacies do the work in the operational apps, so what they
 diagnose and dispense used to reach surveillance only if somebody re-typed it
-as a report. `apps.analytics.capture` files it as it happens, on a signal from
-every route a drug can leave the shelf (a till sale, a cashier completing a
-payment request, a script ticked off at the counter):
+as a report. `apps.analytics.capture` files it as it happens — on a signal at
+the pharmacy, and from the visit itself at a hospital:
 
-- **the diagnosis** on a counter script becomes a `CaseReport`, matched to a
-  catalog disease by name or ICD-10 code and keeping the written text in
-  `notes` when nothing matches — an unmatched diagnosis is still a case the
-  centre hears about;
-- **the medications used** become dispensed `analytics.Prescription` rows,
-  linked back to that case. Only items that match the drug catalog qualify —
-  gloves and table water cross the same counter.
+**At the pharmacy**, on a signal from every route a script or a drug can move
+(a script written up, a line ticked off, a till sale, a cashier completing a
+payment request):
+
+- **the diagnosis** on a counter script becomes a `CaseReport` as soon as the
+  script is written, matched to a catalog disease by name or ICD-10 code and
+  keeping the written text in `notes` when nothing matches — an unmatched
+  diagnosis is still a case the centre hears about, and a patient who could not
+  afford the drugs still had malaria;
+- **the medications** become `analytics.Prescription` rows, linked back to that
+  case: `prescribed` when the line is written, `dispensed` when it goes out.
+  The centre sees what was ordered next to what actually left the shelf, which
+  is what a stockout looks like from outside the building. Only items that
+  match the drug catalog qualify — gloves and table water cross the same
+  counter.
 - a **hospital** order its own clinician already wrote (`Sale.prescription`) is
   marked dispensed rather than filed a second time.
+
+**At a hospital**, from the consultation — `POST /api/consultations/{id}/diagnose/`
+`{"diagnosis": "Malaria, uncomplicated"}`. The clinician writes the diagnosis in
+their own words and the case report is filed, matched and linked to the visit in
+one call, before the note is closed (a closed note is signed, so the diagnosis
+goes on it first). One visit is one case: re-diagnosing corrects that case, and a
+case a client filed itself is adopted rather than duplicated. Drug orders written
+for a patient who is in an open, diagnosed visit inherit that case automatically,
+so `POST /api/prescriptions/` from the patient record or a ward round never files
+drugs the centre can see no reason for.
 
 There is no second store to ship to: a captured row is tenant-scoped like every
 other analytics row, so the tenant's dashboard reads it through `objects` and

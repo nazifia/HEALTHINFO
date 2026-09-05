@@ -155,10 +155,14 @@ def test_a_hospital_order_is_filled_in_not_filed_again(db_clean):
 
 def test_a_walk_in_still_reports_the_drug_but_no_case(counter):
     """Nothing was diagnosed over the counter — the drug used is still reported."""
+    cases = CaseReport.all_objects.filter(tenant=counter["tenant"]).count()
+
     _sell(counter, counter["drug"], quantity=5)
 
-    assert CaseReport.all_objects.filter(tenant=counter["tenant"]).count() == 0
-    order = SurveillanceRx.all_objects.get(tenant=counter["tenant"])
+    # The sale diagnosed nothing, so it added no case to the script's own.
+    assert CaseReport.all_objects.filter(tenant=counter["tenant"]).count() == cases
+    order = SurveillanceRx.all_objects.get(tenant=counter["tenant"],
+                                           source_ref__startswith="dispense:")
     assert order.medication_id == counter["amox"].pk
     assert order.case_report_id is None
 
@@ -167,7 +171,9 @@ def test_a_consumable_never_becomes_a_prescribed_drug(counter):
     """Gloves cross the same counter and match no catalog drug."""
     _sell(counter, counter["gloves"], quantity=2)
 
-    assert SurveillanceRx.all_objects.filter(tenant=counter["tenant"]).count() == 0
+    assert not SurveillanceRx.all_objects.filter(
+        tenant=counter["tenant"], source_ref__startswith="dispense:"
+    ).exists()
 
 
 def test_the_database_refuses_a_second_row_for_one_dispense(counter):
@@ -191,3 +197,43 @@ def test_hand_filed_rows_do_not_collide(counter):
     assert SurveillanceRx.all_objects.filter(
         tenant=counter["tenant"], source_ref__isnull=True
     ).count() == 2
+
+
+def test_a_script_reports_before_anything_is_dispensed(counter):
+    """Writing the script is the report. Filling it only moves the status.
+
+    A patient prescribed a drug the shelf did not have is exactly the stockout
+    the centre is looking for, so a line reports what was ordered from the
+    moment it is written.
+    """
+    line = counter["line"]
+    order = SurveillanceRx.all_objects.get(source_ref=f"rxline:{line.pk}")
+    assert order.status == SurveillanceRx.Status.PRESCRIBED
+    assert order.dispensed_at is None
+    assert order.case_report.disease_id == counter["malaria"].pk
+
+    line.mark_dispensed(user=counter["staff"])
+
+    order.refresh_from_db()
+    assert order.status == SurveillanceRx.Status.DISPENSED
+    assert order.dispensed_at is not None
+    # Still one row: prescribing and dispensing are one drug, not two.
+    assert SurveillanceRx.all_objects.filter(
+        tenant=counter["tenant"], source_ref=f"rxline:{line.pk}"
+    ).count() == 1
+
+
+def test_a_diagnosis_reaches_the_centre_with_nothing_dispensed(db_clean):
+    """A patient who could not afford the drugs still had malaria."""
+    tenant = Tenant.objects.create(name="Zara Pharmacy", slug="zara-dc")
+    Disease.objects.create(name="Malaria", slug="malaria-zara", icd10_code="B54",
+                           status="published")
+    rx = Prescription.all_objects.create(tenant=tenant, customer_name="Walk-in",
+                                         diagnosis="Malaria")
+
+    case = CaseReport.all_objects.get(tenant=tenant, source_ref=f"rx:{rx.pk}")
+    assert case.disease.name == "Malaria"
+
+    # A script with nothing written on it is a purchase, not a case.
+    Prescription.all_objects.create(tenant=tenant, customer_name="Walk-in")
+    assert CaseReport.all_objects.filter(tenant=tenant).count() == 1
