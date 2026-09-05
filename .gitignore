@@ -11,3 +11,6 @@ venv/
 .dart_tool/
 web/build/
 web/web/
+
+# Firebase deploy cache (per-machine, rewritten on every deploy)
+.firebase/

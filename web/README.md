@@ -28,6 +28,18 @@ firebase deploy
 
 `firebase init` writes `.firebaserc` with your project id; `firebase.json` is already here.
 
+One directory, one Firebase project:
+
+| Directory | Project | What it serves |
+| --- | --- | --- |
+| `web/` | `healthinfoweb` | this static SPA |
+| `mobile/` | `healthinfoapp2` | the Flutter web build |
+
+Keep each project id out of the other directory's `.firebaserc`. Listing
+`healthinfoweb` in `mobile/.firebaserc` once let `firebase deploy -P healthinfoweb`
+run from `mobile/` and push the Flutter build over this site, so both URLs served
+the same frontend.
+
 ## Backend CORS (required for prod)
 
 The API only allows configured origins in prod mode. Add your Firebase domain
