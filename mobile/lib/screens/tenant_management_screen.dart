@@ -48,7 +48,7 @@ class _TenantManagementScreenState extends State<TenantManagementScreen> {
   Future<void> _openAs(Map<String, dynamic> t) async {
     try {
       await api.post('/api/tenants/${t['id']}/open/');
-      await setTenant('${t['slug']}');
+      await setTenant('${t['slug']}', name: '${t['name']}');
       if (!mounted) return;
       showSuccess(context, 'Working in ${t['name']}.');
       setState(() {});
@@ -136,7 +136,7 @@ class _TenantManagementScreenState extends State<TenantManagementScreen> {
                 const Icon(Icons.business_outlined, size: 18),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text('Working in $tenantSlug',
+                  child: Text('Working in $tenantLabel',
                       style: TextStyle(color: context.labelColor)),
                 ),
                 TextButton(onPressed: _leave, child: const Text('Leave')),

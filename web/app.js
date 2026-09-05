@@ -305,13 +305,16 @@ async function ensureChrome() {
   $('#topbar').hidden = false;
   $('#sidebar').hidden = false;
   const badge = $('#tenant-badge');
-  badge.textContent = Api.tenant || 'no organization';
+  // Name where there is one; the slug is the fallback for a session that
+  // switched organizations before the name was known.
+  badge.textContent = Api.tenantName || Api.tenant || 'no organization';
   // A super-admin hops between organizations, so their badge is the way back
   // out of the one they opened. Everyone else is stuck to their own tenant.
   badge.classList.toggle('clickable', ME?.role === 'super_admin');
   badge.title = ME?.role === 'super_admin' ? 'Leave this organization' : '';
   badge.onclick = ME?.role === 'super_admin' ? () => {
     Api.tenant = '';
+    Api.tenantName = '';
     location.hash = '#/platform';
     location.reload();
   } : null;
@@ -665,6 +668,7 @@ async function viewRegister() {
     e.preventDefault();
     const fd = new FormData(e.target);
     Api.tenant = fd.get('tenant');
+    Api.tenantName = orgs.find((o) => o.slug === Api.tenant)?.name || '';
     const body = { phone: fd.get('phone'), email: fd.get('email'), password: fd.get('password') };
     if (fd.get('username')) body.username = fd.get('username');
     try {
@@ -704,6 +708,7 @@ async function viewOnboarding() {
     try {
       const r = await Api.post('/api/auth/onboarding/', body);
       Api.tenant = r?.org_slug || body.org_slug;
+      Api.tenantName = body.org_name;
       toast(r?.message || 'Organization created. Sign in to continue.');
       location.hash = '#/login';
     } catch (err) { toast(err.message, true); }
@@ -980,7 +985,7 @@ async function viewDetail(slug, id) {
       // belongs to none, so without it their session sees no tenant data at all.
       tenantHtml = `<div class="card"><h3>Subscription: ${esc(obj.subscription_status)} · Status: ${esc(obj.status)}</h3>
         <div class="actions">
-          <button class="btn" id="open-as" data-slug="${esc(obj.slug)}">Open as this organization</button>
+          <button class="btn" id="open-as" data-slug="${esc(obj.slug)}" data-name="${esc(obj.name)}">Open as this organization</button>
           <button class="btn ghost" id="open-log">Who opened this</button>
           <button class="btn" data-ta="approve">Approve</button>
           <button class="btn" data-ta="reject">Reject</button>
@@ -1069,7 +1074,8 @@ async function viewDetail(slug, id) {
         try { await Api.post(`/api/tenants/${id}/open/`); }
         catch (e) { return toast(e.message, true); }
         Api.tenant = $('#open-as').dataset.slug;
-        toast(`Working in ${Api.tenant}.`);
+        Api.tenantName = $('#open-as').dataset.name;
+        toast(`Working in ${Api.tenantName || Api.tenant}.`);
         location.hash = '#/';
       };
       $('#open-log').onclick = async () => {

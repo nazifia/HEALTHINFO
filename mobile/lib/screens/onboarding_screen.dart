@@ -82,9 +82,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         password: _pass.text,
         jurisdictionId: _localId ?? _stateId,  // most specific picked
       );
-      final slug = (res['tenant'] as Map?)?['slug'] ?? _orgSlug.text.trim();
+      final created = res['tenant'] as Map?;
+      final slug = created?['slug'] ?? _orgSlug.text.trim();
       // Point the client at the tenant just created so the next login targets it.
-      await setTenant(slug);
+      await setTenant(slug, name: '${created?['name'] ?? _orgName.text.trim()}');
       if (!mounted) return;
       Navigator.of(context).pop();
       showSuccess(context,

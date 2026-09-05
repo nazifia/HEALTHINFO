@@ -129,7 +129,9 @@ class Api {
     // The token names the user's organization; every later call carries it.
     // Super-admins come back with none and keep whatever slug was set.
     final slug = (data['tenant'] as String?) ?? '';
-    if (slug.isNotEmpty) await setTenant(slug);
+    if (slug.isNotEmpty) {
+      await setTenant(slug, name: (data['tenant_name'] as String?) ?? '');
+    }
   }
 
   /// GET /api/auth/register/organizations/ — public signup picker.

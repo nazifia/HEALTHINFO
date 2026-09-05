@@ -30,18 +30,28 @@ const String _tenantDefault = String.fromEnvironment(
   defaultValue: 'demo', // matches seed_dev's Demo Clinic tenant
 );
 String tenantSlug = _tenantDefault;
+// The organization's display name. The slug is what the header carries; this
+// is what screens show. Empty until a sign-in or a switch names it.
+String tenantName = '';
 
 const String _kTenant = 'tenant_slug';
+const String _kTenantName = 'tenant_name';
+
+/// Name if the client knows one, slug otherwise. What screens print.
+String get tenantLabel => tenantName.isNotEmpty ? tenantName : tenantSlug;
 
 Future<void> loadTenant() async {
   final p = await SharedPreferences.getInstance();
   tenantSlug = p.getString(_kTenant) ?? _tenantDefault;
+  tenantName = p.getString(_kTenantName) ?? '';
 }
 
-Future<void> setTenant(String slug) async {
+Future<void> setTenant(String slug, {String name = ''}) async {
   tenantSlug = slug.trim();
+  tenantName = name.trim();
   final p = await SharedPreferences.getInstance();
   await p.setString(_kTenant, tenantSlug);
+  await p.setString(_kTenantName, tenantName);
 }
 
 // Auto-logout after this much user inactivity (no taps/scrolls). Health data —

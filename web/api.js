@@ -13,6 +13,9 @@ const Api = (() => {
 
   let base = DEV ? DEFAULT_BASE : (localStorage.getItem('api_base') || DEFAULT_BASE);
   let tenant = localStorage.getItem('tenant_slug') || 'demo';
+  // The organization's display name, kept beside the slug so the chrome can
+  // name it without another call. Empty until a sign-in or a switch names it.
+  let tenantName = localStorage.getItem('tenant_name') || '';
   let access = localStorage.getItem('access');
   let refresh = localStorage.getItem('refresh');
   let me = null; // cached /api/users/me/ for the session
@@ -107,6 +110,8 @@ const Api = (() => {
     set base(v) { base = v.replace(/\/+$/, '') || DEFAULT_BASE; localStorage.setItem('api_base', base); },
     get tenant() { return tenant; },
     set tenant(v) { tenant = v.trim(); localStorage.setItem('tenant_slug', tenant); },
+    get tenantName() { return tenantName; },
+    set tenantName(v) { tenantName = (v || '').trim(); localStorage.setItem('tenant_name', tenantName); },
     get isLoggedIn() { return !!access; },
 
     get: (path, query) => request('GET', path, { query }),
@@ -158,7 +163,12 @@ const Api = (() => {
       me = null;
       // The token names the user's organization; every later call carries it.
       // Super-admins come back with none and keep whatever slug was set.
-      if (data.tenant) { tenant = data.tenant; localStorage.setItem('tenant_slug', tenant); }
+      if (data.tenant) {
+        tenant = data.tenant;
+        localStorage.setItem('tenant_slug', tenant);
+        tenantName = data.tenant_name || '';
+        localStorage.setItem('tenant_name', tenantName);
+      }
       return data.role;
     },
 

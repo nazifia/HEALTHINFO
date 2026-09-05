@@ -95,6 +95,9 @@ def test_login_refused_on_another_tenants_host(tenants):
     ok = client.post("/api/auth/token/", {"phone": "234567", "password": PASSWORD},
                      format="json", HTTP_X_TENANT_ID=a.slug)
     assert ok.status_code == 200, ok.content
+    # The slug goes back as the header; the name is what the client shows.
+    assert ok.json()["tenant"] == a.slug
+    assert ok.json()["tenant_name"] == a.name
     # Same credentials against tenant B: no token, same opaque message.
     denied = client.post("/api/auth/token/", {"phone": "234567", "password": PASSWORD},
                          format="json", HTTP_X_TENANT_ID=b.slug)
