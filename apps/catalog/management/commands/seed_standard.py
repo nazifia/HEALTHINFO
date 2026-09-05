@@ -69,6 +69,11 @@ MEDS = [
     ("Ferrous sulfate", "Feospan", "Oral iron", "Iron-deficiency anaemia.", "200 mg PO BID-TID"),
 ]
 
+# Slugs of the notifiable diseases IDSR wants within 24 hours of suspicion,
+# case by case, rather than in the weekly epi-week summary. Kept beside the
+# table instead of a tenth tuple field: four rows out of thirty carry it.
+IMMEDIATE_SLUGS = {"cholera", "measles", "bacterial-meningitis", "covid-19"}
+
 # name, slug, icd10, notifiable, description, treatment, [symptom names], [med generics], [specialty names]
 DISEASES = [
     ("Influenza", "influenza", "J10", False,
@@ -312,6 +317,7 @@ class Command(BaseCommand):
         for (name, dslug, icd, notif, desc, treat, syms, dmeds, specs) in DISEASES:
             d, _ = co(Disease, {
                 "name": name, "icd10_code": icd, "notifiable": notif,
+                "notify_immediately": dslug in IMMEDIATE_SLUGS,
                 "description": desc, "treatment": treat, "status": Status.PUBLISHED,
             }, slug=dslug)
             d.symptoms.set([symptoms[s] for s in syms])

@@ -21,7 +21,12 @@ from apps.tenants.models import Tenant
 
 from .capture import capture_consultation
 from .export import case_reports_csv, csv_response
-from .idsr import SUMMARY_COLUMNS, platform_idsr_report, tenant_idsr_report
+from .idsr import (
+    ALERT_COLUMNS,
+    SUMMARY_COLUMNS,
+    platform_idsr_report,
+    tenant_idsr_report,
+)
 from .models import (
     AdverseDrugReaction,
     AiInteraction,
@@ -663,13 +668,18 @@ def _weeks(request):
 
 
 def _idsr_response(report, request):
-    """Render an IDSR report dict as JSON, or its weekly summary as CSV when
-    ?format=csv. CSV carries the line-list rows; tier rollups are JSON-only."""
+    """Render an IDSR report dict as JSON, or one section as CSV when ?format=csv.
+
+    CSV carries the line-list rows — the weekly summary by default, the 24-hour
+    immediate-notification worklist on ?section=immediate. Tier rollups are
+    JSON-only.
+    """
     if request.query_params.get("format") == "csv":
-        rows = (
-            [r[c] for c in SUMMARY_COLUMNS] for r in report["summary"]
-        )
-        return csv_response("idsr_weekly_summary.csv", SUMMARY_COLUMNS, rows)
+        if request.query_params.get("section") == "immediate":
+            cols, key, name = ALERT_COLUMNS, "immediate", "idsr_immediate_alerts.csv"
+        else:
+            cols, key, name = SUMMARY_COLUMNS, "summary", "idsr_weekly_summary.csv"
+        return csv_response(name, cols, ([r[c] for c in cols] for r in report[key]))
     return Response(report)
 
 
@@ -677,7 +687,8 @@ class IdsrReportView(APIView):
     """This facility's (tenant's) IDSR weekly epidemiological summary.
 
     ?weeks=N windows the trailing period (default 8). ?format=csv downloads the
-    line-list public-health authorities expect.
+    line-list public-health authorities expect, and ?section=immediate switches
+    that download to the 24-hour immediate-notification worklist.
     """
 
     permission_classes = [IsTenantMember]
