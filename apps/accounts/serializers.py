@@ -297,6 +297,9 @@ class OnboardingSerializer(serializers.Serializer):
                 "address": tenant.address,
                 "contact": tenant.contact,
                 "jurisdiction": tenant.jurisdiction_id,
+                "jurisdiction_name": (
+                    str(tenant.jurisdiction) if tenant.jurisdiction_id else None
+                ),
             },
             "user": {"id": user.id, "phone": user.phone, "role": user.role},
         }

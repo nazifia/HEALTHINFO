@@ -2,6 +2,8 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
+from config.serializers import NamedRelationsMixin
+
 from .models import (
     ConsultationPayout,
     Hospital,
@@ -38,7 +40,7 @@ class PrescriberSerializer(serializers.ModelSerializer):
         return value
 
 
-class PrescriptionItemSerializer(serializers.ModelSerializer):
+class PrescriptionItemSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     item_name = serializers.CharField(source="item.name", read_only=True)
 
     class Meta:
@@ -50,7 +52,7 @@ class PrescriptionItemSerializer(serializers.ModelSerializer):
                             "created_at", "updated_at")
 
 
-class PrescriptionSerializer(serializers.ModelSerializer):
+class PrescriptionSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     lines = PrescriptionItemSerializer(many=True, read_only=True)
     medications = PrescriptionItemSerializer(many=True, write_only=True,
                                              required=False)
@@ -108,7 +110,7 @@ class PrescriptionSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
 
-class PrescriberCommissionSerializer(serializers.ModelSerializer):
+class PrescriberCommissionSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     prescriber_name = serializers.CharField(source="prescriber.name", read_only=True)
 
     class Meta:
@@ -119,7 +121,7 @@ class PrescriberCommissionSerializer(serializers.ModelSerializer):
                             "status", "paid_at", "created_at", "updated_at")
 
 
-class ConsultationPayoutSerializer(serializers.ModelSerializer):
+class ConsultationPayoutSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     prescriber_name = serializers.CharField(source="prescriber.name", read_only=True)
 
     class Meta:

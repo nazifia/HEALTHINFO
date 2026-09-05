@@ -2,10 +2,12 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
+from config.serializers import NamedRelationsMixin
+
 from .models import Customer, WalletTransaction
 
 
-class WalletTransactionSerializer(serializers.ModelSerializer):
+class WalletTransactionSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     class Meta:
         model = WalletTransaction
         exclude = ("tenant",)

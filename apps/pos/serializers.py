@@ -6,6 +6,7 @@ from rest_framework.validators import UniqueValidator
 from apps.accounts.serializers import TenantUserField
 from apps.inventory.models import OutOfStock, StockItem, Supplier
 from apps.inventory.serializers import StockBatchSerializer  # noqa: F401
+from config.serializers import NamedRelationsMixin
 
 from .models import (
     Cashier,
@@ -67,7 +68,7 @@ class SaleLineInputSerializer(serializers.Serializer):
     )
 
 
-class SalePaymentSerializer(serializers.ModelSerializer):
+class SalePaymentSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     """One payment as it was taken: the form it arrived in and its drawer."""
 
     taken_by_name = serializers.CharField(source="taken_by.username", read_only=True)
@@ -89,7 +90,7 @@ class SalePaymentInputSerializer(serializers.Serializer):
                                      required=False)
 
 
-class SaleSerializer(serializers.ModelSerializer):
+class SaleSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     lines = SaleItemSerializer(many=True, read_only=True)
     payments = SalePaymentSerializer(many=True, read_only=True)
     # Write-only request lines; the stored lines come back under ``lines``.
@@ -208,7 +209,7 @@ class ReturnInputSerializer(serializers.Serializer):
                                    default="")
 
 
-class ReturnRecordSerializer(serializers.ModelSerializer):
+class ReturnRecordSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     item_name = serializers.CharField(source="line.name", read_only=True)
     sale_reference = serializers.CharField(source="sale.reference", read_only=True)
 
@@ -218,7 +219,7 @@ class ReturnRecordSerializer(serializers.ModelSerializer):
         read_only_fields = ("created_at", "updated_at")
 
 
-class TillSessionSerializer(serializers.ModelSerializer):
+class TillSessionSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     """The drawer as the counter sees it: what should be in it, and what was."""
 
     opened_by_name = serializers.CharField(source="opened_by.username",
@@ -253,7 +254,7 @@ class TillCloseSerializer(serializers.Serializer):
                                   default="")
 
 
-class DispensingLogSerializer(serializers.ModelSerializer):
+class DispensingLogSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     dispenser = serializers.CharField(source="user.username", read_only=True)
     sale_reference = serializers.CharField(source="sale.reference", read_only=True)
 
@@ -262,7 +263,7 @@ class DispensingLogSerializer(serializers.ModelSerializer):
         exclude = ("tenant",)
 
 
-class PaymentRequestItemSerializer(serializers.ModelSerializer):
+class PaymentRequestItemSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     subtotal = serializers.DecimalField(max_digits=12, decimal_places=2,
                                         read_only=True)
 
@@ -272,7 +273,7 @@ class PaymentRequestItemSerializer(serializers.ModelSerializer):
         read_only_fields = ("created_at", "updated_at")
 
 
-class PaymentRequestSerializer(serializers.ModelSerializer):
+class PaymentRequestSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     lines = PaymentRequestItemSerializer(many=True, read_only=True)
     items = PaymentRequestItemSerializer(many=True, write_only=True)
     dispenser_name = serializers.CharField(source="dispenser.username",
@@ -333,7 +334,7 @@ class ExpenseCategorySerializer(serializers.ModelSerializer):
         read_only_fields = ("created_at", "updated_at")
 
 
-class ExpenseSerializer(serializers.ModelSerializer):
+class ExpenseSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     category_name = serializers.CharField(source="category.name", read_only=True)
 
     class Meta:
@@ -342,7 +343,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
         read_only_fields = ("created_by", "created_at", "updated_at")
 
 
-class NotificationSerializer(serializers.ModelSerializer):
+class NotificationSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     item_name = serializers.CharField(source="item.name", read_only=True)
 
     class Meta:
@@ -363,7 +364,7 @@ class PurchaseOrderLineSerializer(serializers.ModelSerializer):
         read_only_fields = ("quantity_received", "created_at", "updated_at")
 
 
-class PurchaseOrderSerializer(serializers.ModelSerializer):
+class PurchaseOrderSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     lines = PurchaseOrderLineSerializer(many=True, read_only=True)
     # Write-only order lines; the stored lines come back under ``lines``.
     items = PurchaseOrderLineSerializer(many=True, write_only=True, required=False)

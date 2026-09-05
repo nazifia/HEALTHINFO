@@ -107,6 +107,11 @@ class User(AbstractUser):
 
     objects = UserManager()
 
+    def __str__(self):
+        # Whoever reads a trail or a "dispensed by" line wants a person, not a
+        # row id. Display name if there is one, else the login phone.
+        return self.username or self.phone
+
     def save(self, *args, **kwargs):
         # One shape for the licence whatever wrote the row — the API
         # serializer, the Django admin, a management command. Sign-in looks the

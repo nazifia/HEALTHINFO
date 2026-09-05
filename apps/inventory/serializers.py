@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from config.serializers import NamedRelationsMixin
+
 from .models import (
     StockBatch,
     StockCheck,
@@ -54,7 +56,7 @@ class StockBatchSerializer(serializers.ModelSerializer):
                             "updated_at")
 
 
-class StockMovementSerializer(serializers.ModelSerializer):
+class StockMovementSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     item_name = serializers.CharField(source="item.name", read_only=True)
     user_name = serializers.CharField(source="user.username", read_only=True)
 
@@ -104,7 +106,7 @@ class StockCheckItemSerializer(serializers.ModelSerializer):
                             "updated_at")
 
 
-class StockCheckSerializer(serializers.ModelSerializer):
+class StockCheckSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     lines = StockCheckItemSerializer(many=True, read_only=True)
     # Write-only: which items to count. Expected quantities are read off the
     # shelf here, not sent by the client — otherwise the count is checked
@@ -143,7 +145,7 @@ class CountLineSerializer(serializers.Serializer):
                                   default="")
 
 
-class TransferRequestSerializer(serializers.ModelSerializer):
+class TransferRequestSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     from_item_name = serializers.CharField(source="from_item.name", read_only=True)
     to_item_name = serializers.CharField(source="to_item.name", read_only=True)
     direction = serializers.CharField(read_only=True)
