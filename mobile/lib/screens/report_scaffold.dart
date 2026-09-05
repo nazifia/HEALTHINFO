@@ -454,12 +454,16 @@ class PatientPicker extends StatefulWidget {
   final int? initialId;
   final String? initialLabel;
   final ValueChanged<int?> onChanged;
+  /// The whole picked row, for forms that carry the patient's own details
+  /// (region, allergies) instead of asking for them again.
+  final ValueChanged<Map<String, dynamic>>? onPicked;
 
   const PatientPicker({
     super.key,
     required this.onChanged,
     this.initialId,
     this.initialLabel,
+    this.onPicked,
   });
 
   @override
@@ -490,6 +494,7 @@ class _PatientPickerState extends State<PatientPicker> {
       _label = '${picked['full_name']} · ${picked['hospital_number']}';
     });
     widget.onChanged(_id);
+    widget.onPicked?.call(picked);
   }
 
   void _clear() {
