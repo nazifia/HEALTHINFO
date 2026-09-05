@@ -565,8 +565,9 @@ function renderData(data, depth = 0) {
 }
 
 function tableHtml(rows, linkFor, rowAction) {
-  const cols = pickColumns(rows[0]);
-  const head = cols.map((c) => `<th>${esc(label(c))}</th>`).join('')
+  const cols = pickColumns(rows);
+  const keys = Object.keys(mergedRow(rows));
+  const head = cols.map((c) => `<th>${esc(colLabel(keys, c))}</th>`).join('')
     + (rowAction ? '<th></th>' : '');
   const body = rows.map((r, i) => {
     const cells = cols.map((c) => `<td>${cellHtml(c, r[c])}</td>`).join('')
@@ -583,8 +584,32 @@ function tableHtml(rows, linkFor, rowAction) {
 const namedElsewhere = (keys, k) => keys.some((o) => o !== k && o.startsWith(`${k}_`)
   && /_(names?|reference|number)$/.test(o));
 
-// First rows' keys, favoring identity/status columns, capped for readability.
-function pickColumns(row) {
+// A resolved name standing in for a hidden pk is headed by the thing itself:
+// "Tenant", not "Tenant Name". `full_name` and friends keep their heading —
+// there is no `full` column for them to stand in for.
+function colLabel(keys, k) {
+  const base = k.replace(/_names?$/, '');
+  return label(base !== k && keys.includes(base) ? base : k);
+}
+
+// One row carrying every key any row has, so a column is judged on the first
+// row that actually has a value for it.
+function mergedRow(rows) {
+  const row = {};
+  for (const r of rows) {
+    for (const [k, v] of Object.entries(r)) {
+      if (!(k in row) || row[k] === null || row[k] === undefined) row[k] = v;
+    }
+  }
+  return row;
+}
+
+// Column keys, favoring identity/status columns, capped for readability.
+// Sampled across every row, not just the first: a resolved name is absent from
+// a row whose foreign key is null (DRF drops it), and one such row at the top
+// would otherwise bring the bare pk column back for the whole table.
+function pickColumns(rows) {
+  const row = mergedRow(rows);
   const keys = Object.keys(row);
   const resolved = (k) => namedElsewhere(keys, k);
   const first = keys.filter((k) => ['id', 'reference', 'status', 'name', 'generic_name', 'title', 'phone', 'slug'].includes(k));
@@ -958,7 +983,7 @@ function dlHtml(obj) {
   const keys = Object.keys(obj);
   return `<dl class="detail">${Object.entries(obj)
     .filter(([k]) => !namedElsewhere(keys, k))
-    .map(([k, v]) => `<dt>${esc(label(k))}</dt><dd>${cell(k, v)}</dd>`).join('')}</dl>`;
+    .map(([k, v]) => `<dt>${esc(colLabel(keys, k))}</dt><dd>${cell(k, v)}</dd>`).join('')}</dl>`;
 }
 
 async function viewDetail(slug, id) {
