@@ -332,3 +332,66 @@ def test_cancelling_one_drug_stops_the_prescription_it_is_on(db_clean):
     other.refresh_from_db()
     assert loose.status == Prescription.Status.CANCELLED
     assert other.status == Prescription.Status.PRESCRIBED
+
+
+def test_a_patients_number_finds_what_they_were_prescribed(db_clean):
+    """The patient walks up with a number, not a script id.
+
+    Their phone (in any spelling) or their hospital number reaches both halves
+    of what they were prescribed — the counter script and the clinician's drug
+    order — wherever in the tenant it was written.
+    """
+    from apps.prescriptions.models import Prescription as Script
+
+    a = Tenant.objects.create(name="A", slug="a")
+    pharmacist = User.objects.create_user(phone="08030000401", password="x",
+                                          tenant=a, role=Role.PHARMACIST)
+    patient = Patient.objects.create(tenant=a, first_name="Ada", last_name="Obi",
+                                     phone="08031234567")
+    stranger = Patient.objects.create(tenant=a, first_name="Bola", last_name="Eze",
+                                      phone="08039999999")
+    drug = Medication.objects.create(generic_name="Artemether")
+    order = Prescription.all_objects.create(tenant=a, patient=patient,
+                                            medication=drug, dose="500 mg")
+    Prescription.all_objects.create(tenant=a, patient=stranger, medication=drug)
+    client = _client(pharmacist, a)
+
+    written = client.post("/api/prescriptions/scripts/", {
+        "customer_name": "Ada Obi", "patient": patient.id,
+        "medications": [{"name": "Artemether", "quantity": 6}],
+    }, format="json")
+    assert written.status_code == 201, written.content
+    script_id = written.json()["id"]
+
+    # A walk-in with nothing on the script but the number is found too.
+    walk_in = client.post("/api/prescriptions/scripts/", {
+        "customer_name": "Ada", "customer_phone": "+234 803 123 4567",
+        "medications": [{"name": "Paracetamol", "quantity": 10}],
+    }, format="json")
+    assert walk_in.status_code == 201, walk_in.content
+    assert Script.all_objects.get(pk=walk_in.json()["id"]).customer_phone \
+        == "08031234567"
+
+    found = client.get("/api/prescriptions/scripts/by-number/",
+                       {"number": "+234-803-123-4567"})
+    assert found.status_code == 200, found.content
+    body = found.json()
+    assert {r["id"] for r in body["scripts"]} == {script_id, walk_in.json()["id"]}
+    # The clinician's order, plus the one the counter line captured itself;
+    # never the other patient's.
+    order_ids = {r["id"] for r in body["orders"]}
+    assert order.pk in order_ids
+    assert not order_ids & {r.pk for r in Prescription.all_objects.filter(
+        patient=stranger)}
+
+    # The hospital number reaches the same records.
+    patient.refresh_from_db()
+    by_file = client.get("/api/prescriptions/scripts/by-number/",
+                         {"number": patient.hospital_number})
+    assert {r["id"] for r in by_file.json()["scripts"]} == set(
+        r["id"] for r in body["scripts"]
+    )
+
+    # Too few digits is a question nobody meant to ask.
+    assert client.get("/api/prescriptions/scripts/by-number/",
+                      {"number": "45"}).status_code == 400

@@ -8,7 +8,7 @@ transition that settles one.
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -20,7 +20,11 @@ from apps.accounts.permissions import (
     IsTenantMember,
     is_pharmacy_admin,
 )
+from apps.analytics.models import Prescription as DrugOrder
+from apps.analytics.serializers import PrescriptionSerializer as DrugOrderSerializer
 from apps.inventory.views import PharmacyViewSet
+from apps.patients.models import Patient
+from apps.patients.views import number_search_term
 from config.responses import success
 
 from .models import (
@@ -110,6 +114,48 @@ class PrescriptionViewSet(PharmacyViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+    @action(detail=False, url_path="by-number")
+    def by_number(self, request):
+        """Everything prescribed to whoever this number belongs to.
+
+        ``?number=`` is the patient's phone or their hospital number, written
+        however they say it: the match is on the digits (see
+        patients.views.number_search_term), so "+234 803 123 4567" and
+        "08031234567" find the same person.
+
+        Counter scripts and clinician-written drug orders both come back — a
+        pharmacist holding the number has one question, "what was this patient
+        prescribed?", not two — and the search runs across the tenant, so a
+        script written at another branch or counter still turns up.
+
+        ponytail: three indexed-ish lookups (patients by number, then scripts
+        and orders by patient). Fold into one query only if a tenant's script
+        table ever makes this show up in a plan.
+        """
+        number = (request.query_params.get("number") or "").strip()
+        term = number_search_term(number)
+        if len(term) < 4:
+            raise ValidationError(
+                {"number": "Give at least 4 digits of a phone or hospital number."}
+            )
+        # The registry is read to match the number, never returned: this
+        # endpoint is the pharmacy's, and identifying data is the patient
+        # API's (which logs every read of it).
+        patients = Patient.objects.filter(
+            Q(phone__contains=term) | Q(hospital_number__contains=term)
+        )
+        scripts = self.get_queryset().filter(
+            Q(patient__in=patients)
+            | Q(customer__phone__contains=term)
+            | Q(customer_phone__contains=term)
+        )
+        orders = DrugOrder.objects.filter(patient__in=patients)
+        return Response({
+            "number": number,
+            "scripts": PrescriptionSerializer(scripts, many=True).data,
+            "orders": DrugOrderSerializer(orders, many=True).data,
+        })
 
     @action(detail=True, methods=["post"], url_path="dispense")
     def dispense(self, request, pk=None):

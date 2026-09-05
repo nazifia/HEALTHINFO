@@ -20,6 +20,7 @@ from decimal import Decimal
 from django.db import models, transaction
 from django.utils import timezone
 
+from apps.accounts.models import normalize_phone
 from apps.tenants.models import TenantOwnedModel
 
 MONEY = Decimal("0.01")
@@ -185,6 +186,9 @@ class Prescription(TenantOwnedModel):
         return f"Rx{self.pk} — {self.customer_name} ({self.status})"
 
     def save(self, *args, **kwargs):
+        # One shape for the number, so a script written up as "+234 803 123
+        # 4567" is still found by the "08031234567" on the patient's card.
+        self.customer_phone = normalize_phone(self.customer_phone)
         if (self._state.adding and self.prescriber_id
                 and self.consultation_category and not self.consultation_fee):
             self.consultation_fee = self.prescriber.fee_for(
