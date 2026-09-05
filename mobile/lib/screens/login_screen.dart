@@ -67,7 +67,9 @@ class _LoginScreenState extends State<LoginScreen> {
           return;
         }
         // The register call is tenant-scoped: bind the chosen one first.
-        await setTenant(_orgSlug!);
+        await setTenant(_orgSlug!,
+            name: '${_orgs.firstWhere((o) => o['slug'] == _orgSlug,
+                orElse: () => const {})['name'] ?? ''}');
         await api.register(_phone.text.trim(), _email.text.trim(), _pass.text,
             username: _username.text.trim());
       }

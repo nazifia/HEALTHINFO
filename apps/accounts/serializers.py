@@ -114,6 +114,9 @@ class LoginSerializer(TokenObtainPairSerializer):
         # to until they sign in, so the token answer names it: the client sends
         # it straight back as X-Tenant-ID. Empty for super-admins (no tenant).
         data["tenant"] = self.user.tenant.slug if self.user.tenant_id else ""
+        # The slug is what the header needs; the name is what a person reads,
+        # so the client can show the organization without a second call.
+        data["tenant_name"] = self.user.tenant.name if self.user.tenant_id else ""
         data["role"] = self.user.role
         return data
 
