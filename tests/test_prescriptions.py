@@ -181,3 +181,107 @@ def test_a_counter_script_has_its_own_path(db_clean):
     # reach the drug order, not the script.
     assert client.get(f"/api/prescriptions/scripts/{script.pk}/").status_code == 200
     assert client.get(f"/api/prescriptions/{script.pk}/").status_code == 404
+
+
+def test_one_prescription_carries_several_drugs(db_clean):
+    """A visit that calls for three drugs is written once, not three times.
+
+    The rows stay one-drug-each — the pharmacy dispenses them one at a time —
+    but they are posted as one list, share the visit's diagnosis and are
+    written whole or not at all.
+    """
+    a = Tenant.objects.create(name="A", slug="a")
+    doctor = User.objects.create_user(phone="08030000401", password="x",
+                                      tenant=a, role=Role.DOCTOR)
+    patient = Patient.objects.create(tenant=a, first_name="Ada", last_name="Obi")
+    disease = Disease.objects.create(name="Malaria", slug="malaria")
+    case = CaseReport.all_objects.create(tenant=a, patient=patient, disease=disease)
+    artemether = Medication.objects.create(generic_name="Artemether")
+    paracetamol = Medication.objects.create(generic_name="Paracetamol")
+    client = _client(doctor, a)
+
+    written = client.post("/api/prescriptions/", [
+        {"patient": patient.id, "case_report": case.id,
+         "medication": artemether.id, "dose": "80 mg", "frequency": "twice daily"},
+        {"patient": patient.id, "case_report": case.id,
+         "medication": paracetamol.id, "dose": "1 g", "frequency": "as needed"},
+    ], format="json")
+
+    assert written.status_code == 201, written.content
+    rows = written.json()
+    assert [r["medication_name"] for r in rows] == ["Artemether", "Paracetamol"]
+    orders = Prescription.all_objects.filter(patient=patient)
+    assert orders.count() == 2
+    assert {o.case_report_id for o in orders} == {case.id}
+    assert {o.reporter_id for o in orders} == {doctor.id}
+
+    # The rows are one prescription: they share a group, so it can be listed,
+    # cancelled or reprinted as the unit it was written as.
+    groups = {o.group for o in orders}
+    assert len(groups) == 1 and None not in groups
+    listed = client.get(f"/api/prescriptions/?group={groups.pop()}").json()
+    assert len(listed["results"]) == 2
+
+    # A second prescription for the same patient is its own unit.
+    again = client.post("/api/prescriptions/", [
+        {"patient": patient.id, "medication": artemether.id, "dose": "80 mg"},
+    ], format="json").json()
+    assert again[0]["group"] != rows[0]["group"]
+
+    # Nothing prescribed is not a prescription.
+    assert client.post("/api/prescriptions/", [], format="json").status_code == 400
+
+    # One bad drug in the list writes none of them: half a prescription is
+    # worse than none, because nobody can tell which half. The three rows on
+    # file are the two above plus the repeat, and stay three.
+    broken = client.post("/api/prescriptions/", [
+        {"patient": patient.id, "medication": artemether.id, "dose": "80 mg"},
+        {"patient": patient.id, "medication": 999999},
+    ], format="json")
+    assert broken.status_code == 400, broken.content
+    assert Prescription.all_objects.filter(patient=patient).count() == 3
+
+
+def test_cancelling_one_drug_stops_the_prescription_it_is_on(db_clean):
+    """The drugs written together are one decision: stopping one stops them
+    all. A drug already handed over stays dispensed — the patient has it."""
+    a = Tenant.objects.create(name="A", slug="a")
+    doctor = User.objects.create_user(phone="08030000501", password="x",
+                                      tenant=a, role=Role.DOCTOR)
+    patient = Patient.objects.create(tenant=a, first_name="Ada", last_name="Obi")
+    artemether = Medication.objects.create(generic_name="Artemether")
+    paracetamol = Medication.objects.create(generic_name="Paracetamol")
+    zinc = Medication.objects.create(generic_name="Zinc")
+    client = _client(doctor, a)
+
+    rows = client.post("/api/prescriptions/", [
+        {"patient": patient.id, "medication": artemether.id, "dose": "80 mg"},
+        {"patient": patient.id, "medication": paracetamol.id, "dose": "1 g"},
+        {"patient": patient.id, "medication": zinc.id, "dose": "20 mg"},
+    ], format="json").json()
+    dispensed = Prescription.all_objects.get(pk=rows[2]["id"])
+    dispensed.status = Prescription.Status.DISPENSED
+    dispensed.save()
+
+    stopped = client.post(f"/api/prescriptions/{rows[0]['id']}/cancel/",
+                          format="json")
+    assert stopped.status_code == 200, stopped.content
+    assert stopped.json()["message"] == "2 drug orders cancelled."
+    states = {p.medication_id: p.status for p in
+              Prescription.all_objects.filter(patient=patient)}
+    assert states[artemether.id] == Prescription.Status.CANCELLED
+    assert states[paracetamol.id] == Prescription.Status.CANCELLED
+    assert states[zinc.id] == Prescription.Status.DISPENSED
+
+    # An order on no prescription — written before groups, or captured off a
+    # counter script — cancels on its own.
+    loose = Prescription.all_objects.create(tenant=a, patient=patient,
+                                            medication=zinc)
+    other = Prescription.all_objects.create(tenant=a, patient=patient,
+                                            medication=artemether)
+    assert client.post(f"/api/prescriptions/{loose.pk}/cancel/",
+                       format="json").status_code == 200
+    loose.refresh_from_db()
+    other.refresh_from_db()
+    assert loose.status == Prescription.Status.CANCELLED
+    assert other.status == Prescription.Status.PRESCRIBED

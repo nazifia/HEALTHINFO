@@ -64,6 +64,10 @@ class ReportListScreen extends StatefulWidget {
   final void Function(Map<String, dynamic> row)? onTap;
   // Hide the FAB for a list the current user may read but not add to.
   final bool showFab;
+  // Optional fold over the loaded rows before they are turned into cards — a
+  // list that the API returns one row per drug shows one card per
+  // prescription. The header still counts the rows as they came.
+  final List<Map<String, dynamic>> Function(List<Map<String, dynamic>>)? collapse;
 
   const ReportListScreen({
     super.key,
@@ -80,6 +84,7 @@ class ReportListScreen extends StatefulWidget {
     this.filters = const [],
     this.onTap,
     this.showFab = true,
+    this.collapse,
   });
 
   @override
@@ -252,16 +257,17 @@ class _ReportListScreenState extends State<ReportListScreen>
                 ),
               ]);
             }
+            final cards = widget.collapse?.call(items) ?? items;
             return CardGrid(
-              itemCount: items.length,
+              itemCount: cards.length,
               header: widget.header == null ? null : widget.header!(items),
               itemBuilder: (context, i) {
                 final card =
-                    widget.card(items[i], _reload, () => _openForm(items[i]));
+                    widget.card(cards[i], _reload, () => _openForm(cards[i]));
                 if (widget.onTap == null) return card;
                 return InkWell(
                   borderRadius: BorderRadius.circular(16),
-                  onTap: () => widget.onTap!(items[i]),
+                  onTap: () => widget.onTap!(cards[i]),
                   child: card,
                 );
               },

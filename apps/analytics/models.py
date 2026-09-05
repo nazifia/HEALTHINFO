@@ -539,12 +539,20 @@ class Prescription(PatientLinkedModel, TenantOwnedModel):
     source_ref = models.CharField(
         max_length=100, null=True, blank=True, default=None
     )
+    # Every drug written in one go shares this. A prescription is one
+    # prescribing decision; the rows are one drug each only because the
+    # pharmacy dispenses them one at a time. Filter on it to reach the whole
+    # prescription — to cancel or reprint it as the unit it was written as.
+    # NULL on the orders written before this existed and on anything captured
+    # from a counter script, which is grouped by the script it came off.
+    group = models.UUIDField(null=True, blank=True, editable=False, default=None)
 
     class Meta:
         ordering = ("-created_at", "-id")
         indexes = [
             models.Index(fields=["tenant", "status", "created_at"]),
             models.Index(fields=["tenant", "medication"]),
+            models.Index(fields=["tenant", "group"]),
         ]
         constraints = [
             models.UniqueConstraint(

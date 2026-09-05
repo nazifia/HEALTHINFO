@@ -1,3 +1,6 @@
+from uuid import uuid4
+
+from django.db import transaction
 from django.db.models import Q
 from django.utils.dateparse import parse_date
 from rest_framework import viewsets
@@ -399,7 +402,8 @@ class PrescriptionViewSet(_ReportViewSet):
 
     model = Prescription
     serializer_class = PrescriptionSerializer
-    filterset_fields = ("status", "medication", "case_report", "region", "patient")
+    filterset_fields = ("status", "medication", "case_report", "region", "patient",
+                        "group")
     # Digits only: apps.prescriptions hangs hospitals/, prescribers/ and the
     # payout lists off the same /api/prescriptions/ prefix, and this detail
     # route is matched first — a catch-all pk would swallow them as ids.
@@ -412,23 +416,74 @@ class PrescriptionViewSet(_ReportViewSet):
             qs = qs.filter(patient__isnull=False)
         return qs
 
+    def get_serializer(self, *args, **kwargs):
+        """A list body is one prescription of several drugs.
+
+        A visit that calls for three drugs is one prescribing decision; the
+        drugs are separate rows because the pharmacy dispenses them one at a
+        time, not because the clinician wrote three scripts. Sent as a list
+        they are written together, and an empty list is nothing prescribed.
+        """
+        if isinstance(kwargs.get("data"), list):
+            kwargs["many"] = True
+            kwargs.setdefault("allow_empty", False)
+        return super().get_serializer(*args, **kwargs)
+
+    @transaction.atomic
     def perform_create(self, serializer):
-        """Write the order against the diagnosis of the visit it came out of.
+        """Write each order against the diagnosis of the visit it came out of.
 
         A caller that knows the case sends it. One that doesn't — an order
         written off the patient record, on a ward round, from a client that
         never loaded the consultation — would otherwise file drugs the centre
         can see no reason for. The patient's open visit is that reason.
+
+        Atomic, so a prescription of several drugs is written whole: half a
+        prescription is worse than none, because nobody can tell which half.
         """
-        data = serializer.validated_data
-        case = data.get("case_report")
-        if case is None and data.get("patient") is not None:
-            visit = Consultation.objects.filter(
-                patient=data["patient"], status=Consultation.Status.OPEN,
-                case_report__isnull=False,
-            ).first()
-            case = visit.case_report if visit is not None else None
-        serializer.save(reporter=self.request.user, case_report=case)
+        rows = serializer.validated_data
+        group = uuid4()
+        for data in rows if isinstance(rows, list) else [rows]:
+            if data.get("case_report") is None:
+                data["case_report"] = self._open_case(data.get("patient"))
+            # One request is one prescription, however many drugs are on it.
+            data["group"] = group
+        serializer.save(reporter=self.request.user)
+
+    @staticmethod
+    def _open_case(patient):
+        """The case report of the patient's open visit, if they are in one."""
+        if patient is None:
+            return None
+        visit = Consultation.objects.filter(
+            patient=patient, status=Consultation.Status.OPEN,
+            case_report__isnull=False,
+        ).first()
+        return visit.case_report if visit is not None else None
+
+    @action(detail=True, methods=["post"])
+    def cancel(self, request, pk=None):
+        """Stop this prescription — every drug on it, not only this row.
+
+        The drugs written together are one prescribing decision, so stopping
+        the antibiotic stops the course it was part of. A drug already
+        dispensed is left alone: the patient is holding it, and a record that
+        says otherwise is a lie. An order written before groups existed, or
+        captured off a counter script, cancels on its own.
+        """
+        order = self.get_object()
+        rows = self.get_queryset().filter(
+            group=order.group) if order.group else self.get_queryset().filter(
+            pk=order.pk)
+        stopped = [row for row in rows.exclude(status__in=(
+            Prescription.Status.DISPENSED, Prescription.Status.CANCELLED))]
+        for row in stopped:
+            row.status = Prescription.Status.CANCELLED
+            row.save(update_fields=["status", "updated_at"])
+        return success(
+            f"{len(stopped)} drug order{'' if len(stopped) == 1 else 's'} cancelled.",
+            self.get_serializer(rows, many=True).data,
+        )
 
 
 class _StatsView(APIView):
