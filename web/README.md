@@ -59,3 +59,12 @@ CORS_ALLOWED_ORIGINS=https://<your-project>.web.app,https://<your-project>.fireb
 
 Create/edit forms are generated at runtime from DRF `OPTIONS` metadata, so new
 serializer fields show up without frontend changes.
+
+Drug orders are the exception, because a visit rarely calls for one drug:
+"Add another drug" repeats the drug fields, and the rows POST as a list that
+the API writes as one prescription (whole, or not at all). The drugs of one
+prescription share a `group`, so the list shows one row per prescription — each
+drug with its own directions, and a Cancel button on the row — a detail page
+lists what was prescribed with the drug on screen, and cancelling stops every
+drug on the prescription, bar anything already dispensed. `node prescription.test.js` self-checks the payload the form
+builds; `node picker.test.js` the patient type-ahead.

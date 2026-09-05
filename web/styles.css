@@ -184,6 +184,9 @@ td { font-variant-numeric: tabular-nums; }
 th { background: var(--bg); font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); position: sticky; top: 0; font-weight: 600; }
 tr:last-child td { border-bottom: 0; }
 tbody tr:hover { background: var(--bg); }
+/* A row action (cancel a prescription) sits in the row without stretching it. */
+td > button { padding: 4px 10px; font-size: 13px; }
+
 tr.rowlink { cursor: pointer; }
 tr.rowlink:hover { background: var(--brand-soft); }
 

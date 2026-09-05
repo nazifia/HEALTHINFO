@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../main.dart';
 import '../nigeria.dart';
+import '../pharmacy.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/stats_kit.dart';
@@ -39,8 +40,9 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final approved =
         countEq(items, 'status', 'approved') + countEq(items, 'status', 'paid');
+    // DRF sends a DecimalField as a string, so parse rather than cast.
     final totalAmount = items.fold<num>(
-        0, (a, r) => a + ((r['amount'] as num?) ?? 0));
+        0, (a, r) => a + (num.tryParse('${r['amount']}') ?? 0));
     final byStatus = countBy(items, 'status');
     final byDx = countBy(items, 'diagnosis_name');
     return Padding(
@@ -61,8 +63,8 @@ class _Header extends StatelessWidget {
                 color: EnhancedTheme.infoBlue),
             KpiTile(
                 icon: Icons.payments_outlined,
-                label: 'Total (₦)',
-                value: '$totalAmount',
+                label: 'Total',
+                value: money(totalAmount),
                 color: EnhancedTheme.successGreen),
             KpiTile(
                 icon: Icons.verified_outlined,
@@ -131,7 +133,7 @@ class _Card extends StatelessWidget {
         children: [
           Row(children: [
             Expanded(
-              child: Text(amount.isEmpty ? 'Claim #${row['id']}' : '₦$amount',
+              child: Text(amount.isEmpty ? 'Claim #${row['id']}' : money(amount),
                   style: TextStyle(
                       color: context.labelColor,
                       fontWeight: FontWeight.w700,

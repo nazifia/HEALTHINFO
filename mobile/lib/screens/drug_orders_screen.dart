@@ -4,6 +4,7 @@ import '../main.dart';
 import '../nigeria.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
+import '../shared/widgets/snack.dart';
 import '../shared/widgets/stats_kit.dart';
 import '../shared/widgets/bar_chart.dart';
 import 'pharmacy_kit.dart';
@@ -40,11 +41,37 @@ class DrugOrdersScreen extends StatelessWidget {
           }),
         ],
         header: (items) => _Header(items: items),
-        card: (row, reload, edit) => _Card(row: row, edit: edit),
+        collapse: collapseByGroup,
+        card: (row, reload, edit) => _Card(row: row, reload: reload),
         form: (existing) => DrugOrderForm(existing: existing),
       ),
     );
   }
+}
+
+/// One card per prescription, not per drug: the drugs written together were
+/// one decision, and listed apart a three-drug course reads as three
+/// prescriptions. The kept row carries the whole prescription under `drugs`;
+/// an order on no prescription — written before groups, or captured off a
+/// counter script — stands on its own.
+///
+/// ponytail: folds the page it is handed, so a prescription split across two
+/// pages shows on both. Group server-side the day that happens routinely.
+List<Map<String, dynamic>> collapseByGroup(List<Map<String, dynamic>> rows) {
+  final heads = <String, Map<String, dynamic>>{};
+  final out = <Map<String, dynamic>>[];
+  for (final row in rows) {
+    final group = '${row['group'] ?? ''}';
+    final head = group.isEmpty ? null : heads[group];
+    if (head == null) {
+      final kept = {...row, 'drugs': [row]};
+      if (group.isNotEmpty) heads[group] = kept;
+      out.add(kept);
+    } else {
+      (head['drugs'] as List).add(row);
+    }
+  }
+  return out;
 }
 
 /// Write an order for one patient, straight off their record. Pops true when
@@ -106,18 +133,86 @@ class _Header extends StatelessWidget {
   }
 }
 
-class _Card extends StatelessWidget {
+class _Card extends StatefulWidget {
   final Map<String, dynamic> row;
-  final VoidCallback edit;
-  const _Card({required this.row, required this.edit});
+  final VoidCallback reload;
+  const _Card({required this.row, required this.reload});
+
+  @override
+  State<_Card> createState() => _CardState();
+}
+
+class _CardState extends State<_Card> {
+  Map<String, dynamic> get row => widget.row;
+
+  /// The drugs of this prescription. A row that was never collapsed — an order
+  /// on no prescription — is a prescription of one.
+  List<Map<String, dynamic>> get _drugs =>
+      ((row['drugs'] ?? [row]) as List).cast<Map<String, dynamic>>();
+
+  static String _directions(Map<String, dynamic> drug) => [
+        '${drug['dose'] ?? ''}',
+        '${drug['frequency'] ?? ''}',
+        if (drug['duration_days'] != null) 'for ${drug['duration_days']} day(s)',
+      ].where((v) => v.trim().isNotEmpty).join(' · ');
+
+  static bool _stoppable(Map<String, dynamic> drug) =>
+      drug['status'] == 'prescribed' || drug['status'] == 'partially_dispensed';
+
+  /// Edit one drug of the prescription. The sheet edits that drug alone: the
+  /// others are their own orders and the pharmacy dispenses them separately.
+  Future<void> _edit(Map<String, dynamic> drug) async {
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => DrugOrderForm(existing: drug),
+    );
+    if (saved == true) widget.reload();
+  }
+
+  /// Stop the whole prescription, once it is confirmed.
+  ///
+  /// The confirmation says how many drugs stop, because the rest of the course
+  /// goes with the one on screen and nobody should find that out afterwards.
+  Future<void> _cancel() async {
+    final drugs = _drugs;
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancel this prescription?'),
+        content: Text(drugs.length == 1
+            ? 'The order for ${drugs.first['medication_name']} stops.'
+            : 'All ${drugs.length} drugs on it stop. Anything already '
+                'dispensed stays dispensed.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Keep it')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Cancel prescription')),
+        ],
+      ),
+    );
+    if (go != true || !mounted) return;
+    try {
+      final r = await api.post('/api/prescriptions/${row['id']}/cancel/');
+      if (!mounted) return;
+      showSuccess(context, '${r?['message'] ?? 'Cancelled.'}');
+      widget.reload();
+    } catch (e) {
+      if (mounted) showError(context, '$e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final directions = [
-      '${row['dose'] ?? ''}',
-      '${row['frequency'] ?? ''}',
-      if (row['duration_days'] != null) 'for ${row['duration_days']} day(s)',
-    ].where((v) => v.trim().isNotEmpty).join(' · ');
+    final drugs = _drugs;
+    // Drugs of one prescription reach the counter separately, so they are not
+    // always at the same stage; the badge says that rather than picking one.
+    final states = drugs.map((d) => '${d['status']}').toSet();
+    final state = states.length == 1 ? states.first : 'part dispensed';
     final patient = '${row['patient_name'] ?? ''}'.trim();
     final reporter = '${row['reporter_name'] ?? ''}'.trim();
     return GlassCard(
@@ -126,31 +221,56 @@ class _Card extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Expanded(
-            child: Text('${row['medication_name'] ?? 'Drug'}',
+            child: Text(
+                drugs.length == 1
+                    ? '${drugs.first['medication_name'] ?? 'Drug'}'
+                    : '${drugs.length} drugs',
                 style: TextStyle(
                     color: context.labelColor,
                     fontWeight: FontWeight.w700,
                     fontSize: 15)),
           ),
           ReportBadge(
-              text: '${row['status']}'.replaceAll('_', ' '),
-              color: row['status'] == 'dispensed'
+              text: state.replaceAll('_', ' '),
+              color: state == 'dispensed'
                   ? EnhancedTheme.successGreen
                   : EnhancedTheme.accentOrange),
           FutureBuilder<String?>(
             future: api.myRole(),
-            builder: (context, snap) => api.roleCanReport(snap.data)
-                ? IconButton(
-                    visualDensity: VisualDensity.compact,
-                    icon: Icon(Icons.edit_outlined,
-                        size: 18, color: context.hintColor),
-                    onPressed: edit)
-                : const SizedBox.shrink(),
+            builder: (context, snap) {
+              if (!api.roleCanReport(snap.data)) return const SizedBox.shrink();
+              // Nothing to stop once every drug is dispensed or cancelled.
+              if (!drugs.any(_stoppable)) return const SizedBox.shrink();
+              return IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Cancel prescription',
+                  icon: Icon(Icons.block_outlined,
+                      size: 18, color: EnhancedTheme.errorRed),
+                  onPressed: _cancel);
+            },
           ),
         ]),
-        if (directions.isNotEmpty)
-          Text(directions,
-              style: TextStyle(color: context.labelColor, fontSize: 13)),
+        for (final drug in drugs)
+          Row(children: [
+            Expanded(
+              child: Text(
+                  [
+                    if (drugs.length > 1) '${drug['medication_name'] ?? 'Drug'}',
+                    _directions(drug),
+                  ].where((v) => v.trim().isNotEmpty).join(' — '),
+                  style: TextStyle(color: context.labelColor, fontSize: 13)),
+            ),
+            FutureBuilder<String?>(
+              future: api.myRole(),
+              builder: (context, snap) => api.roleCanReport(snap.data)
+                  ? IconButton(
+                      visualDensity: VisualDensity.compact,
+                      icon: Icon(Icons.edit_outlined,
+                          size: 18, color: context.hintColor),
+                      onPressed: () => _edit(drug))
+                  : const SizedBox.shrink(),
+            ),
+          ]),
         const SizedBox(height: 4),
         Text(
           [
@@ -166,7 +286,11 @@ class _Card extends StatelessWidget {
   }
 }
 
-/// One drug order: the patient, the drug, and the directions on it.
+/// One prescription for one patient: the drugs on it and the directions.
+///
+/// A visit rarely calls for a single drug, so drugs are stacked up and written
+/// together. Each becomes its own order row — the pharmacy dispenses them one
+/// at a time — but the patient is prescribed for once.
 class DrugOrderForm extends StatefulWidget {
   final Map<String, dynamic>? existing;
 
@@ -185,7 +309,39 @@ class DrugOrderForm extends StatefulWidget {
   State<DrugOrderForm> createState() => _DrugOrderFormState();
 }
 
+/// A drug stacked onto the prescription being written.
+class _DrugDraft {
+  final int medication;
+  final String name;
+  final String dose;
+  final String frequency;
+  final int? durationDays;
+
+  const _DrugDraft({
+    required this.medication,
+    required this.name,
+    required this.dose,
+    required this.frequency,
+    this.durationDays,
+  });
+
+  Map<String, dynamic> get body => {
+        'medication': medication,
+        'dose': dose,
+        'frequency': frequency,
+        // Blank means open-ended, which is null on the model, not zero days.
+        'duration_days': durationDays,
+      };
+
+  String get directions => [
+        dose,
+        frequency,
+        if (durationDays != null) 'for $durationDays day(s)',
+      ].where((v) => v.trim().isNotEmpty).join(' · ');
+}
+
 class _DrugOrderFormState extends State<DrugOrderForm> {
+  final _drugs = <_DrugDraft>[];
   final _dose = TextEditingController();
   final _frequency = TextEditingController();
   final _duration = TextEditingController();
@@ -251,8 +407,42 @@ class _DrugOrderFormState extends State<DrugOrderForm> {
     });
   }
 
+  /// The drug in the fields right now, or null when none is picked.
+  _DrugDraft? _pending() {
+    final med = _medication;
+    if (med == null) return null;
+    return _DrugDraft(
+      medication: med['id'] as int,
+      name: _medicationName ?? '',
+      dose: _dose.text.trim(),
+      frequency: _frequency.text.trim(),
+      durationDays: int.tryParse(_duration.text.trim()),
+    );
+  }
+
+  /// Stack the drug in the fields and clear them for the next one.
+  void _addAnother() {
+    final drug = _pending();
+    if (drug == null) {
+      setState(() => _error = 'Pick the drug being prescribed.');
+      return;
+    }
+    setState(() {
+      _drugs.add(drug);
+      _medication = null;
+      _medicationName = null;
+      _dose.clear();
+      _frequency.clear();
+      _duration.clear();
+      _error = null;
+    });
+  }
+
   Future<void> _submit() async {
-    if (_medication == null) {
+    // The drug still in the fields counts: nobody should have to press "Add
+    // another drug" to write the only one they wanted.
+    final drugs = [..._drugs, if (_pending() != null) _pending()!];
+    if (drugs.isEmpty) {
       setState(() => _error = 'Pick the drug being prescribed.');
       return;
     }
@@ -261,13 +451,8 @@ class _DrugOrderFormState extends State<DrugOrderForm> {
       _error = null;
     });
     try {
-      final body = {
+      final shared = {
         'patient': _patientId,
-        'medication': _medication!['id'],
-        'dose': _dose.text.trim(),
-        'frequency': _frequency.text.trim(),
-        // Blank means open-ended, which is null on the model, not zero days.
-        'duration_days': int.tryParse(_duration.text.trim()),
         'region': _region,
         'notes': _notes.text.trim(),
         // Only when the caller knows it: sending null on an edit would strip
@@ -275,9 +460,13 @@ class _DrugOrderFormState extends State<DrugOrderForm> {
         if (widget.caseReport != null) 'case_report': widget.caseReport,
       };
       if (_isEdit) {
-        await api.patch('/api/prescriptions/${widget.existing!['id']}/', body);
+        await api.patch('/api/prescriptions/${widget.existing!['id']}/',
+            {...shared, ...drugs.first.body});
       } else {
-        await api.post('/api/prescriptions/', body);
+        // A list is one prescription of several drugs, written whole or
+        // not at all — see PrescriptionViewSet.get_serializer.
+        await api.post('/api/prescriptions/',
+            [for (final drug in drugs) {...shared, ...drug.body}]);
       }
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
@@ -289,13 +478,32 @@ class _DrugOrderFormState extends State<DrugOrderForm> {
 
   @override
   Widget build(BuildContext context) {
+    final written = _drugs.length + (_pending() == null ? 0 : 1);
     return ReportFormSheet(
-      title: _isEdit ? 'Edit order' : 'Prescribe a drug',
+      title: _isEdit ? 'Edit order' : 'Prescribe',
       saving: _saving,
       error: _error,
-      submitLabel: _isEdit ? 'Save changes' : 'Write order',
+      submitLabel: _isEdit
+          ? 'Save changes'
+          : 'Write order${written == 1 ? '' : 's'}',
       onSubmit: _submit,
       children: [
+        for (var i = 0; i < _drugs.length; i++)
+          ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.medication_outlined, size: 18),
+            title: Text(_drugs[i].name,
+                style: TextStyle(color: context.labelColor, fontSize: 14)),
+            subtitle: _drugs[i].directions.isEmpty
+                ? null
+                : Text(_drugs[i].directions,
+                    style: TextStyle(color: context.hintColor, fontSize: 12)),
+            trailing: IconButton(
+              icon: Icon(Icons.close, size: 18, color: context.hintColor),
+              onPressed: () => setState(() => _drugs.removeAt(i)),
+            ),
+          ),
         InputDecorator(
           decoration: InputDecoration(
             labelText: 'Drug',
@@ -338,6 +546,17 @@ class _DrugOrderFormState extends State<DrugOrderForm> {
               helperText: 'Leave blank for an open-ended course'),
         ),
         const SizedBox(height: 12),
+        // An order is edited one drug at a time: the row on screen is that
+        // drug, and stacking more onto it would rewrite a different order.
+        if (!_isEdit)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _addAnother,
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Add another drug'),
+            ),
+          ),
         // Prescribing off a patient's record fixes who it is for; the picker
         // is only for an order written from the list.
         if (widget.patient == null) ...[

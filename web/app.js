@@ -126,7 +126,11 @@ const RESOURCES = {
   'facility-metrics':  { title: 'Facility Metrics',   group: 'Reports', report: true },
   'insurance-claims':  { title: 'Insurance Claims',   group: 'Reports', report: true },
   'appointments':      { title: 'Appointments',       group: 'Reports', report: true },
-  'prescriptions':     { title: 'Prescriptions',      group: 'Reports', report: true },
+  // Cancelling one drug stops the whole prescription it was written on — the
+  // drugs on it are one decision, and a dispensed one is left alone.
+  'prescriptions':     { title: 'Prescriptions',      group: 'Reports', report: true,
+                          actions: [{ name: 'cancel', label: 'Cancel prescription', danger: true,
+                                      when: ['prescribed', 'partially_dispensed'] }] },
   'pharmacy-items':         { title: 'Stock Items',     group: 'Pharmacy', path: 'pharmacy/items',           roles: 'admin', search: true },
   'pharmacy-batches':       { title: 'Stock Batches',   group: 'Pharmacy', path: 'pharmacy/batches',         roles: 'staff', search: true, readOnly: true },
   'pharmacy-movements':     { title: 'Stock Ledger',    group: 'Pharmacy', path: 'pharmacy/movements',       roles: 'staff', readOnly: true },
@@ -186,6 +190,11 @@ const rdetail = (slug, suffix) => slug.startsWith('tenants-')
 // many-related from single-related, so name them.
 // ponytail: hardcoded set; derive from /api/schema/ if the model graph grows.
 const M2M_FIELDS = new Set(['symptoms', 'medications', 'procedures', 'lab_tests', 'specialties', 'articles']);
+
+// The drug fields of a clinical drug order. Everything else on that form —
+// the patient, the region, the notes — is about the prescription as a whole,
+// so an extra drug row repeats these and inherits the rest.
+const RX_DRUG_FIELDS = ['medication', 'dose', 'frequency', 'duration_days'];
 
 // Content workflow edges (mirrors apps/governance/workflow.py TRANSITIONS).
 const TRANSITIONS = {
@@ -552,11 +561,13 @@ function renderData(data, depth = 0) {
   return html || '<p class="muted">No data.</p>';
 }
 
-function tableHtml(rows, linkFor) {
+function tableHtml(rows, linkFor, rowAction) {
   const cols = pickColumns(rows[0]);
-  const head = cols.map((c) => `<th>${esc(label(c))}</th>`).join('');
+  const head = cols.map((c) => `<th>${esc(label(c))}</th>`).join('')
+    + (rowAction ? '<th></th>' : '');
   const body = rows.map((r, i) => {
-    const cells = cols.map((c) => `<td>${cellHtml(c, r[c])}</td>`).join('');
+    const cells = cols.map((c) => `<td>${cellHtml(c, r[c])}</td>`).join('')
+      + (rowAction ? `<td>${rowAction(r)}</td>` : '');
     const href = linkFor && linkFor(r);
     return href ? `<tr class="rowlink" onclick="location.hash='${href}'">${cells}</tr>` : `<tr>${cells}</tr>`;
   }).join('');
@@ -886,7 +897,9 @@ async function viewList(slug) {
         <button>Search</button>
       </form>
       ${res.report ? reportSummaryHtml(slug, rows) : ''}
-      ${rows.length ? tableHtml(rows, res.noLink ? null : (r) => `#/r/${slug}/${r.id}`) : '<p class="muted">Nothing here yet.</p>'}
+      ${rows.length ? tableHtml(slug === 'prescriptions' ? collapseByGroup(rows) : rows,
+        res.noLink ? null : (r) => `#/r/${slug}/${r.id}`,
+        slug === 'prescriptions' && canWrite ? cancelButtonHtml : null) : '<p class="muted">Nothing here yet.</p>'}
       <div class="pager">
         <button id="prev" ${st.page <= 1 ? 'disabled' : ''}>&larr; Prev</button>
         <span>Page ${st.page}${count != null ? ` of ${pages} (${count})` : ''}</span>
@@ -911,6 +924,20 @@ async function viewList(slug) {
       st.timer = setTimeout(run, 300);
     };
     $('#search-form').onsubmit = (e) => { e.preventDefault(); run(); };
+    // Stopping a prescription from the list, the way the app stops one from
+    // the card. The row itself is a link to the record, so the button must not
+    // navigate on its way through.
+    for (const b of document.querySelectorAll('[data-cancel]')) {
+      b.onclick = async (e) => {
+        e.stopPropagation();
+        if (!confirm('Cancel this prescription? Every drug on it stops, bar anything already dispensed.')) return;
+        try {
+          const r = await Api.post(rdetail(slug, `${b.dataset.cancel}/cancel/`));
+          toast(r?.message || 'Cancelled.');
+          viewList(slug);
+        } catch (err) { toast(err.message, true); }
+      };
+    }
     $('#prev').onclick = () => { st.page--; viewList(slug); };
     $('#next').onclick = () => { st.page++; viewList(slug); };
   } catch (e) { errorBox(e); }
@@ -988,6 +1015,8 @@ async function viewDetail(slug, id) {
       ${actsHtml ? `<div class="card"><h3>Actions</h3><div class="actions">${actsHtml}</div></div>` : ''}
       ${fileHtml}
       <div class="card">${dlHtml(obj)}</div>
+      ${slug === 'prescriptions' && obj.group ? `<div class="card"><h3>Prescribed together</h3>
+        <div id="rx-group"><p class="loading">Loading…</p></div></div>` : ''}
       ${res.history ? '<div class="card"><h3>Clinical history</h3><div id="rec-history"><p class="loading">Loading…</p></div></div>' : ''}
       ${res.extra === 'purchase' ? purchaseReceiveHtml(obj) : ''}`);
     if (res.receipt) $('#receipt').onclick = () => printReceipt(id);
@@ -1058,6 +1087,18 @@ async function viewDetail(slug, id) {
         catch (e) { toast(e.message, true); }
       };
     }
+    // The other drugs written with this one. A prescription is one decision
+    // and the rows are one drug each, so the drug on screen is only part of
+    // what the patient was given — and cancelling stops all of them together.
+    if ($('#rx-group')) {
+      try {
+        const { rows } = await Api.list(rpath(slug), { group: obj.group, page_size: 50 });
+        const others = rows.filter((r) => String(r.id) !== String(id));
+        $('#rx-group').innerHTML = others.length
+          ? tableHtml(others, (r) => `#/r/${slug}/${r.id}`)
+          : '<p class="muted">One drug on this prescription.</p>';
+      } catch (e) { $('#rx-group').innerHTML = `<p class="err">${esc(e.message)}</p>`; }
+    }
     // Everything filed against this record, grouped by kind. Empty groups are
     // dropped — ten "No data." headings hide the one group that has rows.
     if (res.history) {
@@ -1100,22 +1141,34 @@ async function viewForm(slug, id, query) {
     const inputs = Object.entries(fields)
       .filter(([, f]) => !f.read_only)
       .map(([name, f]) => fieldHtml(name, f, current[name])).join('');
+    // A visit rarely calls for one drug. Extra rows live outside the <form>
+    // on purpose: inside it, a second field named `medication` would collide
+    // with the first and collectForm would read neither.
+    const multiDrug = slug === 'prescriptions' && !id;
     render(`<div class="page-head"><h2>${id ? 'Edit' : 'New'} — ${esc(res.title)}</h2></div>
       <form id="f" class="card form-card">${inputs}
         <div class="actions">
           <button type="submit" class="btn">${id ? 'Save' : 'Create'}</button>
           <a class="btn ghost" href="#/r/${slug}${id ? '/' + id : ''}">Cancel</a>
         </div>
-      </form>`);
+      </form>
+      ${multiDrug ? `<div id="drugs"></div>
+      <div class="actions">
+        <button type="button" id="add-drug" class="btn ghost">Add another drug</button>
+      </div>` : ''}`);
     wirePatientField($('#f'));
+    const drugRows = multiDrug ? wireExtraDrugs(fields) : null;
     $('#f').onsubmit = async (e) => {
       e.preventDefault();
-      const body = collectForm(e.target, fields);
+      const body = prescriptionPayload(collectForm(e.target, fields),
+        drugRows ? [...drugRows.children].map((row) => collectRow(row, fields)) : []);
       try {
         const saved = id ? await Api.patch(rdetail(slug, `${id}/`), body)
           : await Api.post(rpath(slug), body);
         toast('Saved.');
-        location.hash = `#/r/${slug}/${saved?.id ?? id ?? ''}`;
+        // A prescription of several drugs comes back as the rows it wrote.
+        const first = Array.isArray(saved) ? saved[0] : saved;
+        location.hash = `#/r/${slug}/${first?.id ?? id ?? ''}`;
       } catch (err) {
         if (!id && res.report && !(err instanceof Api.ApiError)) {
           // Network failure on a new report: queue it instead of losing it.
@@ -1129,6 +1182,107 @@ async function viewForm(slug, id, query) {
       }
     };
   } catch (e) { errorBox(e); }
+}
+
+/* Repeat the drug fields on demand, so one visit's drugs are prescribed in one
+ * go. Returns the container the rows are added to. */
+function wireExtraDrugs(fields) {
+  const box = $('#drugs');
+  $('#add-drug').onclick = () => {
+    const row = document.createElement('div');
+    row.className = 'card form-card';
+    row.innerHTML = RX_DRUG_FIELDS
+      .filter((n) => fields[n] && !fields[n].read_only)
+      .map((n) => fieldHtml(n, { ...fields[n], required: false }, '')).join('')
+      + '<div class="actions"><button type="button" class="btn ghost">Remove</button></div>';
+    row.querySelector('button').onclick = () => row.remove();
+    box.append(row);
+  };
+  return box;
+}
+
+/* One extra drug row. It is not in a <form>, so the values are read off the
+ * row itself rather than through form.elements. */
+function collectRow(row, fields) {
+  const drug = {};
+  for (const name of RX_DRUG_FIELDS) {
+    const elm = row.querySelector(`[name="${name}"]`);
+    const raw = (elm?.value ?? '').trim();
+    if (raw === '') continue;
+    const type = fields[name]?.type;
+    drug[name] = (type === 'integer' || type === 'field') ? Number(raw) : raw;
+  }
+  return drug;
+}
+
+/* What to POST: the form on its own, or a list of one row per drug.
+ *
+ * The API takes a list as one prescription of several drugs, written whole or
+ * not at all (see PrescriptionViewSet.get_serializer). The fields that are not
+ * about the drug — the patient, the diagnosis, the notes — go on every row; a
+ * row with no drug picked is an untouched blank and is dropped, not posted. */
+function prescriptionPayload(body, extras) {
+  const drugs = extras.filter((d) => d.medication);
+  if (!drugs.length) return body;
+  const shared = { ...body };
+  for (const name of RX_DRUG_FIELDS) delete shared[name];
+  return [body, ...drugs.map((drug) => ({ ...shared, ...drug }))];
+}
+
+/* One row per prescription, not per drug. The drugs written together were one
+ * decision; listed apart, a three-drug course reads as three prescriptions.
+ * The kept row names every drug on it and links to the first, whose detail
+ * page lists the rest. Per-drug directions are dropped from a collapsed row —
+ * they belong to one drug and would be read as the whole prescription's.
+ *
+ * ponytail: collapses within the page it is given, so a prescription split
+ * across two pages shows a row on each. Group server-side the day a page of
+ * 25 rows routinely splits one. */
+function collapseByGroup(rows) {
+  const heads = new Map();
+  const out = [];
+  for (const row of rows) {
+    const head = row.group ? heads.get(row.group) : null;
+    if (!head) {
+      const copy = { ...row, drugs: [row] };
+      if (row.group) heads.set(row.group, copy);
+      out.push(copy);
+      continue;
+    }
+    head.drugs.push(row);
+    // Drugs of one prescription reach the counter separately, so they are not
+    // always at the same stage; the row says so rather than picking one.
+    if (head.status !== row.status) head.status = 'part-dispensed';
+  }
+  for (const head of out) {
+    const drugs = head.drugs;
+    delete head.drugs;             // a column of objects reads as nothing
+    if (drugs.length === 1) continue;
+    head.medication_name = drugs.map(drugLabel).join('; ');
+    // These belong to one drug and would be read as the prescription's.
+    head.dose = '';
+    head.frequency = '';
+    head.duration_days = null;
+  }
+  return out;
+}
+
+/* Nothing to stop once every drug on the prescription is dispensed or
+ * cancelled, so the row offers no button at all. */
+function cancelButtonHtml(row) {
+  const live = ['prescribed', 'partially_dispensed', 'part-dispensed'];
+  return live.includes(row.status)
+    ? `<button class="btn danger" data-cancel="${row.id}">Cancel</button>` : '';
+}
+
+/* One drug of a prescription, named with its own directions. */
+function drugLabel(drug) {
+  return [
+    drug.medication_name,
+    drug.dose,
+    drug.frequency,
+    drug.duration_days ? `${drug.duration_days} day(s)` : '',
+  ].filter((v) => v != null && String(v).trim() !== '').join(' ');
 }
 
 function fieldHtml(name, f, value) {
