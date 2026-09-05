@@ -154,7 +154,19 @@ const RESOURCES = {
                                         { name: 'approve', label: 'Approve all', adminOnly: true, when: ['submitted'] },
                                         { name: 'pay', label: 'Allocate remittance', ask: 'amount', adminOnly: true, when: ['submitted', 'approved'] },
                                         { name: 'cancel', label: 'Cancel batch', danger: true, when: ['draft', 'submitted', 'approved'] }] },
-  'users':             { title: 'Users',              group: 'Admin' },
+  'patients':          { title: 'Patients',           group: 'Clinical', roles: 'clinical', search: true, history: true,
+                          fileFrom: ['consultations', 'case-reports', 'prescriptions', 'lab-results', 'appointments'],
+                          actions: [{ name: 'merge', label: 'Merge a duplicate into this record', ask: 'source', adminOnly: true }] },
+  // The encounter itself. Closing settles the booking and the case report with
+  // it, so it goes through the action rather than a PATCH of status.
+  'consultations':     { title: 'Visits',             group: 'Clinical', report: true, fileFrom: ['prescriptions', 'case-reports'],
+                          actions: [{ name: 'close', label: 'Close visit', ask: 'follow_up_on,notes',
+                                      choose: 'disposition:home,follow_up,admitted,referred,deceased', when: ['open'] }] },
+  'users':             { title: 'Users',              group: 'Admin', adminOnly: true },
+  // The audit trail of who read which patient record. Tenant admins only, and
+  // read-only for them too — the API writes it, nobody edits it.
+  'patient-access-log':{ title: 'Patient Access Log', group: 'Admin', path: 'patients/access-log',
+                          adminOnly: true, readOnly: true, noLink: true },
   'tenants-hospitals': { title: 'Hospitals',          group: 'Admin', path: 'tenants/hospitals',  superOnly: true, tenantActions: true },
   'tenants-pharmacies':{ title: 'Pharmacies',         group: 'Admin', path: 'tenants/pharmacies', superOnly: true, tenantActions: true },
 };
@@ -198,6 +210,7 @@ const ANALYTICS = [
   { key: 'facility',      label: 'Facility Stats',    path: '/api/analytics/facility/', dates: true },
   { key: 'insurance',     label: 'Insurance Stats',   path: '/api/analytics/insurance/', dates: true },
   { key: 'appointments',  label: 'Appointment Stats', path: '/api/analytics/appointments/', dates: true },
+  { key: 'consultations', label: 'Visit Stats',       path: '/api/analytics/consultations/', dates: true },
   { key: 'funnel',        label: 'Funnel',            path: '/api/analytics/funnel/' },
   { key: 'ai-quality',    label: 'AI Quality',        path: '/api/analytics/ai-quality/', dates: true },
   { key: 'retention',     label: 'Retention',         path: '/api/analytics/retention/' },
@@ -219,6 +232,7 @@ const PLATFORM = [
   { key: 'facility',      label: 'Facility Stats',     path: '/api/analytics/platform/facility/', dates: true },
   { key: 'insurance',     label: 'Insurance Stats',    path: '/api/analytics/platform/insurance/', dates: true },
   { key: 'appointments',  label: 'Appointment Stats',  path: '/api/analytics/platform/appointments/', dates: true },
+  { key: 'consultations', label: 'Visit Stats',        path: '/api/analytics/platform/consultations/', dates: true },
 ];
 
 /* ----------------------------------------------------------------- layout */
@@ -232,13 +246,16 @@ const navGroup = (name, links) =>
   `<summary>${esc(name)}</summary>${links}</details>`;
 
 function navHtml() {
-  const iconFor = (slug, r) => slug === 'users' ? 'users' : slug.startsWith('tenants') ? 'shield'
+  const iconFor = (slug, r) => slug === 'users' || slug === 'patients' ? 'users'
+    : r.group === 'Clinical' ? 'activity' : slug.startsWith('tenants') ? 'shield'
     : r.group === 'Reports' ? 'file' : r.group === 'Pharmacy' ? 'pill' : 'book';
   const groups = {};
   for (const [slug, r] of Object.entries(RESOURCES)) {
     if (r.superOnly && ME?.role !== 'super_admin') continue;
-    if (slug === 'users' && !['super_admin', 'tenant_admin'].includes(ME?.role)) continue;
+    if (r.adminOnly && !['super_admin', 'tenant_admin'].includes(ME?.role)) continue;
     if (r.group === 'Pharmacy' && !PHARMACY_STAFF_ROLES.has(ME?.role)) continue;
+    // Patient data is clinical-staff only (apps.accounts.permissions.IsClinicalStaff).
+    if (r.group === 'Clinical' && !Api.roleCanReport(ME?.role)) continue;
     (groups[r.group] ||= []).push(`<a href="#/r/${slug}" data-route="/r/${slug}">${ico(iconFor(slug, r))}${esc(r.title)}</a>`);
   }
   const tools = [
@@ -259,9 +276,9 @@ function navHtml() {
       `<a href="#/pharmacy/sell" data-route="/pharmacy/sell">${ico('pill')}Dispense</a>` +
       groups.Pharmacy.join(''));
   }
-  if (isClinicalStaff()) {
-    html += navGroup('Clinical', `<a href="#/clinical" data-route="/clinical">${ico('activity')}Ward</a>`);
-  }
+  const clinical = (isClinicalStaff() ? `<a href="#/clinical" data-route="/clinical">${ico('activity')}Ward</a>` : '')
+    + (groups.Clinical || []).join('');
+  if (clinical) html += navGroup('Clinical', clinical);
   let analytics = `<a href="#/analytics" data-route="/analytics">${ico('chart')}Tenant Analytics</a>`;
   if (ME?.role === 'super_admin') analytics += `<a href="#/platform" data-route="/platform">${ico('chart')}Platform Analytics</a>`;
   html += navGroup('Analytics', analytics);
@@ -706,6 +723,7 @@ async function viewHome() {
     ['#/r/case-reports', 'file', 'Case Reports', 'File and browse case reports'],
     ['#/analytics', 'chart', 'Analytics', 'Tenant dashboards and stats'],
   ];
+  if (Api.roleCanReport(ME.role)) tiles.splice(4, 0, ['#/r/patients', 'users', 'Patients', 'Register and open patient records']);
   if (ME.role === 'super_admin') tiles.push(['#/platform', 'chart', 'Platform', 'Cross-tenant analytics'], ['#/r/tenants-hospitals', 'shield', 'Hospitals', 'Approve and manage hospitals'], ['#/r/tenants-pharmacies', 'shield', 'Pharmacies', 'Approve and manage pharmacies']);
   const [health, dash] = await Promise.all([
     Api.public('/api/health/').then((h) => `API: ${h.status} · DB: ${h.db}`, () => 'API unreachable'),
@@ -799,6 +817,10 @@ const REPORT_SUMMARY = {
     kpis: [['Appointments', rows.length], ['Telemedicine', countEq(rows, 'mode', 'telemedicine')], ['No-shows', countEq(rows, 'status', 'no_show')]],
     charts: [['By status', groupRows(rows, 'status', 'appts')]],
   }),
+  'consultations': (rows) => ({
+    kpis: [['Visits', rows.length], ['Open', countEq(rows, 'status', 'open')], ['Admitted', countEq(rows, 'disposition', 'admitted')]],
+    charts: [['By disposition', groupRows(rows, 'disposition', 'visits')]],
+  }),
 };
 
 // KPI tiles + any chartable breakdowns. A chart needs ≥2 categories
@@ -824,6 +846,8 @@ function canWriteRes(slug, res) {
   if (res.readOnly || res.createOnly) return false;
   if (res.roles === 'admin') return isPharmacyAdmin();
   if (res.roles === 'staff') return isPharmacyStaff();
+  // Patients: the same cadres that may read them may register and edit them.
+  if (res.roles === 'clinical') return Api.roleCanReport(ME.role);
   if (slug === 'users') return ['super_admin', 'tenant_admin'].includes(ME.role);
   return res.report ? Api.roleCanReport(ME.role) : Api.roleCanWrite(ME.role);
 }
@@ -860,7 +884,7 @@ async function viewList(slug) {
         <button>Search</button>
       </form>
       ${res.report ? reportSummaryHtml(slug, rows) : ''}
-      ${rows.length ? tableHtml(rows, (r) => `#/r/${slug}/${r.id}`) : '<p class="muted">Nothing here yet.</p>'}
+      ${rows.length ? tableHtml(rows, res.noLink ? null : (r) => `#/r/${slug}/${r.id}`) : '<p class="muted">Nothing here yet.</p>'}
       <div class="pager">
         <button id="prev" ${st.page <= 1 ? 'disabled' : ''}>&larr; Prev</button>
         <span>Page ${st.page}${count != null ? ` of ${pages} (${count})` : ''}</span>
@@ -943,11 +967,26 @@ async function viewDetail(slug, id) {
     const actsHtml = acts.map((a) =>
       `<button class="btn${a.danger ? ' danger' : ''}" data-pa="${a.name}" data-ask="${a.ask || ''}" data-choose="${a.choose || ''}">${esc(a.label)}</button>`).join('');
     if (res.receipt) actions += `<button id="receipt" class="btn ghost">Print receipt</button>`;
-    render(`<div class="page-head"><h2>${esc(obj.name || obj.generic_name || obj.title || obj.reference || res.title + ' #' + id)}</h2></div>
+    // Filing a record against the one on screen. The links travel as query
+    // params so the new-record form opens with them already filled in. A drug
+    // order written off a visit carries that visit's diagnosis, so it is filed
+    // against the case rather than floating loose.
+    let fileHtml = '';
+    if (res.fileFrom && Api.roleCanReport(ME.role)) {
+      const link = new URLSearchParams();
+      const patient = slug === 'patients' ? id : obj.patient;
+      if (patient) link.set('patient', patient);
+      if (slug === 'consultations' && obj.case_report) link.set('case_report', obj.case_report);
+      fileHtml = `<div class="card"><h3>File a record</h3><div class="actions">${res.fileFrom.map((s) =>
+        `<a class="btn ghost" href="#/r/${s}/new?${link}">+ ${esc(RESOURCES[s].title.replace(/s$/, ''))}</a>`).join('')}</div></div>`;
+    }
+    render(`<div class="page-head"><h2>${esc(obj.name || obj.generic_name || obj.title || obj.full_name || obj.reference || res.title + ' #' + id)}</h2></div>
       <div class="actions">${actions}</div>
       ${tenantHtml}${workflowHtml}
       ${actsHtml ? `<div class="card"><h3>Actions</h3><div class="actions">${actsHtml}</div></div>` : ''}
+      ${fileHtml}
       <div class="card">${dlHtml(obj)}</div>
+      ${res.history ? '<div class="card"><h3>Clinical history</h3><div id="rec-history"><p class="loading">Loading…</p></div></div>' : ''}
       ${res.extra === 'purchase' ? purchaseReceiveHtml(obj) : ''}`);
     if (res.receipt) $('#receipt').onclick = () => printReceipt(id);
     if (res.extra === 'purchase') wirePurchaseReceive(id, () => viewDetail(slug, id));
@@ -1017,6 +1056,18 @@ async function viewDetail(slug, id) {
         catch (e) { toast(e.message, true); }
       };
     }
+    // Everything filed against this record, grouped by kind. Empty groups are
+    // dropped — ten "No data." headings hide the one group that has rows.
+    if (res.history) {
+      try {
+        const h = await Api.get(rdetail(slug, `${id}/history/`));
+        const kinds = Object.entries(h).filter(([k, v]) => k !== 'counts' && Array.isArray(v) && v.length);
+        $('#rec-history').innerHTML = kinds.length
+          ? kinds.map(([k, rows]) =>
+            `<section class="sub"><h4>${esc(label(k))} (${rows.length})</h4>${tableHtml(rows)}</section>`).join('')
+          : '<p class="muted">Nothing filed against this patient yet.</p>';
+      } catch (e) { $('#rec-history').innerHTML = `<p class="err">${esc(e.message)}</p>`; }
+    }
     if (res.workflow && $('#history')) {
       try {
         const hist = await Api.get(rdetail(slug, `${id}/history/`));
@@ -1026,17 +1077,21 @@ async function viewDetail(slug, id) {
   } catch (e) { errorBox(e); }
 }
 
-/* Create/edit form generated from DRF OPTIONS metadata. */
-async function viewForm(slug, id) {
+/* Create/edit form generated from DRF OPTIONS metadata.
+ * ``query`` is the new-record link's own query string ("patient=12"), which
+ * seeds the matching fields — filing against a record already on screen
+ * shouldn't make anyone retype which record it was. */
+async function viewForm(slug, id, query) {
   const res = RESOURCES[slug];
   if (!res) return errorBox(new Error('Unknown resource: ' + slug));
   if (!await ensureChrome()) return;
   spinner();
   try {
     const metaPath = id ? rdetail(slug, `${id}/`) : rpath(slug);
+    const prefill = Object.fromEntries(new URLSearchParams(query || ''));
     const [meta, current] = await Promise.all([
       Api.options(metaPath),
-      id ? Api.get(rdetail(slug, `${id}/`)) : Promise.resolve({}),
+      id ? Api.get(rdetail(slug, `${id}/`)) : Promise.resolve(prefill),
     ]);
     const fields = meta?.actions?.PUT || meta?.actions?.POST;
     if (!fields) return errorBox(new Error('You do not have permission to edit this resource.'));
@@ -1050,6 +1105,7 @@ async function viewForm(slug, id) {
           <a class="btn ghost" href="#/r/${slug}${id ? '/' + id : ''}">Cancel</a>
         </div>
       </form>`);
+    wirePatientField($('#f'));
     $('#f').onsubmit = async (e) => {
       e.preventDefault();
       const body = collectForm(e.target, fields);
@@ -1078,6 +1134,16 @@ function fieldHtml(name, f, value) {
   const lbl = esc(f.label || label(name)) + (f.required ? ' *' : '');
   const help = f.help_text ? `<small class="muted">${esc(f.help_text)}</small>` : '';
   const v = value ?? '';
+  // A tenant's registry outgrows a <select> of every patient in it, so the
+  // link is a type-ahead over /api/patients/ instead. The picked id lives in
+  // the hidden input, which is the one collectForm reads.
+  if (name === 'patient') {
+    return `<label data-field="patient">${lbl}
+      <input type="search" id="patient-q" autocomplete="off"
+             placeholder="Name, hospital number or phone…">
+      <input type="hidden" name="patient" value="${esc(v)}">
+      <div id="patient-hit" class="muted"></div>${help}<em class="field-err"></em></label>`;
+  }
   let control;
   if (f.choices) {
     const isMulti = M2M_FIELDS.has(name);
@@ -1129,6 +1195,59 @@ function collectForm(form, fields) {
     }
   }
   return body;
+}
+
+/* ------------------------------------------------------- patient type-ahead */
+
+const patientHitHtml = (p) =>
+  `<b>${esc(p.full_name || p.first_name || '')}</b> · ${esc(p.hospital_number || '')}`;
+
+/* Search the registry as the user types (250ms after the last keystroke) and
+ * report the resolved patient — or null while nothing is resolved — through
+ * onPick. One match binds itself; several are listed to be picked, because
+ * linking the wrong record is worse than one more click. */
+function patientPicker(box, out, onPick) {
+  const bind = (p) => { out.innerHTML = patientHitHtml(p); onPick(p); };
+  let timer;
+  let latest = 0;  // only the newest reply may paint
+  const lookup = async () => {
+    onPick(null);
+    const q = box.value.trim();
+    if (!q) return (out.textContent = '');
+    const seq = ++latest;
+    out.textContent = 'Searching…';
+    try {
+      const { rows } = await Api.list('/api/patients/', { search: q, page_size: 5 });
+      if (seq !== latest) return;  // a later keystroke already asked
+      if (!rows.length) return (out.textContent = 'No patient found.');
+      if (rows.length === 1) return bind(rows[0]);
+      out.innerHTML = '<span class="muted">Which patient?</span><div class="chips">'
+        + rows.map((r, i) => `<button type="button" class="chip pick" data-hit="${i}">${patientHitHtml(r)}</button>`).join('')
+        + '</div>';
+      for (const b of out.querySelectorAll('[data-hit]')) {
+        b.onclick = () => { ++latest; bind(rows[Number(b.dataset.hit)]); };
+      }
+    } catch (e) { if (seq === latest) out.textContent = e.message; }
+  };
+  box.oninput = () => { clearTimeout(timer); timer = setTimeout(lookup, 250); };
+  return { bind };
+}
+
+/* The generated form's `patient` field, if it has one. */
+function wirePatientField(form) {
+  const box = form.querySelector('#patient-q');
+  if (!box) return;
+  const hidden = form.elements.patient;
+  const out = form.querySelector('#patient-hit');
+  const picker = patientPicker(box, out, (p) => { hidden.value = p ? p.id : ''; });
+  // A record that already names a patient — an edit, or a form opened from the
+  // patient — shows who that is rather than an id nobody can read.
+  if (hidden.value) {
+    Api.get(`/api/patients/${hidden.value}/`).then((p) => {
+      box.value = p.full_name || '';
+      picker.bind(p);
+    }, () => { out.textContent = `Patient #${hidden.value}`; });
+  }
 }
 
 function showFieldErrors(form, errors) {
@@ -1537,9 +1656,6 @@ async function viewSell() {
   let schemes = [];        // active enrollments for `patient`
   let schemeId = '';
 
-  const hitHtml = (p) =>
-    `<b>${esc(p.full_name || p.first_name)}</b> · ${esc(p.hospital_number || '')}`;
-
   const schemeOptions = () => '<option value="">—</option>' + schemes.map((r) =>
     `<option value="${r.id}"${String(r.id) === schemeId ? ' selected' : ''}>${esc(r.hmo_name)} · ${esc(r.member_number)} (${r.effective_coverage}%)</option>`).join('');
 
@@ -1558,7 +1674,7 @@ async function viewSell() {
         <label>Patient (optional — leave blank for a walk-in)
           <input name="patient_search" placeholder="Name, hospital number or phone…"
                  autocomplete="off" value="${esc(patientQuery)}"></label>
-        <div id="patient-hit" class="muted">${patient ? hitHtml(patient) : ''}</div>
+        <div id="patient-hit" class="muted">${patient ? patientHitHtml(patient) : ''}</div>
         <label>Payment<select name="payment_method">
           <option value="cash">Cash</option><option value="card">Card</option>
           <option value="transfer">Transfer</option><option value="hmo">HMO / scheme</option>
@@ -1583,54 +1699,26 @@ async function viewSell() {
       b.onclick = () => { basket.splice(Number(b.dataset.drop), 1); draw(); };
     }
 
-    // Patient lookup runs as the pharmacist types (250ms after the last
-    // keystroke). One match binds itself; several are listed to be picked,
-    // because billing the wrong record is worse than one more click.
+    // Same registry type-ahead the report forms use; the sale adds the picked
+    // patient's active schemes, which is what decides who pays.
     const search = $('#checkout').patient_search;
-    const hit = () => $('#patient-hit');
-    let timer;
-    let latest = 0;  // only the newest reply may paint
-
-    const bind = async (p) => {
-      const id = ++latest;  // a picked patient outranks a lookup still in flight
+    let pickSeq = 0;  // only the newest pick's schemes may paint
+    patientPicker(search, $('#patient-hit'), async (p) => {
+      const seq = ++pickSeq;
       patient = p;
-      hit().innerHTML = hitHtml(p);
-      const en = await Api.list('/api/pharmacy/enrollments/',
-                                { patient: p.id, is_active: true });
-      if (id !== latest) return;  // the pharmacist has typed on since
-      schemes = en.rows;
-      schemeId = schemes.length === 1 ? String(schemes[0].id) : '';
-      $('#checkout').enrollment.innerHTML = schemeOptions();
-    };
-
-    const lookup = async () => {
-      patient = null;
       schemes = [];
       schemeId = '';
       $('#checkout').enrollment.innerHTML = schemeOptions();
-      const q = patientQuery.trim();
-      if (!q) return (hit().textContent = '');
-      const id = ++latest;
-      hit().textContent = 'Searching…';
-      try {
-        const { rows } = await Api.list('/api/patients/', { search: q, page_size: 5 });
-        if (id !== latest) return;  // a later keystroke already asked
-        if (!rows.length) return (hit().textContent = 'No patient found.');
-        if (rows.length === 1) return bind(rows[0]);
-        hit().innerHTML = '<span class="muted">Which patient?</span><div class="chips">'
-          + rows.map((r, i) => `<button type="button" class="chip pick" data-hit="${i}">${hitHtml(r)}</button>`).join('')
-          + '</div>';
-        for (const b of hit().querySelectorAll('[data-hit]')) {
-          b.onclick = () => bind(rows[Number(b.dataset.hit)]);
-        }
-      } catch (err) { if (id === latest) hit().textContent = err.message; }
-    };
-
-    search.oninput = () => {
-      patientQuery = search.value;
-      clearTimeout(timer);
-      timer = setTimeout(lookup, 250);
-    };
+      if (!p) return;
+      const en = await Api.list('/api/pharmacy/enrollments/',
+                                { patient: p.id, is_active: true });
+      if (seq !== pickSeq) return;  // the pharmacist has picked again since
+      schemes = en.rows;
+      schemeId = schemes.length === 1 ? String(schemes[0].id) : '';
+      $('#checkout').enrollment.innerHTML = schemeOptions();
+    });
+    // Adding a basket line re-renders the form, so what was typed is kept.
+    search.addEventListener('input', () => { patientQuery = search.value; });
     $('#checkout').enrollment.onchange = (e) => { schemeId = e.target.value; };
 
     $('#checkout').onsubmit = async (e) => {
@@ -1703,7 +1791,7 @@ const routes = [
   [/^\/onboarding$/, viewOnboarding],
   [/^\/profile$/, viewProfile],
   [/^\/?$/, viewHome],
-  [/^\/r\/([a-z-]+)\/new$/, (m) => viewForm(m[1])],
+  [/^\/r\/([a-z-]+)\/new(?:\?(.*))?$/, (m) => viewForm(m[1], null, m[2])],
   [/^\/r\/([a-z-]+)\/(\d+)\/edit$/, (m) => viewForm(m[1], m[2])],
   [/^\/r\/([a-z-]+)\/(\d+)$/, (m) => viewDetail(m[1], m[2])],
   [/^\/r\/([a-z-]+)$/, (m) => viewList(m[1])],
