@@ -14,7 +14,7 @@ from apps.accounts.permissions import (
     sees_whole_tenant,
 )
 
-from .models import Patient, PatientAccessLog
+from .models import Patient, PatientAccessLog, number_search_term
 from .serializers import PatientAccessLogSerializer, PatientSerializer
 
 # Record types shown on a patient's timeline: response key -> (model, serializer).
@@ -70,29 +70,6 @@ def visible_patients(user):
 # A query that is nothing but digits and the separators people type into a
 # phone number: "0803 123 4567", "+234-803-123-4567", "(0803)1234567".
 _NUMBER_QUERY = re.compile(r"[+(]?\d[\d\s()+-]{4,}")
-# The national part of a Nigerian mobile: 10 digits starting 7, 8 or 9,
-# whatever the writer did with the country code or the leading zero.
-_MOBILE_TAIL = re.compile(r"[789]\d{9}$")
-
-
-def number_search_term(raw):
-    """The digits to match a typed number against the stored one.
-
-    Phone numbers are normalized on write (see normalize_phone) to local
-    ``0XXXXXXXXXX``, so the 10-digit national part is what every spelling has
-    in common: "+2348031234567", "234 803 123 4567" and "0803-123-4567" all
-    come down to "8031234567", which matches the stored number as a substring.
-
-    A number that is not a mobile — a hospital number, an NHIS number — keeps
-    every digit it was typed with. That is the point of matching the tail
-    rather than folding a leading "234" onto a "0" the way normalize_phone
-    does: an NHIS number that happens to start "234" stayed unfindable.
-    """
-    digits = re.sub(r"\D", "", raw)
-    tail = _MOBILE_TAIL.search(digits)
-    return tail.group() if tail else digits
-
-
 class NumberAwareSearchFilter(filters.SearchFilter):
     """SearchFilter that folds a typed number onto the shape we store.
 

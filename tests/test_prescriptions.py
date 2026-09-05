@@ -395,3 +395,89 @@ def test_a_patients_number_finds_what_they_were_prescribed(db_clean):
     # Too few digits is a question nobody meant to ask.
     assert client.get("/api/prescriptions/scripts/by-number/",
                       {"number": "45"}).status_code == 400
+
+
+def test_a_pharmacy_fills_another_facilitys_prescription_on_the_number(db_clean):
+    """A hospital writes the order; the patient fills it wherever they like.
+
+    The number the patient hands over is what reaches it — and it reaches the
+    prescription only. The pharmacy learns what drug to hand over, not who the
+    patient is, and the sale is what marks the order dispensed.
+    """
+    from decimal import Decimal
+
+    from apps.inventory.models import StockItem, Store, receive_stock
+    from apps.pos.models import Sale
+
+    hosp = Tenant.objects.create(name="General Hospital", slug="gen",
+                                 kind=Tenant.Kind.HOSPITAL)
+    pharm = Tenant.objects.create(name="Bola Pharmacy", slug="bola",
+                                  kind=Tenant.Kind.PHARMACY)
+    doctor = User.objects.create_user(phone="08030000501", password="x",
+                                      tenant=hosp, role=Role.DOCTOR,
+                                      username="drada", license_number="MDCN1")
+    pharmacist = User.objects.create_user(phone="08030000502", password="x",
+                                          tenant=pharm, role=Role.PHARMACIST)
+    patient = Patient.objects.create(tenant=hosp, first_name="Ada",
+                                     last_name="Obi", phone="08031234567")
+    drug = Medication.objects.create(generic_name="Amoxicillin")
+    order = Prescription.all_objects.create(
+        tenant=hosp, patient=patient, medication=drug, dose="500 mg",
+        reporter=doctor, notes="take after food",
+    )
+    item = StockItem.all_objects.create(
+        tenant=pharm, name="Amoxicillin 250mg", sku="AMOX250", unit="capsule",
+        cost_price=Decimal("10.00"), unit_price=Decimal("25.00"),
+        store=Store.RETAIL, medication=drug,
+    )
+    receive_stock(item, 50, batch_number="AM-1", cost_price=Decimal("10.00"))
+    client = _client(pharmacist, pharm)
+
+    found = client.get("/api/prescriptions/scripts/by-number/",
+                       {"number": "+234 803 123 4567"})
+    assert found.status_code == 200, found.content
+    [outside] = found.json()["orders_elsewhere"]
+    assert outside["id"] == order.pk
+    assert outside["medication_name"] == "Amoxicillin"
+    assert outside["facility"] == "General Hospital"
+    # The prescription, and nothing else about the patient.
+    assert "patient" not in outside and "patient_name" not in outside
+    assert "notes" not in outside and "region" not in outside
+
+    # Half a number does not walk another facility's registry.
+    assert client.get("/api/prescriptions/scripts/by-number/",
+                      {"number": "80312345"}).json()["orders_elsewhere"] == []
+
+    # The order id alone is not enough — the patient has to be holding it.
+    refused = client.post("/api/pos/sales/", {
+        "items": [{"item": item.pk, "quantity": 10}], "prescription": order.pk,
+    }, format="json")
+    assert refused.status_code == 400, refused.content
+    assert "patient_number" in refused.json()["errors"]
+
+    sold = client.post("/api/pos/sales/", {
+        "items": [{"item": item.pk, "quantity": 10}], "prescription": order.pk,
+        "patient_number": "08031234567",
+    }, format="json")
+    assert sold.status_code == 201, sold.content
+    assert Sale.all_objects.get(pk=sold.json()["id"]).prescription_id == order.pk
+    order.refresh_from_db()
+    assert order.status == Prescription.Status.DISPENSED
+    assert order.dispensed_at is not None
+    # The hospital's record stayed the hospital's.
+    assert order.tenant_id == hosp.id
+
+
+def test_the_number_lookup_leaves_a_trail(db_clean):
+    """Who asked what a number was prescribed is logged like a patient read."""
+    from apps.patients.models import PatientAccessLog
+
+    pharm = Tenant.objects.create(name="Bola Pharmacy", slug="bola",
+                                  kind=Tenant.Kind.PHARMACY)
+    pharmacist = User.objects.create_user(phone="08030000601", password="x",
+                                          tenant=pharm, role=Role.PHARMACIST)
+    r = _client(pharmacist, pharm).get("/api/prescriptions/scripts/by-number/",
+                                       {"number": "08031234567"})
+    assert r.status_code == 200, r.content
+    log = PatientAccessLog.all_objects.get(action=PatientAccessLog.Action.LOOKUP)
+    assert log.user_id == pharmacist.id and log.query == "08031234567"

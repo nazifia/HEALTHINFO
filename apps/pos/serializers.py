@@ -4,7 +4,9 @@ from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
 from apps.accounts.serializers import TenantUserField
+from apps.analytics.models import Prescription as DrugOrder
 from apps.inventory.models import OutOfStock, StockItem, Supplier
+from apps.patients.models import patients_by_number
 from apps.inventory.serializers import StockBatchSerializer  # noqa: F401
 from config.serializers import NamedRelationsMixin
 
@@ -106,6 +108,17 @@ class SaleSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     change_due = serializers.DecimalField(max_digits=12, decimal_places=2,
                                           read_only=True)
     claim_id = serializers.IntegerField(source="claim.id", read_only=True)
+    # The order this sale fills may be another facility's: a patient
+    # prescribed at a hospital fills it at whichever pharmacy they reach, and
+    # the till is where the drug actually leaves the shelf.
+    prescription = serializers.PrimaryKeyRelatedField(
+        queryset=DrugOrder.all_objects.all(), required=False, allow_null=True
+    )
+    # Proof the patient is standing there: the number they handed over. Only
+    # asked for when the order belongs to another facility — inside one tenant
+    # the staff can read the order anyway.
+    patient_number = serializers.CharField(write_only=True, required=False,
+                                           allow_blank=True)
 
     class Meta:
         model = Sale
@@ -118,6 +131,7 @@ class SaleSerializer(NamedRelationsMixin, serializers.ModelSerializer):
                             "updated_at")
 
     def validate(self, attrs):
+        self._check_outside_order(attrs)
         method = attrs.get("payment_method", Sale.PaymentMethod.CASH)
         enrollment = attrs.get("enrollment")
         patient = attrs.get("patient")
@@ -159,6 +173,35 @@ class SaleSerializer(NamedRelationsMixin, serializers.ModelSerializer):
         if not attrs.get("items"):
             raise serializers.ValidationError({"items": "A sale needs at least one item."})
         return attrs
+
+    def _check_outside_order(self, attrs):
+        """Let a sale fill another facility's order, on the patient's number.
+
+        Selling the drug is what marks the order dispensed (see
+        analytics.capture.capture_dispense), so this is the point where one
+        tenant writes to another's record — and the only thing that entitles
+        it is the number the patient handed over. Without that the id of an
+        order is enough to mark a stranger's prescription filled.
+        """
+        number = attrs.pop("patient_number", "")
+        order = attrs.get("prescription")
+        tenant = getattr(self.context.get("request"), "tenant", None)
+        if order is None or order.tenant_id == getattr(tenant, "id", None):
+            return
+        if order.status in (DrugOrder.Status.DISPENSED,
+                            DrugOrder.Status.CANCELLED):
+            raise serializers.ValidationError(
+                {"prescription": "That order has already been filled or stopped."}
+            )
+        matched = (order.patient_id is not None and number
+                   and patients_by_number(number).filter(
+                       pk=order.patient_id).exists())
+        if not matched:
+            raise serializers.ValidationError(
+                {"patient_number": "Give the number the prescription was written "
+                                   "for — an order from another facility is only "
+                                   "dispensable to the patient holding it."}
+            )
 
     def create(self, validated_data):
         """Dispense the whole basket or none of it, then raise any HMO claim.

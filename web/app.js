@@ -1884,6 +1884,34 @@ async function viewSell() {
   let patientQuery = '';   // what is in the search box
   let schemes = [];        // active enrollments for `patient`
   let schemeId = '';
+  // What the patient's number turned up, and which of it this sale fills. A
+  // prescription written at another facility is dispensable here on that
+  // number alone, so the sale carries it back as the proof the API asks for.
+  let rxNumber = '';
+  let rxFound = null;      // null until a lookup has run
+  let filling = null;      // { id, label } of the order being filled
+
+  // Rows of both kinds read the same at the counter: a drug, its directions,
+  // and where it was written. Only the ones still open can be filled.
+  const rxRows = () => [
+    ...(rxFound?.orders || []).map((o) => ({ ...o, facility: 'Here' })),
+    ...(rxFound?.orders_elsewhere || []),
+  ].filter((o) => o.status === 'prescribed' || o.status === 'partially_dispensed');
+
+  const rxLabel = (o) => [o.medication_name, o.dose, o.frequency,
+    o.duration_days ? `${o.duration_days} days` : ''].filter(Boolean).join(' · ');
+
+  const rxHtml = () => {
+    if (!rxFound) return '<p class="muted">Enter the number the patient gives you.</p>';
+    const rows = rxRows();
+    if (!rows.length) return '<p class="muted">Nothing outstanding for that number.</p>';
+    return `<table><thead><tr><th>Prescribed</th><th>From</th><th></th></tr></thead>
+      <tbody>${rows.map((o) => `<tr>
+        <td>${esc(rxLabel(o))}</td><td>${esc(o.facility || '—')}</td>
+        <td>${filling?.id === o.id ? '<b>Filling</b>'
+          : `<button class="btn ghost" data-fill="${o.id}">Fill this</button>`}</td>
+      </tr>`).join('')}</tbody></table>`;
+  };
 
   const schemeOptions = () => '<option value="">—</option>' + schemes.map((r) =>
     `<option value="${r.id}"${String(r.id) === schemeId ? ' selected' : ''}>${esc(r.hmo_name)} · ${esc(r.member_number)} (${r.effective_coverage}%)</option>`).join('');
@@ -1892,6 +1920,17 @@ async function viewSell() {
     render(`
       <div class="page-head"><h2>Dispense</h2>
         <a class="btn ghost" href="#/pharmacy">&larr; Pharmacy</a></div>
+      <div class="card"><h3>Prescriptions</h3>
+        <form id="rx-find" class="toolbar">
+          <label>Patient's number
+            <input name="number" placeholder="Phone or hospital number…"
+                   autocomplete="off" value="${esc(rxNumber)}"></label>
+          <button class="btn">Find</button>
+        </form>
+        <div id="rx-hits">${rxHtml()}</div>
+        ${filling ? `<p class="muted">This sale fills: ${esc(filling.label)}
+          — the order is marked dispensed when the sale completes.</p>` : ''}
+      </div>
       <form id="add" class="card form-card">
         <label>Item<select name="stock_item">${optionsHtml}</select></label>
         <label>Quantity<input type="number" name="quantity" min="1" value="1"></label>
@@ -1911,6 +1950,26 @@ async function viewSell() {
         <label>Scheme membership<select name="enrollment">${schemeOptions()}</select></label>
         <div class="actions"><button class="btn">Complete sale</button></div>
       </form>`);
+
+    $('#rx-find').onsubmit = async (e) => {
+      e.preventDefault();
+      rxNumber = new FormData(e.target).get('number').trim();
+      $('#rx-hits').innerHTML = '<div class="loading">Loading…</div>';
+      try {
+        rxFound = await Api.get('/api/prescriptions/scripts/by-number/',
+                                { number: rxNumber });
+      } catch (err) { rxFound = null; return toast(err.message, true); }
+      draw();
+    };
+    for (const b of document.querySelectorAll('[data-fill]')) {
+      b.onclick = () => {
+        const order = rxRows().find((o) => String(o.id) === b.dataset.fill);
+        // One order per sale: the API takes one, and the drugs written with it
+        // are marked off by the basket lines that match them.
+        filling = order ? { id: order.id, label: rxLabel(order) } : null;
+        draw();
+      };
+    }
 
     $('#add').onsubmit = (e) => {
       e.preventDefault();
@@ -1964,6 +2023,10 @@ async function viewSell() {
         items: basket.map((b) => ({ item: b.item, quantity: b.quantity, discount: b.discount })),
       };
       if (patient) body.patient = patient.id;
+      if (filling) {
+        body.prescription = filling.id;
+        body.patient_number = rxNumber;
+      }
       if (fd.get('enrollment')) body.enrollment = Number(fd.get('enrollment'));
       try {
         const sale = await Api.post('/api/pharmacy/sales/', body);

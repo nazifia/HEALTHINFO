@@ -240,6 +240,25 @@ def _rx_line_for(sale, item_id):
     ).first()
 
 
+def _ordered_drug(order, medication):
+    """The row of ``order``'s prescription for ``medication``, or ``order``.
+
+    A sale fills a basket, and the prescription it was written off is one row
+    per drug (they share ``group``). The sale names one of them, so without
+    this every line of a three-drug sale would mark that same one dispensed
+    and leave the other two reading as never collected.
+    """
+    if medication is None or order.group is None:
+        return order
+    if order.medication_id == medication.pk:
+        return order
+    sibling = Prescription.all_objects.filter(
+        tenant_id=order.tenant_id, group=order.group, medication=medication
+    ).exclude(status__in=(Prescription.Status.DISPENSED,
+                          Prescription.Status.CANCELLED)).first()
+    return sibling or order
+
+
 def capture_dispense(log):
     """One item handed over at a till — a hospital's pharmacy or a shop's counter.
 
@@ -250,12 +269,12 @@ def capture_dispense(log):
     sale = log.sale
     if sale is None:
         return None
-    # A hospital clinician already wrote this order into the data centre. Fill
-    # that row in rather than filing the same drug a second time.
-    if sale.prescription_id:
-        return mark_dispensed(sale.prescription)
     tenant_id = log.tenant_id or sale.tenant_id
     medication = medication_for(tenant_id, log.item, log.name)
+    # A clinician already wrote this order into the data centre. Fill that row
+    # in rather than filing the same drug a second time.
+    if sale.prescription_id:
+        return mark_dispensed(_ordered_drug(sale.prescription, medication))
     if medication is None:
         return None
     line = _rx_line_for(sale, log.item_id)

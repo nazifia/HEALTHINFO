@@ -6,9 +6,11 @@ centrally, and only an optional FK back to here. A patient row never leaves its
 tenant — the manager is tenant-scoped like the rest of the platform, and the
 API gates reads to clinical staff (see apps.accounts.permissions).
 """
+import re
 import secrets
 
 from django.db import models, transaction
+from django.db.models import Q
 
 from apps.accounts.models import normalize_phone, phone_validator
 from apps.tenants.models import TenantOwnedModel
@@ -29,6 +31,48 @@ def age_band(years):
         if years < upper:
             return label
     return AGE_BAND_OVER
+
+
+# The national part of a Nigerian mobile: 10 digits starting 7, 8 or 9,
+# whatever the writer did with the country code or the leading zero.
+_MOBILE_TAIL = re.compile(r"[789]\d{9}$")
+
+
+def number_search_term(raw):
+    """The digits to match a typed number against the stored one.
+
+    Phone numbers are normalized on write (see normalize_phone) to local
+    ``0XXXXXXXXXX``, so the 10-digit national part is what every spelling has
+    in common: "+2348031234567", "234 803 123 4567" and "0803-123-4567" all
+    come down to "8031234567", which matches the stored number as a substring.
+
+    A number that is not a mobile — a hospital number, an NHIS number — keeps
+    every digit it was typed with. That is the point of matching the tail
+    rather than folding a leading "234" onto a "0" the way normalize_phone
+    does: an NHIS number that happens to start "234" stayed unfindable.
+    """
+    digits = re.sub(r"\D", "", raw)
+    tail = _MOBILE_TAIL.search(digits)
+    return tail.group() if tail else digits
+
+
+def patients_by_number(number):
+    """Patients in any tenant whose own number is exactly the one given.
+
+    The number a patient hands over is how a pharmacy that has never seen them
+    finds what they were prescribed, so this deliberately crosses tenants —
+    and therefore matches whole numbers only. A fragment still finds a patient
+    inside their own facility, where staff may list the registry anyway; it
+    must never walk another facility's registry a digit at a time.
+    """
+    typed = (number or "").strip()
+    if len(typed) < 5:
+        return Patient.all_objects.none()
+    match = Q(hospital_number__iexact=typed)
+    tail = number_search_term(typed)
+    if len(tail) >= 10:  # a whole mobile number, however it was written
+        match |= Q(phone__endswith=tail)
+    return Patient.all_objects.filter(match)
 
 
 class Patient(TenantOwnedModel):
@@ -331,6 +375,11 @@ class PatientAccessLog(TenantOwnedModel):
         LIST = "list"
         RETRIEVE = "retrieve"
         HISTORY = "history"
+        # A pharmacy asking what the holder of a number was prescribed. It
+        # reads no identifying field, but it does say that this number is
+        # registered somewhere and what was written for it, and a pharmacy
+        # outside the facility can ask — so it leaves the same trail.
+        LOOKUP = "lookup"
         DELETE = "delete"
         MERGE = "merge"
 

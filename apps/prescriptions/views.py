@@ -23,8 +23,12 @@ from apps.accounts.permissions import (
 from apps.analytics.models import Prescription as DrugOrder
 from apps.analytics.serializers import PrescriptionSerializer as DrugOrderSerializer
 from apps.inventory.views import PharmacyViewSet
-from apps.patients.models import Patient
-from apps.patients.views import number_search_term
+from apps.patients.models import (
+    Patient,
+    PatientAccessLog,
+    number_search_term,
+    patients_by_number,
+)
 from config.responses import success
 
 from .models import (
@@ -37,6 +41,7 @@ from .models import (
 )
 from .serializers import (
     ConsultationPayoutSerializer,
+    OutsideOrderSerializer,
     HospitalSerializer,
     PrescriberCommissionSerializer,
     PrescriberSerializer,
@@ -121,17 +126,25 @@ class PrescriptionViewSet(PharmacyViewSet):
 
         ``?number=`` is the patient's phone or their hospital number, written
         however they say it: the match is on the digits (see
-        patients.views.number_search_term), so "+234 803 123 4567" and
+        patients.models.number_search_term), so "+234 803 123 4567" and
         "08031234567" find the same person.
 
-        Counter scripts and clinician-written drug orders both come back — a
-        pharmacist holding the number has one question, "what was this patient
-        prescribed?", not two — and the search runs across the tenant, so a
-        script written at another branch or counter still turns up.
+        Three lists come back, because a pharmacy is asked to fill three kinds
+        of thing and only wants to ask once:
 
-        ponytail: three indexed-ish lookups (patients by number, then scripts
-        and orders by patient). Fold into one query only if a tenant's script
-        table ever makes this show up in a plan.
+        * ``scripts`` — this tenant's own counter scripts, matched loosely
+          (a fragment of the number will do) since its staff may list them all
+          anyway;
+        * ``orders`` — this tenant's clinician-written drug orders;
+        * ``orders_elsewhere`` — drug orders written for that number at
+          *another* facility, so a patient prescribed at a hospital can fill it
+          at whichever pharmacy they reach. Whole numbers only, and carrying
+          the prescription alone (see OutsideOrderSerializer): the number the
+          patient hands over is the key to their prescriptions, never to their
+          record.
+
+        ponytail: a query per list. Fold them together only if a tenant's
+        script table ever makes this show up in a plan.
         """
         number = (request.query_params.get("number") or "").strip()
         term = number_search_term(number)
@@ -142,20 +155,37 @@ class PrescriptionViewSet(PharmacyViewSet):
         # The registry is read to match the number, never returned: this
         # endpoint is the pharmacy's, and identifying data is the patient
         # API's (which logs every read of it).
-        patients = Patient.objects.filter(
+        here = Patient.objects.filter(
             Q(phone__contains=term) | Q(hospital_number__contains=term)
         )
         scripts = self.get_queryset().filter(
-            Q(patient__in=patients)
+            Q(patient__in=here)
             | Q(customer__phone__contains=term)
             | Q(customer_phone__contains=term)
         )
-        orders = DrugOrder.objects.filter(patient__in=patients)
-        return Response({
+        orders = DrugOrder.objects.filter(patient__in=here)
+        elsewhere = DrugOrder.all_objects.filter(
+            patient__in=patients_by_number(number)
+        ).exclude(tenant_id=getattr(request.tenant, "id", None)).select_related(
+            "medication", "reporter", "tenant"
+        )
+        body = {
             "number": number,
             "scripts": PrescriptionSerializer(scripts, many=True).data,
             "orders": DrugOrderSerializer(orders, many=True).data,
-        })
+            "orders_elsewhere": OutsideOrderSerializer(elsewhere, many=True).data,
+        }
+        # Logged like a patient read and for the same reason: this says a
+        # number is registered somewhere and what was written for it, and it
+        # answers a pharmacy that has never seen the patient. Fail-closed —
+        # if the trail can't be written the answer isn't given.
+        PatientAccessLog.objects.create(
+            user=request.user if request.user.is_authenticated else None,
+            action=PatientAccessLog.Action.LOOKUP, query=number[:255],
+            result_count=sum(len(body[k]) for k in
+                             ("scripts", "orders", "orders_elsewhere")),
+        )
+        return Response(body)
 
     @action(detail=True, methods=["post"], url_path="dispense")
     def dispense(self, request, pk=None):

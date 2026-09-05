@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
+from apps.analytics.models import Prescription as DrugOrder
 from config.serializers import NamedRelationsMixin
 
 from .models import (
@@ -108,6 +109,30 @@ class PrescriptionSerializer(NamedRelationsMixin, serializers.ModelSerializer):
                     tenant=instance.tenant, prescription=instance, **line
                 )
         return super().update(instance, validated_data)
+
+
+class OutsideOrderSerializer(serializers.ModelSerializer):
+    """A drug order as a pharmacy outside the writing facility may read it.
+
+    A patient hands a pharmacy their number, not their file, so this carries
+    the prescription and nothing else: the drug, the directions, where it was
+    written and by whom. No name, no age band, no diagnosis, no notes — the
+    patient record stays inside the facility that holds it, which is the rule
+    everything else in the platform keeps too.
+    """
+
+    medication_name = serializers.CharField(source="medication.generic_name",
+                                            read_only=True)
+    prescriber_name = serializers.CharField(source="reporter.username",
+                                            read_only=True)
+    facility = serializers.CharField(source="tenant.name", read_only=True)
+
+    class Meta:
+        model = DrugOrder
+        fields = ("id", "medication", "medication_name", "dose", "frequency",
+                  "duration_days", "status", "group", "prescriber_name",
+                  "facility", "created_at")
+        read_only_fields = fields
 
 
 class PrescriberCommissionSerializer(NamedRelationsMixin, serializers.ModelSerializer):
