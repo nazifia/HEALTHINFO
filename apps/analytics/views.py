@@ -12,7 +12,7 @@ from rest_framework.views import APIView
 from config.responses import success
 
 from apps.accounts.permissions import (
-    IsSuperAdmin,
+    IsPlatformAdmin,
     IsTenantMember,
     ReadOnlyOrReportRole,
     sees_whole_tenant,
@@ -108,7 +108,7 @@ class TenantDashboardView(APIView):
 
 
 class PlatformDashboardView(APIView):
-    permission_classes = [IsSuperAdmin]
+    permission_classes = [IsPlatformAdmin]
 
     def get(self, request):
         return Response(platform_stats(*_range(request)))
@@ -156,7 +156,7 @@ class TenantSpikesView(APIView):
 class PlatformSpikesView(APIView):
     """Cross-tenant outbreak alerts (super-admin)."""
 
-    permission_classes = [IsSuperAdmin]
+    permission_classes = [IsPlatformAdmin]
 
     def get(self, request):
         return Response({"alerts": platform_spikes()})
@@ -503,7 +503,7 @@ class LabStatsView(_StatsView):
 
 
 class PlatformLabStatsView(_StatsView):
-    permission_classes = [IsSuperAdmin]
+    permission_classes = [IsPlatformAdmin]
     platform = True
     stats_fn = staticmethod(lab_stats)
 
@@ -513,7 +513,7 @@ class ImmunizationStatsView(_StatsView):
 
 
 class PlatformImmunizationStatsView(_StatsView):
-    permission_classes = [IsSuperAdmin]
+    permission_classes = [IsPlatformAdmin]
     platform = True
     stats_fn = staticmethod(immunization_stats)
 
@@ -523,7 +523,7 @@ class VitalStatsView(_StatsView):
 
 
 class PlatformVitalStatsView(_StatsView):
-    permission_classes = [IsSuperAdmin]
+    permission_classes = [IsPlatformAdmin]
     platform = True
     stats_fn = staticmethod(vital_stats)
 
@@ -533,7 +533,7 @@ class StockStatsView(_StatsView):
 
 
 class PlatformStockStatsView(_StatsView):
-    permission_classes = [IsSuperAdmin]
+    permission_classes = [IsPlatformAdmin]
     platform = True
     stats_fn = staticmethod(stock_stats)
 
@@ -543,7 +543,7 @@ class ChwStatsView(_StatsView):
 
 
 class PlatformChwStatsView(_StatsView):
-    permission_classes = [IsSuperAdmin]
+    permission_classes = [IsPlatformAdmin]
     platform = True
     stats_fn = staticmethod(chw_stats)
 
@@ -553,7 +553,7 @@ class FacilityStatsView(_StatsView):
 
 
 class PlatformFacilityStatsView(_StatsView):
-    permission_classes = [IsSuperAdmin]
+    permission_classes = [IsPlatformAdmin]
     platform = True
     stats_fn = staticmethod(facility_stats)
 
@@ -563,7 +563,7 @@ class InsuranceStatsView(_StatsView):
 
 
 class PlatformInsuranceStatsView(_StatsView):
-    permission_classes = [IsSuperAdmin]
+    permission_classes = [IsPlatformAdmin]
     platform = True
     stats_fn = staticmethod(insurance_stats)
 
@@ -573,7 +573,7 @@ class PrescriptionStatsView(_StatsView):
 
 
 class PlatformPrescriptionStatsView(_StatsView):
-    permission_classes = [IsSuperAdmin]
+    permission_classes = [IsPlatformAdmin]
     platform = True
     stats_fn = staticmethod(prescription_stats)
 
@@ -583,7 +583,7 @@ class AppointmentStatsView(_StatsView):
 
 
 class PlatformAppointmentStatsView(_StatsView):
-    permission_classes = [IsSuperAdmin]
+    permission_classes = [IsPlatformAdmin]
     platform = True
     stats_fn = staticmethod(appointment_stats)
 
@@ -593,7 +593,7 @@ class ConsultationStatsView(_StatsView):
 
 
 class PlatformConsultationStatsView(_StatsView):
-    permission_classes = [IsSuperAdmin]
+    permission_classes = [IsPlatformAdmin]
     platform = True
     stats_fn = staticmethod(consultation_stats)
 
@@ -610,7 +610,7 @@ class TenantCaseReportStatsView(APIView):
 class PlatformCaseReportStatsView(APIView):
     """Central collation of all tenants' case reports for analysis (super-admin)."""
 
-    permission_classes = [IsSuperAdmin]
+    permission_classes = [IsPlatformAdmin]
 
     def get(self, request):
         return Response(platform_case_report_stats(*_range(request)))
@@ -624,7 +624,7 @@ class AdrStatsView(APIView):
 
 
 class PlatformAdrStatsView(APIView):
-    permission_classes = [IsSuperAdmin]
+    permission_classes = [IsPlatformAdmin]
 
     def get(self, request):
         return Response(adr_stats(*_range(request), platform=True))
@@ -642,7 +642,7 @@ class ReportSourcesView(APIView):
 class PlatformReportSourcesView(APIView):
     """Cross-tenant report sources (super-admin) — origins of all reports."""
 
-    permission_classes = [IsSuperAdmin]
+    permission_classes = [IsPlatformAdmin]
 
     def get(self, request):
         return Response(report_sources(*_range(request), platform=True))
@@ -691,7 +691,7 @@ class PlatformIdsrReportView(APIView):
     """Central (NCDC) IDSR collation across all tenants, rolled up the gov
     hierarchy to national (super-admin)."""
 
-    permission_classes = [IsSuperAdmin]
+    permission_classes = [IsPlatformAdmin]
 
     def get(self, request):
         weeks = _weeks(request)

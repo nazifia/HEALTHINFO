@@ -46,6 +46,21 @@ class IsSuperAdmin(BasePermission):
         return request.user.is_authenticated and request.user.is_super_admin
 
 
+class IsPlatformAdmin(IsSuperAdmin):
+    """Super admin working platform-wide — refused while inside one tenant.
+
+    A super admin who opens a clinic or a pharmacy (the request carries that
+    tenant) is working as that organization, so the cross-tenant rollups stay
+    shut until they leave it: what they read on screen is that tenant's data
+    and nothing else. Leaving the organization drops the tenant from the
+    request and the platform views answer again.
+    """
+
+    def has_permission(self, request, view):
+        return (super().has_permission(request, view)
+                and getattr(request, "tenant", None) is None)
+
+
 class ReadOnlyOrWriteRole(BasePermission):
     """Anyone in the tenant reads; only WRITE_ROLES mutate.
 

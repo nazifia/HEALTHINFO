@@ -252,6 +252,12 @@ let ME = null; // current user object
 
 // Collapsed nav groups persist across reloads; <details> does the open/close itself.
 const NAV_CLOSED = new Set(JSON.parse(localStorage.getItem('navClosed') || '[]'));
+/* True when a super-admin is working platform-wide — signed in as one and
+   outside every organization. Opening a clinic or a pharmacy (a tenant slug on
+   every call) makes them that organization: the cross-tenant views disappear
+   until they leave it, and the API refuses them meanwhile. */
+const isPlatformScope = () => ME?.role === 'super_admin' && !Api.tenant;
+
 const navGroup = (name, links) =>
   `<details class="nav-group"${NAV_CLOSED.has(name) ? '' : ' open'} data-group="${name}">` +
   `<summary>${esc(name)}</summary>${links}</details>`;
@@ -291,7 +297,7 @@ function navHtml() {
     + (groups.Clinical || []).join('');
   if (clinical) html += navGroup('Clinical', clinical);
   let analytics = `<a href="#/analytics" data-route="/analytics">${ico('chart')}Tenant Analytics</a>`;
-  if (ME?.role === 'super_admin') analytics += `<a href="#/platform" data-route="/platform">${ico('chart')}Platform Analytics</a>`;
+  if (isPlatformScope()) analytics += `<a href="#/platform" data-route="/platform">${ico('chart')}Platform Analytics</a>`;
   html += navGroup('Analytics', analytics);
   if (groups.Admin?.length) html += navGroup('Admin', groups.Admin.join(''));
   return html;
@@ -769,7 +775,9 @@ async function viewHome() {
     ['#/analytics', 'chart', 'Analytics', 'Tenant dashboards and stats'],
   ];
   if (Api.roleCanReport(ME.role)) tiles.splice(4, 0, ['#/r/patients', 'users', 'Patients', 'Register and open patient records']);
-  if (ME.role === 'super_admin') tiles.push(['#/platform', 'chart', 'Platform', 'Cross-tenant analytics'], ['#/r/tenants-hospitals', 'shield', 'Hospitals', 'Approve and manage hospitals'], ['#/r/tenants-pharmacies', 'shield', 'Pharmacies', 'Approve and manage pharmacies']);
+  if (isPlatformScope()) tiles.push(['#/platform', 'chart', 'Platform', 'Cross-tenant analytics']);
+  // The organization lists stay inside an organization: they are the way out of it.
+  if (ME.role === 'super_admin') tiles.push(['#/r/tenants-hospitals', 'shield', 'Hospitals', 'Approve and manage hospitals'], ['#/r/tenants-pharmacies', 'shield', 'Pharmacies', 'Approve and manage pharmacies']);
   const [health, dash] = await Promise.all([
     Api.public('/api/health/').then((h) => `API: ${h.status} · DB: ${h.db}`, () => 'API unreachable'),
     Api.get('/api/analytics/tenant/').catch(() => null),
@@ -2002,7 +2010,7 @@ const routes = [
 
 /* Where a role starts work: the platform owner on cross-tenant analytics, the
    counter on the counter, everyone else on the tenant dashboard. */
-const homeHash = (role) => role === 'super_admin' ? '#/platform'
+const homeHash = (role) => role === 'super_admin' && !Api.tenant ? '#/platform'
   : role === 'pharmacist' ? '#/pharmacy'
   : CLINICAL_ROLES.has(role) ? '#/clinical' : '#/';
 

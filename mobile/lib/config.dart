@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show ValueNotifier, kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
 
 // Backend connection settings.
@@ -46,12 +46,17 @@ Future<void> loadTenant() async {
   tenantName = p.getString(_kTenantName) ?? '';
 }
 
+/// Bumped whenever the organization changes. The nav listens: a super-admin
+/// who opens or leaves an organization gets the menu for where they now are.
+final ValueNotifier<int> tenantChanged = ValueNotifier<int>(0);
+
 Future<void> setTenant(String slug, {String name = ''}) async {
   tenantSlug = slug.trim();
   tenantName = name.trim();
   final p = await SharedPreferences.getInstance();
   await p.setString(_kTenant, tenantSlug);
   await p.setString(_kTenantName, tenantName);
+  tenantChanged.value++;
 }
 
 // Auto-logout after this much user inactivity (no taps/scrolls). Health data —
