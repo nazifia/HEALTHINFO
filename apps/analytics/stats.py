@@ -138,6 +138,7 @@ def tenant_stats(start=None, end=None):
         "popular_medications": _popular(events, "medication"),
         "ai_feedback": _ai_feedback(ai),
         "search_trend": _series(events.filter(event_type="search"), days=30),
+        **_prescribing_rollup(start, end),
     }
 
 
@@ -277,6 +278,38 @@ def _diagnosis_pairs(rx, limit=20):
          "dispensed": r["dispensed"]}
         for r in rows
     ]
+
+
+def _prescribing_rollup(start=None, end=None, platform=False):
+    """The clinical half of a dashboard: diagnoses, and the drugs written for them.
+
+    The dashboards otherwise report searching and AI answers, which say nothing
+    about what was treated. These two rows do, and both carry the dispensed
+    count next to the written one, because an order written is not an order
+    handed over.
+    """
+    rx = apply_range(_manager(Prescription, platform).all(), start, end)
+    rows = (
+        rx.values("case_report__disease__name")
+        .annotate(
+            count=Count("id"),
+            dispensed=Count("id", filter=Q(status__in=_RX_FILLED)),
+        )
+        .order_by("-count")[:10]
+    )
+    return {
+        # Orders with no case linked stay under "—" here for the same reason as
+        # in the pairs: a drug with no recorded reason is a gap worth seeing.
+        "top_diagnoses": [
+            {"diagnosis": r["case_report__disease__name"] or "—",
+             "count": r["count"], "dispensed": r["dispensed"]}
+            for r in rows
+        ],
+        # More pairs than a dashboard panel draws: tapping a diagnosis
+        # filters this list client-side, and a top-10 cut would leave the
+        # quieter diagnoses with nothing behind their bar.
+        "by_diagnosis_medication": _diagnosis_pairs(rx, limit=30),
+    }
 
 
 def _case_breakdown(reports):
@@ -489,6 +522,7 @@ def platform_stats(start=None, end=None):
         "ai_feedback": _ai_feedback(apply_range(AiInteraction.all_objects.all(), start, end)),
         "search_trend": _series(events.filter(event_type="search"), days=90, bucket="week"),
         "adverse_reactions": adr_stats(platform=True),
+        **_prescribing_rollup(start, end, platform=True),
     }
 
 

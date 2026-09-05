@@ -7,6 +7,7 @@ import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/bar_chart.dart';
 import '../shared/widgets/skeleton_cards.dart';
 import '../shared/widgets/stats_kit.dart';
+import '../shared/stats_rows.dart';
 
 /// Tenant analytics dashboard — GET /api/analytics/tenant/.
 /// Read-only summary cards + ranked lists.
@@ -20,6 +21,9 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   late Future<Map<String, dynamic>> _future;
   DateTimeRange? _range;
+
+  /// Diagnosis the prescribing panel is drilled into, or null for all of them.
+  String? _diagnosis;
 
   @override
   void initState() {
@@ -88,6 +92,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           final satPct = satTotal == 0 ? null : (up / satTotal * 100).round();
           final searchTotal =
               trend.fold<num>(0, (a, r) => a + ((r['count'] as num?) ?? 0));
+          final diagnoses = (d['top_diagnoses'] as List?) ?? [];
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             children: [
@@ -199,6 +204,38 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 titleKey: 'name',
                 countKey: 'views',
               ),
+              // The clinical half of the dashboard: what was treated, and what
+              // was written for it. Each label carries its dispensed count,
+              // because a bar counts orders written, not orders handed over.
+              _RankList(
+                heading: 'Top diagnoses (prescribing)',
+                color: EnhancedTheme.accentCyan,
+                rows: diagnosisRows(diagnoses),
+                titleKey: 'diagnosis',
+                countKey: 'count',
+                // Tap a bar to drill the panel below into that diagnosis;
+                // tapping the same bar again goes back to all of them.
+                onTap: (i) => setState(() {
+                  final name = '${(diagnoses[i] as Map)['diagnosis']}';
+                  _diagnosis = _diagnosis == name ? null : name;
+                }),
+              ),
+              _RankList(
+                heading: _diagnosis == null
+                    ? 'Prescribed for each diagnosis'
+                    : 'Prescribed for $_diagnosis',
+                color: EnhancedTheme.successGreen,
+                rows: diagnosisPairRows(
+                    pairsFor(d['by_diagnosis_medication'], _diagnosis)),
+                titleKey: 'pair',
+                countKey: 'count',
+                trailing: _diagnosis == null
+                    ? null
+                    : TextButton(
+                        onPressed: () => setState(() => _diagnosis = null),
+                        child: const Text('Show all'),
+                      ),
+              ),
               _RankList(
                 heading: 'Content gaps (no results)',
                 color: EnhancedTheme.errorRed,
@@ -265,12 +302,16 @@ class _RankList extends StatelessWidget {
   final List<dynamic> rows;
   final String titleKey;
   final String countKey;
+  final void Function(int index)? onTap;
+  final Widget? trailing;
   const _RankList({
     required this.heading,
     required this.color,
     required this.rows,
     required this.titleKey,
     required this.countKey,
+    this.onTap,
+    this.trailing,
   });
 
   @override
@@ -278,7 +319,9 @@ class _RankList extends StatelessWidget {
     return PanelCard(
       title: heading,
       accent: color,
+      trailing: trailing,
       child: MiniBarChart(
+        onTap: onTap,
         rows: [
           for (final row in rows.cast<Map<String, dynamic>>())
             (

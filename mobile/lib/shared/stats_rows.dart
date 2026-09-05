@@ -34,3 +34,28 @@ List<Map<String, dynamic>> prescribedRows(dynamic rows) => [
           'count': r['count'],
         }
     ];
+
+/// The same treatment for a diagnosis breakdown ("top diagnoses"), which
+/// carries a diagnosis name and the prescribing written against it.
+List<Map<String, dynamic>> diagnosisRows(dynamic rows) => [
+      for (final r in (rows as List?) ?? [])
+        {
+          'diagnosis':
+              withFilled('${r['diagnosis']}', r['count'], r['dispensed']),
+          'count': r['count'],
+        }
+    ];
+
+/// The pair rows behind one diagnosis — the drilldown for a tapped bar.
+///
+/// With nothing selected the list is capped, because the panel is a chart and
+/// thirty bars is not readable. A selection shows every pair it has, which is
+/// why the API sends more pairs than the panel draws.
+List<dynamic> pairsFor(dynamic pairs, String? diagnosis, {int limit = 10}) {
+  final all = (pairs as List?) ?? [];
+  if (diagnosis == null) return all.take(limit).toList();
+  return [
+    for (final p in all)
+      if ('${p['diagnosis']}' == diagnosis) p
+  ];
+}

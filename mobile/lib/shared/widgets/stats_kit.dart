@@ -564,7 +564,10 @@ class Sparkline extends StatelessWidget {
 /// fill of the largest value, with the value printed at the end.
 class ComparisonBars extends StatelessWidget {
   final List<({String label, num value, Color color})> rows;
-  const ComparisonBars({super.key, required this.rows});
+
+  /// Gets the tapped row's index — for a panel that drills into the row.
+  final void Function(int index)? onTap;
+  const ComparisonBars({super.key, required this.rows, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -579,51 +582,58 @@ class ComparisonBars extends StatelessWidget {
         : Colors.black.withValues(alpha: 0.05);
     return Column(
       children: [
-        for (final r in rows)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        for (var i = 0; i < rows.length; i++)
+          _row(context, rows[i], denom, track, i),
+      ],
+    );
+  }
+
+  Widget _row(BuildContext context, ({String label, num value, Color color}) r,
+      double denom, Color track, int index) {
+    final bar = Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(r.label,
+                  style: TextStyle(
+                      color: context.subLabelColor, fontSize: 12)),
+              Text('${r.value}',
+                  style: TextStyle(
+                      color: r.color,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: Stack(
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(r.label,
-                        style: TextStyle(
-                            color: context.subLabelColor, fontSize: 12)),
-                    Text('${r.value}',
-                        style: TextStyle(
-                            color: r.color,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800)),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: Stack(
-                    children: [
-                      Container(height: 8, color: track),
-                      FractionallySizedBox(
-                        widthFactor: (r.value / denom).clamp(0.0, 1.0),
-                        child: Container(
-                          height: 8,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(colors: [
-                              r.color.withValues(alpha: 0.6),
-                              r.color,
-                            ]),
-                          ),
-                        ),
-                      ),
-                    ],
+                Container(height: 8, color: track),
+                FractionallySizedBox(
+                  widthFactor: (r.value / denom).clamp(0.0, 1.0),
+                  child: Container(
+                    height: 8,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(colors: [
+                        r.color.withValues(alpha: 0.6),
+                        r.color,
+                      ]),
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-      ],
+        ],
+      ),
     );
+    if (onTap == null) return bar;
+    return InkWell(onTap: () => onTap!(index), child: bar);
   }
 }
 

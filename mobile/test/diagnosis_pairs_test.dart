@@ -41,6 +41,37 @@ void main() {
     );
   });
 
+  test('a diagnosis row carries the filled count too', () {
+    expect(
+      diagnosisRows([
+        {'diagnosis': 'Malaria', 'count': 3, 'dispensed': 2}
+      ]),
+      [
+        {'diagnosis': 'Malaria (2 of 3 filled)', 'count': 3}
+      ],
+    );
+    expect(diagnosisRows(null), isEmpty);
+  });
+
+  test('a drilldown keeps only the pairs for the tapped diagnosis', () {
+    final pairs = [
+      {'diagnosis': 'Malaria', 'medication': 'Artemether', 'count': 2},
+      {'diagnosis': 'Cholera', 'medication': 'ORS', 'count': 1},
+    ];
+    expect(pairsFor(pairs, 'Malaria'), [pairs.first]);
+    expect(pairsFor(pairs, 'Typhoid'), isEmpty);
+  });
+
+  test('no selection caps the pairs the panel draws', () {
+    final pairs = [
+      for (var i = 0; i < 30; i++)
+        {'diagnosis': 'D$i', 'medication': 'M$i', 'count': 1}
+    ];
+    expect(pairsFor(pairs, null).length, 10);
+    expect(pairsFor(pairs, null, limit: 3).length, 3);
+    expect(pairsFor(null, null), isEmpty);
+  });
+
   test('a row from an older API with no dispensed field keeps a bare label', () {
     expect(
       prescribedRows([
