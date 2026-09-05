@@ -31,6 +31,12 @@ class Disease(SharedCatalogModel):
     # Notifiable = legally reportable to public-health authorities. Drives the
     # mandatory-report endpoint and raises surveillance priority.
     notifiable = models.BooleanField(default=False)
+    # IDSR splits the notifiable list by how fast the report must leave the
+    # facility. Most diseases ride the weekly epi-week summary; the epidemic-prone
+    # ones (cholera, measles, meningitis, COVID-19) must be notified within 24
+    # hours of suspicion, one case at a time. True marks that second class, so
+    # `notify_immediately` only ever means anything on a `notifiable` disease.
+    notify_immediately = models.BooleanField(default=False)
     description = models.TextField(blank=True)
     causes = models.TextField(blank=True)
     risk_factors = models.TextField(blank=True)

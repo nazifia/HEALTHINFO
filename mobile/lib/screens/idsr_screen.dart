@@ -13,8 +13,10 @@ import 'report_scaffold.dart';
 ///
 /// Super-admins get the central NCDC collation (/api/analytics/platform/idsr/);
 /// everyone else their own facility's return. Response: {"weeks": N,
-/// "summary": [{epi_week, disease, icd10_code, notifiable, cases, deaths,
-/// case_fatality_rate}, ...]} newest week first.
+/// "summary": [{epi_week, disease, icd10_code, notifiable, notify_immediately,
+/// cases, deaths, case_fatality_rate}, ...]} newest week first, plus
+/// "immediate": the single cases of an epidemic-prone disease whose 24-hour
+/// notification clock is running, oldest first.
 ///
 /// Rows are grouped by epi-week here only for reading — the server already
 /// ordered them, so grouping never reorders, it just inserts the headings.
@@ -36,6 +38,11 @@ class _IdsrScreenState extends State<IdsrScreen> {
 
   static const _windows = {4: '4 weeks', 8: '8 weeks', 13: '1 quarter', 26: '6 months'};
 
+  // The 24-hour worklist that came back with the same call. Held apart from
+  // the weekly rows because it is a different report: one card per case, not
+  // per epi-week.
+  List<Map<String, dynamic>> _immediate = const [];
+
   Future<List<Map<String, dynamic>>> _load() async {
     final q = {'weeks': '$_weeks'};
     Map data;
@@ -47,6 +54,7 @@ class _IdsrScreenState extends State<IdsrScreen> {
       data = await api.get('/api/analytics/idsr/', q) as Map;
       _path = '/api/analytics/idsr/';
     }
+    _immediate = ((data['immediate'] as List?) ?? []).cast<Map<String, dynamic>>();
     return ((data['summary'] as List?) ?? []).cast<Map<String, dynamic>>();
   }
 
@@ -127,8 +135,30 @@ class _IdsrScreenState extends State<IdsrScreen> {
                     label: 'Notifiable rows',
                     value: '$notifiable',
                     color: EnhancedTheme.accentOrange),
+                KpiTile(
+                    icon: Icons.alarm_outlined,
+                    label: 'Notify in 24h',
+                    value: '${_immediate.length}',
+                    color: EnhancedTheme.errorRed),
               ]),
               const SizedBox(height: 12),
+              if (_immediate.isNotEmpty) ...[
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text('Immediate notification (24h)',
+                      style: GoogleFonts.outfit(
+                        color: context.hintColor,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      )),
+                ),
+                for (final c in _immediate)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _ImmediateRow(row: c),
+                  ),
+                const SizedBox(height: 14),
+              ],
               if (rows.isEmpty)
                 const EmptyState(
                   icon: Icons.assignment_turned_in_outlined,
@@ -180,7 +210,9 @@ class _IdsrRow extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                     fontSize: 15)),
           ),
-          if (row['notifiable'] == true)
+          if (row['notify_immediately'] == true)
+            const ReportBadge(text: '24h', color: EnhancedTheme.errorRed)
+          else if (row['notifiable'] == true)
             const ReportBadge(
                 text: 'notifiable', color: EnhancedTheme.accentOrange),
         ]),
@@ -188,6 +220,54 @@ class _IdsrRow extends StatelessWidget {
         Text(
             '${row['cases'] ?? 0} case(s) · ${row['deaths'] ?? 0} death(s)'
             ' · CFR ${pctOf(cfr)}${code.isEmpty ? '' : ' · $code'}',
+            style: TextStyle(color: context.hintColor, fontSize: 13)),
+      ]),
+    );
+  }
+}
+
+
+/// One case awaiting immediate notification. Shows the facility and LGA because
+/// a super-admin reads this list across every tenant, and the hours elapsed
+/// because that is what says how late the notification already is.
+class _ImmediateRow extends StatelessWidget {
+  final Map<String, dynamic> row;
+  const _ImmediateRow({required this.row});
+
+  @override
+  Widget build(BuildContext context) {
+    final overdue = row['overdue'] == true;
+    final hours = (row['hours_elapsed'] as num?)?.toStringAsFixed(0) ?? '?';
+    final where = [row['facility'], row['jurisdiction']]
+        .map((v) => '${v ?? ''}'.trim())
+        .where((v) => v.isNotEmpty)
+        .join(' · ');
+    return GlassCard(
+      borderRadius: 16,
+      padding: const EdgeInsets.all(14),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(
+            child: Text('${row['disease'] ?? '—'} · case #${row['id']}',
+                style: TextStyle(
+                    color: context.labelColor,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15)),
+          ),
+          ReportBadge(
+            text: overdue ? 'overdue ${hours}h' : '${hours}h ago',
+            color: overdue
+                ? EnhancedTheme.errorRed
+                : EnhancedTheme.accentOrange,
+          ),
+        ]),
+        const SizedBox(height: 4),
+        Text(
+            [
+              if (where.isNotEmpty) where,
+              '${row['severity'] ?? ''}',
+              '${row['outcome'] ?? ''}',
+            ].where((v) => v.trim().isNotEmpty).join(' · '),
             style: TextStyle(color: context.hintColor, fontSize: 13)),
       ]),
     );
