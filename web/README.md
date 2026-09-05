@@ -79,4 +79,4 @@ prescription share a `group`, so the list shows one row per prescription — eac
 drug with its own directions, and a Cancel button on the row — a detail page
 lists what was prescribed with the drug on screen, and cancelling stops every
 drug on the prescription, bar anything already dispensed. `node prescription.test.js` self-checks the payload the form
-builds; `node picker.test.js` the patient type-ahead.
+builds; `node picker.test.js` the patient type-ahead; `node columns.test.js` the table/detail column picker.
