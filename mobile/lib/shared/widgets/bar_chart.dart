@@ -6,11 +6,16 @@ import '../../core/theme/enhanced_theme.dart';
 /// One bar per row; full label + value shown in the tooltip since x-axis
 /// labels are truncated to fit. Each bar cycles through [palette] so rows
 /// are visually distinct.
+///
+/// [onTap] gets the tapped row's index — for a panel that drills into the bar.
+/// The tooltip still shows either way.
 class MiniBarChart extends StatelessWidget {
   final List<({String label, num value})> rows;
+  final void Function(int index)? onTap;
   const MiniBarChart({
     super.key,
     required this.rows,
+    this.onTap,
   });
 
   static const List<Color> palette = [
@@ -56,6 +61,16 @@ class MiniBarChart extends StatelessWidget {
           ),
           borderData: FlBorderData(show: false),
           barTouchData: BarTouchData(
+            // Fire on release only, and only when a bar was actually hit:
+            // drags and misses would otherwise change the selection.
+            touchCallback: onTap == null
+                ? null
+                : (event, response) {
+                    final spot = response?.spot;
+                    if (event is FlTapUpEvent && spot != null) {
+                      onTap!(spot.touchedBarGroupIndex);
+                    }
+                  },
             touchTooltipData: BarTouchTooltipData(
               getTooltipColor: (_) => EnhancedTheme.primaryDark,
               getTooltipItem: (group, _, rod, _) => BarTooltipItem(

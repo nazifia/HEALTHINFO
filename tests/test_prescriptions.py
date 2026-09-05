@@ -94,7 +94,11 @@ def test_stats_rollup_and_endpoint(db_clean):
 
 
 def test_stats_collate_diagnosis_with_prescribed_drugs(db_clean):
-    from apps.analytics.stats import case_report_stats, prescription_stats
+    from apps.analytics.stats import (
+        case_report_stats,
+        prescription_stats,
+        tenant_stats,
+    )
     from apps.tenants.current import set_current_tenant
 
     a = Tenant.objects.create(name="A", slug="a")
@@ -127,6 +131,13 @@ def test_stats_collate_diagnosis_with_prescribed_drugs(db_clean):
     assert case_report_stats()["top_prescribed"][0] == {
         "medication": "Artemether", "count": 2, "dispensed": 1
     }
+
+    # The dashboard carries the same two rows, so the summary screen says what
+    # was treated and not only what was searched for.
+    dash = tenant_stats()
+    assert {"diagnosis": "Malaria", "count": 3, "dispensed": 2} in         dash["top_diagnoses"]
+    assert {"diagnosis": "—", "count": 1, "dispensed": 0} in dash["top_diagnoses"]
+    assert dash["by_diagnosis_medication"] == pairs
 
 
 def test_pharmacy_tenant_sees_only_patient_linked_orders(db_clean):

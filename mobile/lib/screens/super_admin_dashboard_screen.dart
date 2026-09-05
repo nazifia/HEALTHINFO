@@ -6,10 +6,12 @@ import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/skeleton_cards.dart';
 import '../shared/widgets/stats_kit.dart';
+import '../shared/stats_rows.dart';
 
 /// Platform-wide super-admin dashboard — GET /api/analytics/platform/.
 /// Cross-tenant rollup: tenant/user counts, search volume, per-tenant breakdown,
-/// AI satisfaction, ADR collation. Read-only. Gated to super_admin in the nav.
+/// AI satisfaction, ADR collation, prescribing by diagnosis. Read-only.
+/// Gated to super_admin in the nav.
 class SuperAdminDashboardScreen extends StatefulWidget {
   const SuperAdminDashboardScreen({super.key});
 
@@ -21,6 +23,9 @@ class SuperAdminDashboardScreen extends StatefulWidget {
 class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   late Future<Map<String, dynamic>> _future;
   DateTimeRange? _range;
+
+  /// Diagnosis the prescribing panel is drilled into, or null for all of them.
+  String? _diagnosis;
 
   @override
   void initState() {
@@ -92,6 +97,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
           final adr = (d['adverse_reactions'] as Map?)?.cast<String, dynamic>() ?? const {};
           final searchTotal =
               trend.fold<num>(0, (a, r) => a + ((r['count'] as num?) ?? 0));
+          final diagnoses = (d['top_diagnoses'] as List?) ?? [];
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             children: [
@@ -209,6 +215,52 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                         label: '${r['tenant__name'] ?? '—'}',
                         value: (r['count'] as num?) ?? 0,
                         color: EnhancedTheme.errorRed,
+                      ),
+                  ],
+                ),
+              ),
+              // What was treated across the platform, and what was written for
+              // it. Each label carries its dispensed count, because a bar
+              // counts orders written, not orders handed over.
+              PanelCard(
+                title: 'Top Diagnoses (prescribing)',
+                accent: EnhancedTheme.accentCyan,
+                child: ComparisonBars(
+                  // Tap a row to drill the panel below into that diagnosis;
+                  // tapping the same row again goes back to all of them.
+                  onTap: (i) => setState(() {
+                    final name = '${(diagnoses[i] as Map)['diagnosis']}';
+                    _diagnosis = _diagnosis == name ? null : name;
+                  }),
+                  rows: [
+                    for (final r in diagnosisRows(diagnoses))
+                      (
+                        label: '${r['diagnosis']}',
+                        value: (r['count'] as num?) ?? 0,
+                        color: EnhancedTheme.accentCyan,
+                      ),
+                  ],
+                ),
+              ),
+              PanelCard(
+                title: _diagnosis == null
+                    ? 'Prescribed for Each Diagnosis'
+                    : 'Prescribed for $_diagnosis',
+                accent: EnhancedTheme.successGreen,
+                trailing: _diagnosis == null
+                    ? null
+                    : TextButton(
+                        onPressed: () => setState(() => _diagnosis = null),
+                        child: const Text('Show all'),
+                      ),
+                child: ComparisonBars(
+                  rows: [
+                    for (final r in diagnosisPairRows(
+                        pairsFor(d['by_diagnosis_medication'], _diagnosis)))
+                      (
+                        label: '${r['pair']}',
+                        value: (r['count'] as num?) ?? 0,
+                        color: EnhancedTheme.successGreen,
                       ),
                   ],
                 ),
