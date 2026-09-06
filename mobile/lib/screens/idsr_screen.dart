@@ -9,17 +9,17 @@ import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/stats_kit.dart';
 import 'report_scaffold.dart';
 
-/// IDSR weekly epidemiological summary — GET /api/analytics/idsr/.
+/// IDSR daily epidemiological summary — GET /api/analytics/idsr/.
 ///
 /// Super-admins get the central NCDC collation (/api/analytics/platform/idsr/);
-/// everyone else their own facility's return. Response: {"weeks": N,
-/// "summary": [{epi_week, disease, icd10_code, notifiable, notify_immediately,
-/// cases, deaths, case_fatality_rate}, ...]} newest week first, plus
+/// everyone else their own facility's return. Response: {"days": N,
+/// "summary": [{date, disease, icd10_code, notifiable, notify_immediately,
+/// cases, deaths, case_fatality_rate}, ...]} newest day first, plus
 /// "immediate": the single cases of an epidemic-prone disease whose 24-hour
 /// notification clock is running, oldest first. Sending one
 /// (POST /api/case-reports/{id}/notify/) takes it off that list.
 ///
-/// Rows are grouped by epi-week here only for reading — the server already
+/// Rows are grouped by day here only for reading — the server already
 /// ordered them, so grouping never reorders, it just inserts the headings.
 /// The CSV the public-health authority expects is the same ?format=csv the web
 /// client downloads — here it goes out through the platform share sheet.
@@ -31,21 +31,21 @@ class IdsrScreen extends StatefulWidget {
 }
 
 class _IdsrScreenState extends State<IdsrScreen> {
-  int _weeks = 8;
+  int _days = 30;
   // Which endpoint answered, so the CSV export pulls the same scope as the
   // rows on screen rather than guessing at the reader's role a second time.
   String _path = '/api/analytics/idsr/';
   late Future<List<Map<String, dynamic>>> _future = _load();
 
-  static const _windows = {4: '4 weeks', 8: '8 weeks', 13: '1 quarter', 26: '6 months'};
+  static const _windows = {7: '7 days', 30: '30 days', 90: '90 days', 180: '6 months'};
 
   // The 24-hour worklist that came back with the same call. Held apart from
-  // the weekly rows because it is a different report: one card per case, not
-  // per epi-week.
+  // the daily rows because it is a different report: one card per case, not
+  // per day.
   List<Map<String, dynamic>> _immediate = const [];
 
   Future<List<Map<String, dynamic>>> _load() async {
-    final q = {'weeks': '$_weeks'};
+    final q = {'days': '$_days'};
     Map data;
     // Platform view is super-admin only; a 403 scopes down to this tenant.
     try {
@@ -107,12 +107,12 @@ class _IdsrScreenState extends State<IdsrScreen> {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             children: [
               DashTitleBar(
-                title: 'IDSR weekly summary',
-                subtitle: 'Cases, deaths and case-fatality by epi-week',
+                title: 'IDSR daily summary',
+                subtitle: 'Cases, deaths and case-fatality by day',
                 trailing: CsvExportButton(
                   path: _path,
-                  filename: 'idsr_${_weeks}w.csv',
-                  query: {'weeks': '$_weeks'},
+                  filename: 'idsr_${_days}d.csv',
+                  query: {'days': '$_days'},
                 ),
               ),
               const SizedBox(height: 8),
@@ -122,9 +122,9 @@ class _IdsrScreenState extends State<IdsrScreen> {
                   for (final w in _windows.entries) ...[
                     ChoiceChip(
                       label: Text(w.value),
-                      selected: _weeks == w.key,
+                      selected: _days == w.key,
                       onSelected: (_) {
-                        setState(() => _weeks = w.key);
+                        setState(() => _days = w.key);
                         _reload();
                       },
                     ),
@@ -189,10 +189,10 @@ class _IdsrScreenState extends State<IdsrScreen> {
                   color: EnhancedTheme.successGreen,
                 ),
               for (var i = 0; i < rows.length; i++) ...[
-                if (i == 0 || rows[i]['epi_week'] != rows[i - 1]['epi_week'])
+                if (i == 0 || rows[i]['date'] != rows[i - 1]['date'])
                   Padding(
                     padding: EdgeInsets.only(top: i == 0 ? 0 : 14, bottom: 6),
-                    child: Text('${rows[i]['epi_week']}',
+                    child: Text('${rows[i]['date']}',
                         style: GoogleFonts.outfit(
                           color: context.hintColor,
                           fontWeight: FontWeight.w700,

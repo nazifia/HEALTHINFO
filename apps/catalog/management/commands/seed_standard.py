@@ -70,7 +70,7 @@ MEDS = [
 ]
 
 # Slugs of the notifiable diseases IDSR wants within 24 hours of suspicion,
-# case by case, rather than in the weekly epi-week summary. Kept beside the
+# case by case, rather than in the daily summary. Kept beside the
 # table instead of a tenth tuple field: four rows out of thirty carry it.
 IMMEDIATE_SLUGS = {"cholera", "measles", "bacterial-meningitis", "covid-19"}
 

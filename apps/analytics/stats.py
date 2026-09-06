@@ -15,7 +15,7 @@ from django.db.models import (
     Q,
     Sum,
 )
-from django.db.models.functions import TruncDay, TruncWeek
+from django.db.models.functions import TruncDay
 from django.utils import timezone
 
 from apps.accounts.models import User
@@ -49,18 +49,17 @@ _OBJECT_MODELS = {"disease": Disease, "medication": Medication}
 _RX_FILLED = (Prescription.Status.DISPENSED, Prescription.Status.PARTIAL)
 
 
-def _series(qs, days=30, bucket="day"):
-    """Time-series counts per day/week over the trailing window.
+def _series(qs, days=30):
+    """Time-series counts per day over the trailing window.
 
     Returns [{"period": iso-date, "count": n}] ordered oldest→newest. Empty
     buckets are omitted (caller can densify if it needs a continuous axis).
-    ponytail: DB-side TruncDay/Week; gap-filling is a frontend concern.
+    ponytail: DB-side TruncDay; gap-filling is a frontend concern.
     """
     since = timezone.now() - timedelta(days=days)
-    trunc = TruncWeek if bucket == "week" else TruncDay
     rows = (
         qs.filter(created_at__gte=since)
-        .annotate(period=trunc("created_at"))
+        .annotate(period=TruncDay("created_at"))
         .values("period")
         .annotate(count=Count("id"))
         .order_by("period")
@@ -112,20 +111,12 @@ def tenant_stats(start=None, end=None):
     ai = apply_range(AiInteraction.objects.all(), start, end)
     since = timezone.now() - timedelta(days=30)
     return {
-        "total_searches": events.filter(event_type="search").count(),
         "content_gaps": _content_gaps(events),
         "active_users": events.filter(created_at__gte=since)
         .exclude(user=None)
         .values("user")
         .distinct()
         .count(),
-        "top_searches": list(
-            events.filter(event_type="search")
-            .exclude(query="")
-            .values("query")
-            .annotate(count=Count("id"))
-            .order_by("-count")[:10]
-        ),
         "popular_diseases": _popular(events, "disease"),
         "popular_medications": _popular(events, "medication"),
         "ai_feedback": _ai_feedback(ai),
@@ -176,13 +167,13 @@ def ai_quality_stats(start=None, end=None):
     }
 
 
-def retention_stats(weeks=8):
-    """Active distinct users per week — engagement curve (tenant-scoped)."""
+def retention_stats(days=30):
+    """Active distinct users per day — engagement curve (tenant-scoped)."""
     events = AnalyticsEvent.objects.exclude(user=None)
-    since = timezone.now() - timedelta(weeks=weeks)
+    since = timezone.now() - timedelta(days=days)
     rows = (
         events.filter(created_at__gte=since)
-        .annotate(period=TruncWeek("created_at"))
+        .annotate(period=TruncDay("created_at"))
         .values("period")
         .annotate(users=Count("user", distinct=True))
         .order_by("period")
@@ -324,7 +315,7 @@ def _case_breakdown(reports):
             .annotate(count=Count("id"))
             .order_by("-count")[:10]
         ),
-        "case_trend": _series(reports, days=90, bucket="week"),
+        "case_trend": _series(reports, days=90),
         # The other half of the same picture: what was prescribed against these
         # diagnoses, so a case rollup no longer stops at the diagnosis.
         "top_prescribed": _prescribed_for(reports),
@@ -505,7 +496,7 @@ def platform_stats(start=None, end=None):
             .order_by("-count")[:20]
         ),
         "ai_feedback": _ai_feedback(apply_range(AiInteraction.all_objects.all(), start, end)),
-        "search_trend": _series(events.filter(event_type="search"), days=90, bucket="week"),
+        "search_trend": _series(events.filter(event_type="search"), days=90),
         "adverse_reactions": adr_stats(platform=True),
         **_prescribing_rollup(start, end, platform=True),
     }
@@ -528,7 +519,7 @@ def adr_stats(start=None, end=None, platform=False):
         "top_reactions": list(
             reports.values("reaction").annotate(count=Count("id")).order_by("-count")[:10]
         ),
-        "trend": _series(reports, days=90, bucket="week"),
+        "trend": _series(reports, days=90),
     }
     if platform:
         out["by_tenant"] = _grouped(reports, "tenant__name")
@@ -586,7 +577,7 @@ def lab_stats(start=None, end=None, platform=False):
         "amr_by_antibiotic": amr_by("antibiotic"),
         "top_organisms": _grouped(reports.exclude(organism=""), "organism", 10),
         "by_region": _grouped(reports, "region"),
-        "trend": _series(reports, days=90, bucket="week"),
+        "trend": _series(reports, days=90),
     }
     if platform:
         out["by_tenant"] = _grouped(reports, "tenant__name", 20)
@@ -606,7 +597,7 @@ def chw_stats(start=None, end=None, platform=False):
         "referral_rate": round(referred / total, 4) if total else None,
         "by_type": _grouped(reports, "report_type"),
         "by_region_state": _fold_region_to_state(_grouped(reports, "region")),
-        "trend": _series(reports, days=90, bucket="week"),
+        "trend": _series(reports, days=90),
     }
     if platform:
         out["by_tenant"] = _grouped(reports, "tenant__name", 20)
@@ -631,7 +622,7 @@ def facility_stats(start=None, end=None, platform=False):
         "avg_wait_minutes": round(agg["avg_wait"], 1) if agg["avg_wait"] is not None else None,
         "avg_staff_on_duty": round(agg["avg_staff"], 1) if agg["avg_staff"] is not None else None,
         "patients_treated": agg["patients"] or 0,
-        "trend": _series(reports, days=90, bucket="week"),
+        "trend": _series(reports, days=90),
     }
     if platform:
         # Throughput per facility — who is busiest.
@@ -667,7 +658,7 @@ def insurance_stats(start=None, end=None, platform=False):
             .order_by("-count")[:10]
         ),
         "by_region_state": _fold_region_to_state(_grouped(claims, "region")),
-        "trend": _series(claims, days=90, bucket="week"),
+        "trend": _series(claims, days=90),
     }
     if platform:
         out["by_tenant"] = _grouped(claims, "tenant__name", 20)
@@ -688,7 +679,7 @@ def appointment_stats(start=None, end=None, platform=False):
         "no_show_rate": round(no_show / due, 4) if due else None,
         "by_mode": _grouped(appts, "mode"),
         "by_status": _grouped(appts, "status"),
-        "trend": _series(appts, days=90, bucket="week"),
+        "trend": _series(appts, days=90),
     }
     if platform:
         out["by_tenant"] = _grouped(appts, "tenant__name", 20)
@@ -750,7 +741,7 @@ def consultation_stats(start=None, end=None, platform=False):
         "by_sex": _grouped(rows, "patient_sex"),
         "top_complaints": _grouped(rows, "chief_complaint", 20),
         "by_region": _grouped(rows, "region"),
-        "trend": _series(rows, days=90, bucket="week"),
+        "trend": _series(rows, days=90),
     }
     if platform:
         out["by_tenant"] = _grouped(rows, "tenant__name", 20)
@@ -766,7 +757,7 @@ def immunization_stats(start=None, end=None, platform=False):
         "by_age_group": _grouped(reports, "patient_age_group"),
         "by_region": _grouped(reports, "region"),
         "by_region_state": _fold_region_to_state(_grouped(reports, "region")),
-        "trend": _series(reports, days=90, bucket="week"),
+        "trend": _series(reports, days=90),
     }
     if platform:
         out["by_tenant"] = _grouped(reports, "tenant__name", 20)
@@ -799,9 +790,9 @@ def vital_stats(start=None, end=None, platform=False):
         "deaths_by_cause": _grouped(deaths.exclude(cause=None), "cause__name", 10),
         "by_region": _fold_region_to_state(_grouped(events, "region")),
         "birth_trend": _series(
-            events.filter(event_type=VitalEvent.Kind.BIRTH), days=90, bucket="week"
+            events.filter(event_type=VitalEvent.Kind.BIRTH), days=90
         ),
-        "death_trend": _series(deaths, days=90, bucket="week"),
+        "death_trend": _series(deaths, days=90),
     }
     if platform:
         out["by_tenant"] = _grouped(events, "tenant__name", 20)
@@ -831,7 +822,7 @@ def stock_stats(start=None, end=None, platform=False):
             .order_by("-consumed")[:10]
         ),
         "by_region": _grouped(reports, "region"),
-        "trend": _series(reports, days=90, bucket="week"),
+        "trend": _series(reports, days=90),
     }
     if platform:
         out["by_tenant"] = _grouped(reports, "tenant__name", 20)
@@ -873,7 +864,7 @@ def prescription_stats(start=None, end=None, platform=False):
         "linked_rate": round(linked / total, 4) if total else None,
         "by_status": _grouped(rx, "status"),
         "by_region": _grouped(rx, "region"),
-        "trend": _series(rx, days=90, bucket="week"),
+        "trend": _series(rx, days=90),
     }
     if platform:
         out["by_tenant"] = _grouped(rx, "tenant__name", 20)

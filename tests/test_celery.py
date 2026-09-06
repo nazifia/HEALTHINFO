@@ -38,8 +38,7 @@ def test_tenant_dashboard_aggregations(tenant_a):
     record_event(tenant_a.id, uid, "view", object_type="disease", object_id=d.pk)
 
     stats = tenant_stats()
-    assert stats["total_searches"] == 3
-    assert stats["top_searches"][0] == {"query": "fever", "count": 2}
+    assert sum(r["count"] for r in stats["search_trend"]) == 3
     assert stats["popular_diseases"][0]["name"] == "Malaria"
     assert stats["popular_diseases"][0]["views"] == 1
 

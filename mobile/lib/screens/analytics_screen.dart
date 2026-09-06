@@ -8,7 +8,7 @@ import '../shared/widgets/skeleton_cards.dart';
 import '../shared/widgets/stats_kit.dart';
 
 /// Secondary analytics dashboards in one scroll: conversion funnel, AI answer
-/// quality, peer benchmark, weekly retention, and adverse-reaction signal.
+/// quality, peer benchmark, daily retention, and adverse-reaction signal.
 /// Each card fetches its own endpoint and degrades independently — one failing
 /// call never blanks the whole screen.
 class AnalyticsScreen extends StatefulWidget {
@@ -296,7 +296,7 @@ class _RetentionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final points = rows.cast<Map<String, dynamic>>();
     return PanelCard(
-      title: 'Weekly Active Users',
+      title: 'Daily Active Users',
       accent: EnhancedTheme.accentCyan,
       child: TrendLineChart(
         color: EnhancedTheme.accentCyan,

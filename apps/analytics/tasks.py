@@ -22,10 +22,10 @@ def record_event(
 
 
 @shared_task
-def weekly_tenant_report():
-    """Build a per-tenant weekly rollup + outbreak alerts and email tenant admins.
+def daily_tenant_report():
+    """Build a per-tenant daily rollup + outbreak alerts and email tenant admins.
 
-    Runs under beat (Mondays 04:00). Binds each tenant in turn so the
+    Runs under beat (daily 04:00). Binds each tenant in turn so the
     tenant-scoped stats functions resolve correctly, then restores the prior
     context. Email is best-effort (fail_silently) — no SMTP in dev just logs.
     """
@@ -52,7 +52,7 @@ def weekly_tenant_report():
                 "cases": case_report_stats(),
                 "outbreak_alerts": tenant_spikes(),
             }
-            log.info("weekly report for %s: %s", tenant.slug, report)
+            log.info("daily report for %s: %s", tenant.slug, report)
             recipients = list(
                 User.objects.filter(tenant=tenant, role=Role.TENANT_ADMIN)
                 .exclude(email="")
@@ -60,12 +60,12 @@ def weekly_tenant_report():
             )
             if recipients:
                 alerts = report["outbreak_alerts"]
-                subject = f"[{tenant.name}] Weekly health report"
+                subject = f"[{tenant.name}] Daily health report"
                 if alerts:
                     subject += f" — {len(alerts)} outbreak alert(s)"
                 send_mail(
                     subject,
-                    f"Weekly summary:\n{report}",
+                    f"Daily summary:\n{report}",
                     None,  # DEFAULT_FROM_EMAIL
                     recipients,
                     fail_silently=True,

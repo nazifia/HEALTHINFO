@@ -656,24 +656,31 @@ class PlatformReportSourcesView(APIView):
         return Response(report_sources(*_range(request), platform=True))
 
 
-def _weeks(request):
-    """?weeks=N as a positive int, default 8. Bad input → 400, not 500."""
-    raw = request.query_params.get("weeks")
+def _days(request):
+    """?days=N as a positive int, default 30. Bad input → 400, not 500.
+
+    Legacy ?weeks=N (the window before these reports went daily) still works and
+    means N*7 days, so an older client keeps the window it asked for. ?days wins
+    when both are sent.
+    """
+    unit, raw = "days", request.query_params.get("days")
     if raw is None:
-        return 8
+        unit, raw = "weeks", request.query_params.get("weeks")
+    if raw is None:
+        return 30
     try:
         n = int(raw)
     except ValueError:
-        raise ValidationError("weeks must be an integer")
+        raise ValidationError(f"{unit} must be an integer")
     if n < 1:
-        raise ValidationError("weeks must be >= 1")
-    return n
+        raise ValidationError(f"{unit} must be >= 1")
+    return n * 7 if unit == "weeks" else n
 
 
 def _idsr_response(report, request):
     """Render an IDSR report dict as JSON, or one section as CSV when ?format=csv.
 
-    CSV carries the line-list rows — the weekly summary by default, the 24-hour
+    CSV carries the line-list rows — the daily summary by default, the 24-hour
     immediate-notification worklist on ?section=immediate. Tier rollups are
     JSON-only.
     """
@@ -681,15 +688,15 @@ def _idsr_response(report, request):
         if request.query_params.get("section") == "immediate":
             cols, key, name = ALERT_COLUMNS, "immediate", "idsr_immediate_alerts.csv"
         else:
-            cols, key, name = SUMMARY_COLUMNS, "summary", "idsr_weekly_summary.csv"
+            cols, key, name = SUMMARY_COLUMNS, "summary", "idsr_daily_summary.csv"
         return csv_response(name, cols, ([r[c] for c in cols] for r in report[key]))
     return Response(report)
 
 
 class IdsrReportView(APIView):
-    """This facility's (tenant's) IDSR weekly epidemiological summary.
+    """This facility's (tenant's) IDSR daily epidemiological summary.
 
-    ?weeks=N windows the trailing period (default 8). ?format=csv downloads the
+    ?days=N windows the trailing period (default 30). ?format=csv downloads the
     line-list public-health authorities expect, and ?section=immediate switches
     that download to the 24-hour immediate-notification worklist.
     """
@@ -697,8 +704,8 @@ class IdsrReportView(APIView):
     permission_classes = [IsTenantMember]
 
     def get(self, request):
-        weeks = _weeks(request)
-        return _idsr_response(tenant_idsr_report(weeks), request)
+        days = _days(request)
+        return _idsr_response(tenant_idsr_report(days), request)
 
 
 class PlatformIdsrReportView(APIView):
@@ -708,8 +715,8 @@ class PlatformIdsrReportView(APIView):
     permission_classes = [IsPlatformAdmin]
 
     def get(self, request):
-        weeks = _weeks(request)
-        return _idsr_response(platform_idsr_report(weeks), request)
+        days = _days(request)
+        return _idsr_response(platform_idsr_report(days), request)
 
 
 class CaseReportExportView(APIView):

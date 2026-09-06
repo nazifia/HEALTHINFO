@@ -152,7 +152,7 @@ class _PlatformAdrScreenState extends State<PlatformAdrScreen> {
   }
 }
 
-/// Reaction volume over the trailing 90 days (weekly buckets) from `trend`.
+/// Reaction volume over the trailing 90 days (daily buckets) from `trend`.
 class _TrendCard extends StatelessWidget {
   final List<dynamic> rows;
   const _TrendCard({required this.rows});

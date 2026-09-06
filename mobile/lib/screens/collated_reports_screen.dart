@@ -199,7 +199,7 @@ class _CollatedReportsScreenState extends State<CollatedReportsScreen> {
 String _cfr(dynamic rate) =>
     rate is num ? '${(rate * 100).toStringAsFixed(1)}%' : '—';
 
-/// Case volume over the trailing 90 days (weekly buckets) from `case_trend`.
+/// Case volume over the trailing 90 days (daily buckets) from `case_trend`.
 class _TrendCard extends StatelessWidget {
   final List<dynamic> rows;
   const _TrendCard({required this.rows});

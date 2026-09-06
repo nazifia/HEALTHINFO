@@ -218,9 +218,9 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.ai.tasks.reindex_all",
         "schedule": crontab(hour=3, minute=0),
     },
-    "weekly-tenant-report": {
-        "task": "apps.analytics.tasks.weekly_tenant_report",
-        "schedule": crontab(hour=4, minute=0, day_of_week="mon"),
+    "daily-tenant-report": {
+        "task": "apps.analytics.tasks.daily_tenant_report",
+        "schedule": crontab(hour=4, minute=0),
     },
 }
 

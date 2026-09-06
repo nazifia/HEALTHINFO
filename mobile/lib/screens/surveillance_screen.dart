@@ -7,7 +7,7 @@ import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/bar_chart.dart';
 
-/// Outbreak surveillance — disease clusters whose latest week spikes above their
+/// Outbreak surveillance — disease clusters whose latest day spikes above their
 /// trailing baseline. Super-admins get the cross-tenant view
 /// (/api/analytics/platform/surveillance/); everyone else their own tenant's
 /// (/api/analytics/surveillance/). Response: {"alerts": [...]}.
@@ -97,9 +97,9 @@ class _AlertCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final name = '${alert['name'] ?? 'Unknown'}';
     final code = '${alert['icd10_code'] ?? ''}'.trim();
-    final current = (alert['current_week'] as num?) ?? 0;
+    final current = (alert['current_day'] as num?) ?? 0;
     final baseline = (alert['baseline_mean'] as num?) ?? 0;
-    final weeks = (alert['weekly_counts'] as List?)?.cast<num>() ?? const [];
+    final days = (alert['daily_counts'] as List?)?.cast<num>() ?? const [];
     return GlassCard(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -147,26 +147,26 @@ class _AlertCard extends StatelessWidget {
               Flexible(
                 child: Padding(
                   padding: const EdgeInsets.only(top: 8),
-                  child: Text('cases this week',
+                  child: Text('cases today',
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(color: context.hintColor, fontSize: 12)),
                 ),
               ),
               const Spacer(),
               Flexible(
-                child: Text('baseline ~$baseline/wk',
+                child: Text('baseline ~$baseline/day',
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(color: context.hintColor, fontSize: 12)),
               ),
             ],
           ),
-          if (weeks.isNotEmpty) ...[
+          if (days.isNotEmpty) ...[
             const SizedBox(height: 12),
             TrendLineChart(
               color: EnhancedTheme.errorRed,
               rows: [
-                for (var i = 0; i < weeks.length; i++)
-                  (period: 'w$i', value: weeks[i]),
+                for (var i = 0; i < days.length; i++)
+                  (period: 'd$i', value: days[i]),
               ],
             ),
           ],

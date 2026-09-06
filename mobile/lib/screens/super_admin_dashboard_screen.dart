@@ -154,7 +154,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
               ]),
               const SizedBox(height: 14),
               PanelCard(
-                title: 'Search Volume (90d, weekly)',
+                title: 'Search Volume (90d, daily)',
                 accent: EnhancedTheme.accentPurple,
                 trailing: Text('$searchTotal total',
                     style: TextStyle(color: context.hintColor, fontSize: 12)),
@@ -289,7 +289,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   }
 }
 
-/// 90-day weekly search volume line. rows: [{period: iso-date, count: n}].
+/// 90-day daily search volume line. rows: [{period: iso-date, count: n}].
 class _Trend extends StatelessWidget {
   final List<Map<String, dynamic>> points;
   const _Trend({required this.points});

@@ -1,7 +1,7 @@
 """Outbreak surveillance: spot disease clusters from case-report volume.
 
-Compares the most recent week's case count per disease against a trailing
-baseline. A spike = current week well above the historical mean. This is the
+Compares the most recent day's case count per disease against a trailing
+baseline. A spike = current day well above the historical mean. This is the
 one genuinely novel health feature — the data model already carries
 disease + time + region, so detection is a query plus a threshold.
 """
@@ -10,54 +10,72 @@ from datetime import timedelta
 from statistics import mean, pstdev
 
 from django.db.models import Count
-from django.db.models.functions import TruncWeek
+from django.db.models.functions import TruncDay
 from django.utils import timezone
 
 from .models import CaseReport
 
-# A week must clear BOTH guards to alarm: enough absolute cases to matter, and
+# A day must clear BOTH guards to alarm: enough absolute cases to matter, and
 # enough above baseline to be a real signal not noise.
-MIN_CASES = 5
-Z_THRESHOLD = 2.0  # current week > mean + 2*stdev of prior weeks
+# ponytail: 3/day is the daily equivalent of the old 5/week floor; tune if a
+# facility's normal daily volume makes it noisy.
+MIN_CASES = 3
+Z_THRESHOLD = 2.0  # current day > mean + 2*stdev of prior days
 
 
-def _weekly_counts(reports, weeks):
-    """{disease_id: {"name", "code", "weeks": [oldest..newest counts]}}."""
-    since = timezone.now() - timedelta(weeks=weeks)
+def _daily_counts(reports, days):
+    """{disease_id: {"name", "code", "days": [oldest..newest counts]}}.
+
+    Every day in the window gets a bucket, quiet ones included. A day with no
+    cases is a zero in the baseline, not a missing entry: drop it and the mean
+    is taken over busy days only, which lifts the baseline and hides the very
+    spikes this looks for. Daily buckets are sparse where weekly ones were not,
+    so the gaps have to be filled.
+    """
+    since = timezone.now() - timedelta(days=days)
     rows = (
         reports.filter(created_at__gte=since)
         .exclude(disease=None)
-        .annotate(period=TruncWeek("created_at"))
+        .annotate(period=TruncDay("created_at"))
         .values("disease_id", "disease__name", "disease__icd10_code", "period")
         .annotate(count=Count("id"))
-        .order_by("period")
     )
-    periods = sorted({r["period"] for r in rows})
-    idx = {p: i for i, p in enumerate(periods)}
+    today = timezone.localdate()
+    idx = {today - timedelta(days=i): days - 1 - i for i in range(days)}
     out = {}
     for r in rows:
+        i = idx.get(timezone.localtime(r["period"]).date())
+        if i is None:
+            continue  # the partial extra day the window edge picks up
         d = out.setdefault(
             r["disease_id"],
             {
                 "disease_id": r["disease_id"],
                 "name": r["disease__name"],
                 "icd10_code": r["disease__icd10_code"],
-                "weeks": [0] * len(periods),
+                "days": [0] * days,
             },
         )
-        d["weeks"][idx[r["period"]]] = r["count"]
+        d["days"][i] = r["count"]
     return out
 
 
-def detect_spikes(reports, weeks=8):
-    """Return diseases whose latest week spikes vs their trailing baseline.
+def detect_spikes(reports, days=30):
+    """Return diseases whose latest day spikes vs their trailing baseline.
 
     `reports` is any CaseReport queryset (tenant-scoped or all_objects), so the
     same logic powers a per-tenant alert and the platform-wide one.
+
+    The last bucket is today, so a caller running early in the morning judges a
+    few hours of reports against full days.
+    ponytail: the 04:00 beat task lives with that; compare the last *complete*
+    day if the daily email starts missing outbreaks.
     """
     alerts = []
-    for d in _weekly_counts(reports, weeks).values():
-        series = d["weeks"]
+    for d in _daily_counts(reports, days).values():
+        series = d["days"]
+        # ponytail: this is window length, not data length — a tenant in its
+        # first week baselines against zeros. Track first case date if it bites.
         if len(series) < 3:
             continue  # not enough history to call a baseline
         current, baseline = series[-1], series[:-1]
@@ -73,18 +91,18 @@ def detect_spikes(reports, weeks=8):
                     "disease_id": d["disease_id"],
                     "name": d["name"],
                     "icd10_code": d["icd10_code"],
-                    "current_week": current,
+                    "current_day": current,
                     "baseline_mean": round(mu, 2),
-                    "weekly_counts": series,
+                    "daily_counts": series,
                 }
             )
-    alerts.sort(key=lambda a: a["current_week"] - a["baseline_mean"], reverse=True)
+    alerts.sort(key=lambda a: a["current_day"] - a["baseline_mean"], reverse=True)
     return alerts
 
 
-def tenant_spikes(weeks=8):
-    return detect_spikes(CaseReport.objects.all(), weeks)
+def tenant_spikes(days=30):
+    return detect_spikes(CaseReport.objects.all(), days)
 
 
-def platform_spikes(weeks=8):
-    return detect_spikes(CaseReport.all_objects.all(), weeks)
+def platform_spikes(days=30):
+    return detect_spikes(CaseReport.all_objects.all(), days)

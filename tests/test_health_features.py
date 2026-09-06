@@ -40,28 +40,47 @@ def _backdate(report, days_ago):
     CaseReport.all_objects.filter(pk=report.pk).update(created_at=when)
 
 
-def test_spike_detection_flags_latest_week_surge(tenant):
+def test_spike_detection_flags_latest_day_surge(tenant):
     flu = Disease.objects.create(name="Flu", slug="flu", icd10_code="J10")
-    # Quiet baseline: 1 case/week for 4 prior weeks.
-    for w in range(4):
+    # Quiet baseline: 1 case/day for 4 prior days.
+    for d in range(4):
         r = CaseReport.objects.create(disease=flu)
-        _backdate(r, days_ago=14 + w * 7)  # weeks 2..5 ago
-    # Current week: a surge of 8.
+        _backdate(r, days_ago=1 + d)  # days 1..4 ago
+    # Today: a surge of 8.
     for _ in range(8):
         CaseReport.objects.create(disease=flu)  # now
 
-    alerts = detect_spikes(CaseReport.objects.all(), weeks=8)
+    alerts = detect_spikes(CaseReport.objects.all(), days=30)
     assert len(alerts) == 1
     assert alerts[0]["icd10_code"] == "J10"
-    assert alerts[0]["current_week"] == 8
+    assert alerts[0]["current_day"] == 8
+
+
+def test_quiet_days_count_as_zero_in_the_baseline(tenant):
+    """A gap is a zero, not a missing bucket.
+
+    Two busy days a fortnight back and nothing since: counting only the days
+    that had cases puts the baseline at 6/day and hides today's cluster.
+    """
+    lassa = Disease.objects.create(name="Lassa", slug="lassa", icd10_code="A96")
+    for days_ago in (15, 20):
+        for _ in range(6):
+            _backdate(CaseReport.objects.create(disease=lassa), days_ago=days_ago)
+    for _ in range(5):
+        CaseReport.objects.create(disease=lassa)  # today
+
+    [alert] = detect_spikes(CaseReport.objects.all(), days=30)
+    assert alert["current_day"] == 5
+    assert alert["baseline_mean"] < 1  # 12 cases spread over 29 days, not 2
+    assert len(alert["daily_counts"]) == 30
 
 
 def test_no_spike_when_flat(tenant):
     cold = Disease.objects.create(name="Cold", slug="cold")
-    for w in range(5):
+    for d in range(5):
         r = CaseReport.objects.create(disease=cold)
-        _backdate(r, days_ago=w * 7)
-    assert detect_spikes(CaseReport.objects.all(), weeks=8) == []
+        _backdate(r, days_ago=d)
+    assert detect_spikes(CaseReport.objects.all(), days=30) == []
 
 
 def test_differential_ranks_by_symptom_overlap(tenant):

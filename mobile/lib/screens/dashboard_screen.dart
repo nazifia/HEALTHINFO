@@ -1,4 +1,3 @@
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
 import '../main.dart';
@@ -88,8 +87,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           final fb = (d['ai_feedback'] as Map?)?.cast<String, dynamic>() ?? const {};
           final up = (fb['up'] as num?)?.toInt() ?? 0;
           final down = (fb['down'] as num?)?.toInt() ?? 0;
-          final satTotal = up + down;
-          final satPct = satTotal == 0 ? null : (up / satTotal * 100).round();
           final searchTotal =
               trend.fold<num>(0, (a, r) => a + ((r['count'] as num?) ?? 0));
           final diagnoses = (d['top_diagnoses'] as List?) ?? [];
@@ -110,22 +107,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               KpiStrip(tiles: [
                 KpiChip(
-                  icon: Icons.search,
-                  label: 'Searches',
-                  value: '${d['total_searches'] ?? 0}',
-                  color: EnhancedTheme.primaryTeal,
-                ),
-                KpiChip(
                   icon: Icons.group_outlined,
                   label: 'Active Users 30d',
                   value: '${d['active_users'] ?? 0}',
                   color: EnhancedTheme.accentPurple,
-                ),
-                KpiChip(
-                  icon: Icons.thumb_up_alt_outlined,
-                  label: 'AI Positive',
-                  value: satPct == null ? '—' : '$satPct%',
-                  color: EnhancedTheme.successGreen,
                 ),
                 KpiChip(
                   icon: Icons.show_chart,
@@ -147,49 +132,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ]),
               const SizedBox(height: 14),
-              PanelCard(
-                title: 'Search Volume (30d)',
-                accent: EnhancedTheme.primaryTeal,
-                trailing: Text('$searchTotal total',
-                    style: TextStyle(color: context.hintColor, fontSize: 12)),
-                child: _SearchTrend(points: trend),
-              ),
-              PanelCard(
-                title: 'AI Answer Satisfaction',
-                accent: EnhancedTheme.successGreen,
-                child: Row(
-                  children: [
-                    DonutChart(
-                      value: up,
-                      total: satTotal,
-                      color: EnhancedTheme.successGreen,
-                      centerLabel: satPct == null ? '—' : '$satPct%',
-                      centerSub: 'positive',
-                      size: 110,
-                    ),
-                    const SizedBox(width: 20),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          StatMetric('thumbs up', '$up',
-                              color: EnhancedTheme.successGreen),
-                          const SizedBox(height: 10),
-                          StatMetric('thumbs down', '$down',
-                              color: EnhancedTheme.errorRed),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              _RankList(
-                heading: 'Top searches',
-                color: EnhancedTheme.primaryTeal,
-                rows: (d['top_searches'] as List?) ?? [],
-                titleKey: 'query',
-                countKey: 'count',
-              ),
               _RankList(
                 heading: 'Popular diseases',
                 color: EnhancedTheme.accentPurple,
@@ -247,51 +189,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           );
         },
       ),
-    );
-  }
-}
-
-/// 30-day search volume line chart. rows: [{period: iso-date, count: n}].
-class _SearchTrend extends StatelessWidget {
-  final List<Map<String, dynamic>> points;
-  const _SearchTrend({required this.points});
-
-  @override
-  Widget build(BuildContext context) {
-    if (points.isEmpty) {
-      return Text('No data yet.',
-          style: TextStyle(color: context.hintColor, fontSize: 13));
-    }
-    return SizedBox(height: 160, child: LineChart(_chartData(points)));
-  }
-
-  LineChartData _chartData(List<Map<String, dynamic>> points) {
-    final spots = [
-      for (var i = 0; i < points.length; i++)
-        FlSpot(i.toDouble(), ((points[i]['count'] as num?) ?? 0).toDouble()),
-    ];
-    final maxY = spots.map((s) => s.y).reduce((a, b) => a > b ? a : b);
-    return LineChartData(
-      minY: 0,
-      maxY: (maxY <= 0 ? 1 : maxY) * 1.2,
-      gridData: const FlGridData(show: false),
-      borderData: FlBorderData(show: false),
-      titlesData: const FlTitlesData(show: false),
-      lineTouchData: const LineTouchData(enabled: false),
-      lineBarsData: [
-        LineChartBarData(
-          spots: spots,
-          isCurved: true,
-          color: EnhancedTheme.primaryTeal,
-          barWidth: 2.5,
-          // A single point draws no line segment; show the dot so it's visible.
-          dotData: FlDotData(show: spots.length == 1),
-          belowBarData: BarAreaData(
-            show: true,
-            color: EnhancedTheme.primaryTeal.withValues(alpha: 0.12),
-          ),
-        ),
-      ],
     );
   }
 }

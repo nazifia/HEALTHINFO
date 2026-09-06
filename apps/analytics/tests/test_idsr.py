@@ -1,15 +1,16 @@
-"""IDSR weekly summary: epi-week grouping, deaths and case-fatality rate, the
+"""IDSR daily summary: per-day grouping, deaths and case-fatality rate, the
 national-tier collation, and the 24-hour immediate-notification worklist."""
 from datetime import timedelta
 
 import pytest
 from django.utils import timezone
+from rest_framework.test import APIRequestFactory
 
 from apps.analytics.idsr import (
     immediate_alerts,
     platform_idsr_report,
     timeliness,
-    weekly_summary,
+    daily_summary,
 )
 from apps.analytics.models import CaseReport
 from apps.catalog.models import Disease
@@ -23,7 +24,7 @@ def db_clean(db):
     clear_current_tenant()
 
 
-def test_weekly_summary_cfr_and_national_rollup(db_clean):
+def test_daily_summary_cfr_and_national_rollup(db_clean):
     national = Jurisdiction.objects.create(name="NG", level="national")
     state = Jurisdiction.objects.create(name="Lagos", level="state", parent=national)
     lga = Jurisdiction.objects.create(name="Ikeja", level="local", parent=state)
@@ -33,17 +34,17 @@ def test_weekly_summary_cfr_and_national_rollup(db_clean):
         notify_immediately=True, status="published",
     )
 
-    # 4 cases this week, 1 deceased → CFR 0.25.
+    # 4 cases today, 1 deceased → CFR 0.25.
     CaseReport.objects.create(tenant=tenant, disease=cholera, outcome="deceased")
     for _ in range(3):
         CaseReport.objects.create(tenant=tenant, disease=cholera, outcome="recovered")
 
-    [row] = weekly_summary(CaseReport.all_objects.all())
+    [row] = daily_summary(CaseReport.all_objects.all())
     assert row["disease"] == "Cholera"
     assert row["notifiable"] is True
     assert row["notify_immediately"] is True
     assert (row["cases"], row["deaths"], row["case_fatality_rate"]) == (4, 1, 0.25)
-    assert row["epi_week"].startswith("20") and "-W" in row["epi_week"]
+    assert row["date"] == timezone.localdate().isoformat()
 
     # Central collation reaches the national apex.
     report = platform_idsr_report()
@@ -51,7 +52,7 @@ def test_weekly_summary_cfr_and_national_rollup(db_clean):
 
 
 def test_immediate_alerts_lists_only_the_24_hour_diseases(db_clean):
-    """Immediately-notifiable cases are listed one by one; weekly ones are not.
+    """Immediately-notifiable cases are listed one by one; routine ones are not.
 
     Also pins the deadline: a case filed 30 hours ago is overdue even though a
     72-hour window is what surfaced it.
@@ -61,7 +62,7 @@ def test_immediate_alerts_lists_only_the_24_hour_diseases(db_clean):
         name="Cholera", slug="cholera", icd10_code="A00", notifiable=True,
         notify_immediately=True, status="published",
     )
-    # Notifiable but weekly, not immediate — must stay out of the worklist.
+    # Notifiable but routine, not immediate — must stay out of the worklist.
     tb = Disease.objects.create(
         name="Tuberculosis", slug="tb", icd10_code="A15", notifiable=True,
         status="published",
@@ -114,7 +115,27 @@ def test_notifying_a_case_takes_it_off_the_worklist(db_clean):
     late.refresh_from_db()
     assert late.notified_at == first
 
+    # The default window is wider than the 24-hour deadline, so the case
+    # notified 30 hours late still counts as late instead of vanishing.
     assert timeliness(CaseReport.all_objects.all()) == {
-        "window_hours": 168, "cases": 2, "notified": 1,
+        "window_hours": 72, "cases": 2, "notified": 1,
         "on_time": 0, "late": 1, "pending": 1,
     }
+
+
+def test_days_window_accepts_the_legacy_weeks_param():
+    """Old clients sent ?weeks=N; it still resolves, as N*7 days."""
+    from rest_framework.exceptions import ValidationError
+    from rest_framework.request import Request
+
+    from apps.analytics.views import _days
+
+    def req(query):
+        return Request(APIRequestFactory().get("/api/analytics/idsr/", query))
+
+    assert _days(req({})) == 30
+    assert _days(req({"days": "7"})) == 7
+    assert _days(req({"weeks": "4"})) == 28
+    assert _days(req({"days": "10", "weeks": "4"})) == 10  # days wins
+    with pytest.raises(ValidationError):
+        _days(req({"weeks": "0"}))
