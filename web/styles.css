@@ -20,6 +20,15 @@
   --viz-s1: #2a78d6; --viz-s2: #1baf7a; --viz-s3: #eda100; --viz-s4: #008300;
   --viz-grid: #e1e0d9; --viz-axis: #c3c2b7; --viz-muted: #898781;
   --viz-ink: var(--text); --viz-surface: var(--card);
+  /* one colour per module — tiles and nav groups share it, so teal always
+     means Tools, blue always Pharmacy. Never the sole signal: labels stay. */
+  --d-tools: #0f766e;     --d-tools-soft: #e6f2f1;
+  --d-pharmacy: #2563eb;  --d-pharmacy-soft: #e6eefc;
+  --d-catalog: #7c3aed;   --d-catalog-soft: #f0e9fd;
+  --d-reports: #c2410c;   --d-reports-soft: #fdece3;
+  --d-analytics: #0891b2; --d-analytics-soft: #e2f4f8;
+  --d-clinical: #be185d;  --d-clinical-soft: #fce8f0;
+  --d-admin: #475569;     --d-admin-soft: #eaeef3;
 }
 [data-theme="dark"] {
   color-scheme: dark;
@@ -35,11 +44,22 @@
   --ok: #4ade80;
   --viz-s1: #3987e5; --viz-s2: #199e70; --viz-s3: #c98500; --viz-s4: #008300;
   --viz-grid: #2c2c2a; --viz-axis: #383835;
+  --d-tools: #14b8a6;     --d-tools-soft: #113b37;
+  --d-pharmacy: #60a5fa;  --d-pharmacy-soft: #14243d;
+  --d-catalog: #a78bfa;   --d-catalog-soft: #251f3d;
+  --d-reports: #fb923c;   --d-reports-soft: #3a2415;
+  --d-analytics: #22d3ee; --d-analytics-soft: #123037;
+  --d-clinical: #f472b6;  --d-clinical-soft: #3a1a2a;
+  --d-admin: #94a3b8;     --d-admin-soft: #23272e;
 }
 html, body { margin: 0; height: 100%; }
 body {
   font: 15px/1.55 "Segoe UI Variable Text", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  background: var(--bg);
+  background:
+    radial-gradient(900px 420px at 100% -10%, color-mix(in srgb, var(--a3) 10%, transparent), transparent 70%),
+    radial-gradient(760px 380px at -10% 0%, color-mix(in srgb, var(--brand) 12%, transparent), transparent 70%),
+    var(--bg);
+  background-attachment: fixed;
   color: var(--text);
   -webkit-font-smoothing: antialiased;
 }
@@ -51,7 +71,7 @@ a:hover { text-decoration: underline; }
 #app { display: flex; flex-direction: column; height: 100vh; }
 #topbar {
   display: flex; align-items: center; gap: 12px;
-  background: linear-gradient(90deg, var(--brand-dark), var(--brand));
+  background: linear-gradient(100deg, var(--brand-dark) 0%, var(--brand) 45%, var(--a5) 100%);
   color: #fff; padding: 10px 18px; flex: 0 0 auto;
   box-shadow: var(--shadow-1);
 }
@@ -86,12 +106,15 @@ a.badge:hover { background: rgba(255,255,255,.3); text-decoration: none; }
 #sidebar a:hover { background: var(--bg); text-decoration: none; }
 #sidebar a:hover .ico { color: var(--text); }
 #sidebar a:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
-#sidebar a.active { background: var(--brand-soft); color: var(--brand-dark); font-weight: 600; }
-#sidebar a.active .ico { color: var(--brand); }
+#sidebar a.active {
+  background: linear-gradient(90deg, var(--accent-soft, var(--brand-soft)), transparent);
+  color: var(--accent, var(--brand-dark)); font-weight: 600;
+}
+#sidebar a.active .ico { color: var(--accent, var(--brand)); }
 /* active marker sits inside the pill so it never shifts the label */
 #sidebar a.active::before {
   content: ""; position: absolute; left: -10px; top: 50%; transform: translateY(-50%);
-  width: 3px; height: 18px; border-radius: 0 3px 3px 0; background: var(--brand);
+  width: 3px; height: 18px; border-radius: 0 3px 3px 0; background: var(--accent, var(--brand));
 }
 #sidebar .nav-home { margin-bottom: 8px; }
 .nav-group { padding-top: 6px; }
@@ -101,7 +124,7 @@ a.badge:hover { background: rgba(255,255,255,.3); text-decoration: none; }
   display: flex; align-items: center; gap: 6px;
   margin: 10px 12px 4px; padding: 4px 10px; border-radius: 6px;
   font-size: 10.5px; text-transform: uppercase;
-  letter-spacing: 1.1px; color: var(--muted); font-weight: 700;
+  letter-spacing: 1.1px; color: var(--accent, var(--muted)); font-weight: 700;
 }
 .nav-group > summary::-webkit-details-marker { display: none; }
 .nav-group > summary:hover { background: var(--bg); color: var(--text); }
@@ -115,7 +138,8 @@ a.badge:hover { background: rgba(255,255,255,.3); text-decoration: none; }
 #main { flex: 1; overflow-y: auto; padding: 24px 28px 48px; }
 
 h2 { margin: 0 0 4px; font-size: 22px; letter-spacing: -.2px; }
-h3 { margin: 22px 0 8px; font-size: 16px; }
+h3 { margin: 22px 0 8px; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+h3::before { content: ""; width: 4px; height: 15px; border-radius: 2px; background: var(--brand); flex: 0 0 auto; }
 .page-sub { margin: 0 0 16px; color: var(--muted); font-size: 14px; }
 .muted { color: var(--muted); }
 .center { text-align: center; }
@@ -181,7 +205,7 @@ input[type="checkbox"] { width: auto; }
 table { border-collapse: collapse; width: 100%; font-size: 14px; }
 th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; max-width: 340px; overflow: hidden; text-overflow: ellipsis; }
 td { font-variant-numeric: tabular-nums; }
-th { background: var(--bg); font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); position: sticky; top: 0; font-weight: 600; }
+th { background: linear-gradient(var(--brand-soft), color-mix(in srgb, var(--brand-soft) 55%, var(--card))); font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); position: sticky; top: 0; font-weight: 600; }
 tr:last-child td { border-bottom: 0; }
 tbody tr:hover { background: var(--bg); }
 /* A row action (cancel a prescription) sits in the row without stretching it. */
@@ -211,11 +235,31 @@ tr.rowlink:hover { background: var(--brand-soft); }
 }
 .tile-label { font-size: 13px; color: var(--muted); }
 .tile-val { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.4px; }
-.kpi-tile { border-top: 3px solid var(--brand); }
+/* KPI tiles name a number, not a module, so they rotate; anything with a
+   dom-* class overrides this below. */
+:where(.tiles) > *:nth-child(6n+1) { --accent: var(--d-tools); --accent-soft: var(--d-tools-soft); }
+:where(.tiles) > *:nth-child(6n+2) { --accent: var(--d-pharmacy); --accent-soft: var(--d-pharmacy-soft); }
+:where(.tiles) > *:nth-child(6n+3) { --accent: var(--d-catalog); --accent-soft: var(--d-catalog-soft); }
+:where(.tiles) > *:nth-child(6n+4) { --accent: var(--d-reports); --accent-soft: var(--d-reports-soft); }
+:where(.tiles) > *:nth-child(6n+5) { --accent: var(--d-analytics); --accent-soft: var(--d-analytics-soft); }
+:where(.tiles) > *:nth-child(6n+6) { --accent: var(--d-clinical); --accent-soft: var(--d-clinical-soft); }
+.dom-tools, [data-group="Tools"] { --accent: var(--d-tools); --accent-soft: var(--d-tools-soft); }
+.dom-catalog, [data-group="Catalog"] { --accent: var(--d-catalog); --accent-soft: var(--d-catalog-soft); }
+.dom-reports, [data-group="Reports"] { --accent: var(--d-reports); --accent-soft: var(--d-reports-soft); }
+.dom-pharmacy, [data-group="Pharmacy"] { --accent: var(--d-pharmacy); --accent-soft: var(--d-pharmacy-soft); }
+.dom-clinical, [data-group="Clinical"] { --accent: var(--d-clinical); --accent-soft: var(--d-clinical-soft); }
+.dom-analytics, [data-group="Analytics"] { --accent: var(--d-analytics); --accent-soft: var(--d-analytics-soft); }
+.dom-admin, [data-group="Admin"] { --accent: var(--d-admin); --accent-soft: var(--d-admin-soft); }
+.tile { border-left: 3px solid var(--accent, var(--brand)); }
+.tile .tile-val { color: var(--accent, var(--text)); }
+.kpi-tile { border-top: 3px solid var(--accent, var(--brand)); }
 .linktile { color: var(--text); transition: border-color .12s, box-shadow .12s, transform .12s; }
-.linktile:hover { border-color: var(--brand); text-decoration: none; box-shadow: var(--shadow-2); transform: translateY(-1px); }
-.linktile .tile-label { font-size: 15px; font-weight: 600; color: var(--brand-dark); display: flex; align-items: center; gap: 8px; }
-.linktile .tile-label .ico { color: var(--brand); }
+.linktile:hover { border-color: var(--accent, var(--brand)); text-decoration: none; box-shadow: var(--shadow-2); transform: translateY(-1px); }
+.linktile .tile-label { font-size: 15px; font-weight: 600; color: var(--accent, var(--brand-dark)); display: flex; align-items: center; gap: 8px; }
+.linktile .tile-label .ico {
+  color: var(--accent, var(--brand)); background: var(--accent-soft, var(--brand-soft));
+  box-sizing: content-box; padding: 5px; border-radius: 8px; width: 16px; height: 16px;
+}
 .home-tiles .tile { min-height: 72px; }
 /* Money and quantity columns line up on the decimal (pharmacy tables). */
 th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
