@@ -14,11 +14,27 @@ import from the owning app.
 from decimal import Decimal
 from uuid import uuid4
 
+from django.contrib.contenttypes.models import ContentType
 from django.db import models, transaction
 from django.utils import timezone
 
+from apps.governance.models import AuditLog
 from apps.tenants.models import TenantOwnedModel
 from config.money import money as _money
+
+
+def _audit(obj, user, from_status, to_status, note=""):
+    """Append-only note of who moved this record, and why.
+
+    Every other transition leaves its mark on the record itself - the code, the
+    amount, the reason. Undoing one erases exactly that, so the undo is the
+    transition that has to be written down somewhere else.
+    """
+    AuditLog.objects.create(
+        tenant_id=obj.tenant_id, user=user,
+        content_type=ContentType.objects.get_for_model(obj), object_id=obj.pk,
+        from_status=from_status, to_status=to_status, note=note[:1000],
+    )
 
 
 
@@ -182,6 +198,12 @@ class PreAuthorization(TenantOwnedModel):
     enrollment = models.ForeignKey(
         HmoEnrollment, on_delete=models.CASCADE, related_name="preauths"
     )
+    # Who asked. The insurer's answer is told back to them, and a request
+    # outlives the account that raised it.
+    requested_by = models.ForeignKey(
+        "accounts.User", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="preauth_requests",
+    )
     # What the pharmacy expects to bill the insurer for this basket.
     amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     # What they agreed to stand behind, which can be less than was asked.
@@ -197,6 +219,10 @@ class PreAuthorization(TenantOwnedModel):
     decided_at = models.DateTimeField(null=True, blank=True)
     reason = models.CharField(max_length=255, blank=True)
     notes = models.TextField(blank=True)
+    # How often the recorded answer was withdrawn. A request answered once and
+    # left alone reads 0; anything else is worth a second look before the
+    # insurer is billed against it.
+    reopened_count = models.PositiveIntegerField(default=0)
 
     class Meta:
         verbose_name = "pre-authorization"
@@ -223,10 +249,30 @@ class PreAuthorization(TenantOwnedModel):
         """Approved, still in date, and not already spent on a sale."""
         return self.status == self.Status.APPROVED and not self.is_expired
 
+    def _notify(self, title, message):
+        """Tell whoever raised the request what the insurer said.
+
+        They are usually at the till with a waiting patient, so the answer goes
+        to them rather than waiting on someone reloading the request page.
+        """
+        if not self.requested_by_id:
+            return
+        from apps.pos.models import Notification  # local: pos is imported below
+
+        Notification.objects.create(
+            tenant_id=self.tenant_id, user_id=self.requested_by_id,
+            kind=Notification.Kind.SYSTEM, priority=Notification.Priority.HIGH,
+            title=title[:200], message=message,
+        )
+
     _ALLOWED = {
         "approve": {Status.REQUESTED},
         "decline": {Status.REQUESTED},
         "cancel": {Status.REQUESTED, Status.APPROVED},
+        # An answer is typed by hand and can be typed wrong. It is undone
+        # until it has been spent on a sale, after which the goods are gone
+        # and a fresh request is the only honest way back.
+        "reopen": {Status.APPROVED, Status.DECLINED},
     }
 
     def _guard(self, action):
@@ -250,6 +296,9 @@ class PreAuthorization(TenantOwnedModel):
         self.save(update_fields=["status", "amount_approved", "code",
                                  "expires_on", "decided_at", "reason",
                                  "updated_at"])
+        self._notify(f"{self.reference} authorised",
+                     f"{self.hmo.name} will stand behind {approved}. "
+                     f"Dispense against {self.reference}.")
         return self
 
     def decline(self, reason=""):
@@ -260,6 +309,8 @@ class PreAuthorization(TenantOwnedModel):
         self.decided_at = timezone.now()
         self.save(update_fields=["status", "amount_approved", "reason",
                                  "decided_at", "updated_at"])
+        self._notify(f"{self.reference} declined",
+                     reason or "The insurer refused the request.")
         return self
 
     def cancel(self, reason=""):
@@ -269,6 +320,39 @@ class PreAuthorization(TenantOwnedModel):
         if reason:
             self.reason = reason[:255]
         self.save(update_fields=["status", "reason", "updated_at"])
+        self._notify(f"{self.reference} withdrawn",
+                     reason or "The request was withdrawn before an answer.")
+        return self
+
+    def reopen(self, reason="", by=None):
+        """Undo the recorded answer, putting the request back to unanswered.
+
+        The decision guards refuse to answer a request twice, which is what a
+        wrong amount or a mistyped code would otherwise be stuck behind. This
+        clears the answer so the right one can be recorded; it does not decide
+        anything itself.
+
+        ``by`` is whoever withdrew it. The answer being erased was money the
+        pharmacy could have billed, so the trail says who erased it.
+        """
+        self._guard("reopen")
+        was, was_amount = self.status, self.amount_approved
+        self.reopened_count += 1
+        self.status = self.Status.REQUESTED
+        self.amount_approved = Decimal("0.00")
+        self.code = ""
+        self.expires_on = None
+        self.decided_at = None
+        self.reason = reason[:255]
+        self.save(update_fields=["status", "amount_approved", "code",
+                                 "expires_on", "decided_at", "reason",
+                                 "reopened_count", "updated_at"])
+        _audit(self, by, was, self.Status.REQUESTED,
+               f"Withdrew an answer of {was_amount}."
+               + (f" {reason}" if reason else ""))
+        self._notify(f"{self.reference} reopened",
+                     reason or "The answer recorded against this request was "
+                     "withdrawn. It is waiting on the insurer again.")
         return self
 
     def mark_used(self):
@@ -278,6 +362,157 @@ class PreAuthorization(TenantOwnedModel):
             raise ValueError("Only an approved request can be used.")
         self.status = self.Status.USED
         self.save(update_fields=["status", "updated_at"])
+        return self
+
+    @property
+    def item_limits(self):
+        """How much of each drug the insurer cleared: ``{item_id: quantity}``.
+
+        A refused drug sits here as 0, a part-cleared one as the quantity the
+        insurer stood behind. Empty when the request was not itemised, which
+        keeps a lump-sum request out of the counter's way.
+        """
+        return dict(
+            PreAuthorizationItem.all_objects.filter(authorization=self).exclude(
+                status=PreAuthorizationItem.Status.REQUESTED
+            ).values_list("item_id", "quantity_approved")
+        )
+
+    def settle_from_items(self):
+        """Answer the request itself once every medication on it is decided.
+
+        The insurer decides drug by drug; the request as a whole is whatever
+        those decisions add up to. Anything still undecided leaves the request
+        open, so a half-answered request never clears a sale.
+        """
+        items = list(PreAuthorizationItem.all_objects.filter(authorization=self))
+        if not items or any(i.status == PreAuthorizationItem.Status.REQUESTED
+                            for i in items):
+            return self
+        approved = _money(sum((i.amount_approved for i in items), Decimal("0.00")))
+        if approved > 0:
+            return self.approve(code=self.code, amount=approved,
+                                expires_on=self.expires_on)
+        return self.decline("Every medication on the request was declined.")
+
+
+class PreAuthorizationItem(TenantOwnedModel):
+    """One ordered medication on an authorisation request, decided on its own.
+
+    Insurers answer a request drug by drug: the antibiotic is cleared, the
+    branded painkiller on the same script is not. Keeping each line's answer
+    here is what lets the counter dispense the cleared drugs and turn the
+    patient away for the rest, rather than losing the whole basket to one
+    refusal.
+    """
+
+    class Status(models.TextChoices):
+        REQUESTED = "requested"
+        APPROVED = "approved"
+        DECLINED = "declined"
+
+    authorization = models.ForeignKey(
+        PreAuthorization, on_delete=models.CASCADE, related_name="items"
+    )
+    item = models.ForeignKey("inventory.StockItem", on_delete=models.PROTECT,
+                             related_name="preauth_items")
+    quantity = models.PositiveIntegerField(default=1)
+    # How much of that the insurer stood behind - they cut a quantity, 20 of
+    # the 30 tablets asked for, as readily as they cut an amount.
+    quantity_approved = models.PositiveIntegerField(default=0)
+    # What the pharmacy expects to bill the insurer for this drug.
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    amount_approved = models.DecimalField(max_digits=12, decimal_places=2,
+                                          default=0)
+    status = models.CharField(max_length=20, choices=Status.choices,
+                              default=Status.REQUESTED)
+    reason = models.CharField(max_length=255, blank=True)
+    decided_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("id",)
+        unique_together = ("authorization", "item")
+        indexes = [models.Index(fields=["tenant", "authorization"])]
+
+    def __str__(self):
+        return f"{self.quantity} x {self.item_id} ({self.status})"
+
+    def _guard(self):
+        if self.status != self.Status.REQUESTED:
+            raise ValueError(
+                f"That medication is already {self.get_status_display()}."
+            )
+
+    def approve(self, amount=None, quantity=None):
+        """Clear this drug, for all or part of what was asked for it.
+
+        An insurer cutting the quantity - 20 of the 30 tablets - cuts the bill
+        with it, so an unstated amount follows the cleared quantity pro rata
+        rather than standing behind the whole ask.
+        """
+        self._guard()
+        cleared = int(quantity) if quantity is not None else self.quantity
+        if not 0 < cleared <= self.quantity:
+            raise ValueError(
+                f"The insurer can clear 1 to {self.quantity} of that medication."
+            )
+        if amount is not None:
+            approved = _money(amount)
+        else:
+            approved = _money(self.amount * cleared / (self.quantity or 1))
+        if approved <= 0:
+            raise ValueError("An approved amount must be positive.")
+        self.status = self.Status.APPROVED
+        self.amount_approved = approved
+        self.quantity_approved = cleared
+        self.reason = ""
+        self.decided_at = timezone.now()
+        self.save(update_fields=["status", "amount_approved", "quantity_approved",
+                                 "reason", "decided_at", "updated_at"])
+        self.authorization.settle_from_items()
+        return self
+
+    def decline(self, reason=""):
+        """Refuse this drug. The pharmacy does not dispense it under cover."""
+        self._guard()
+        self.status = self.Status.DECLINED
+        self.amount_approved = Decimal("0.00")
+        self.quantity_approved = 0
+        self.reason = reason[:255]
+        self.decided_at = timezone.now()
+        self.save(update_fields=["status", "amount_approved", "quantity_approved",
+                                 "reason", "decided_at", "updated_at"])
+        self.authorization.settle_from_items()
+        return self
+
+    def reopen(self, reason="", by=None):
+        """Undo the recorded answer to this medication.
+
+        The request settled the moment its last medication was decided, so a
+        line going back to unanswered takes the request with it - otherwise a
+        corrected line would sit under a total that no longer adds up.
+        """
+        if self.status == self.Status.REQUESTED:
+            raise ValueError("That medication is still awaiting the insurer.")
+        auth = self.authorization
+        if auth.status == PreAuthorization.Status.USED:
+            raise ValueError(
+                "That clearance was already spent on a sale. Raise a new request."
+            )
+        was, was_amount = self.status, self.amount_approved
+        self.status = self.Status.REQUESTED
+        self.amount_approved = Decimal("0.00")
+        self.quantity_approved = 0
+        self.reason = reason[:255]
+        self.decided_at = None
+        self.save(update_fields=["status", "amount_approved", "quantity_approved",
+                                 "reason", "decided_at", "updated_at"])
+        _audit(self, by, was, self.Status.REQUESTED,
+               f"Withdrew an answer of {was_amount} on {self.item}."
+               + (f" {reason}" if reason else ""))
+        if auth.status in (PreAuthorization.Status.APPROVED,
+                           PreAuthorization.Status.DECLINED):
+            auth.reopen(reason, by=by)
         return self
 
 

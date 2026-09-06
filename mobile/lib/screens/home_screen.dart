@@ -24,6 +24,8 @@ import 'pharmacy_stock_screen.dart';
 import 'pharmacy_sales_screen.dart';
 import 'pharmacy_till_screen.dart';
 import 'pharmacy_claims_screen.dart';
+import 'pharmacy_preauth_screen.dart';
+import 'pharmacy_schemes_screen.dart';
 import 'pharmacy_suppliers_screen.dart';
 import 'pharmacy_orders_screen.dart';
 import 'pharmacy_reports_screen.dart';
@@ -202,7 +204,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _Section('Customers', Icons.people_alt_outlined, CustomersScreen()),
     _Section('Prescribers', Icons.badge_outlined, PrescribersScreen()),
     _Section('Hospitals', Icons.local_hospital_outlined, HospitalsScreen()),
+    _Section('Schemes', Icons.health_and_safety_outlined,
+        PharmacySchemesScreen()),
     _Section('HMO claims', Icons.request_quote_outlined, PharmacyClaimsScreen()),
+    _Section('Authorisations', Icons.verified_user_outlined,
+        PharmacyPreauthScreen()),
     _Section('Suppliers', Icons.local_shipping_outlined,
         PharmacySuppliersScreen()),
     _Section('Purchase orders', Icons.receipt_long_outlined,

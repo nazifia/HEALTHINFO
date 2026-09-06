@@ -77,6 +77,7 @@ Map<String, dynamic> saleBody({
   int? enrollmentId,
   int? prescriptionId,
   String? patientNumber,
+  int? authorizationId,
 }) {
   final insured = paymentMethod == 'hmo';
   final number = (patientNumber ?? '').trim();
@@ -84,6 +85,8 @@ Map<String, dynamic> saleBody({
     'payment_method': paymentMethod,
     'patient': ?patientId,
     if (insured && enrollmentId != null) 'enrollment': enrollmentId,
+    // Only an insured sale can spend a clearance, so it travels with the card.
+    if (insured && authorizationId != null) 'authorization': authorizationId,
     'prescription': ?prescriptionId,
     if (prescriptionId != null && number.isNotEmpty) 'patient_number': number,
     'items': [
@@ -95,6 +98,58 @@ Map<String, dynamic> saleBody({
         },
     ],
   };
+}
+
+/// POST body for /api/pharmacy/pre-authorizations/ — the basket, itemised.
+///
+/// The insurer answers drug by drug, so every medication travels as its own
+/// line: a refusal on one does not cost the pharmacy the rest of the basket.
+/// A line the patient pays nothing for is left out — the insurer is asked for
+/// a positive figure, and the API refuses a zero one.
+///
+/// The ask is the gross. What the scheme actually owes (item rules, the annual
+/// cap) is worked out server-side, and a clearance for more than is billed
+/// still covers the sale.
+Map<String, dynamic> preauthBody({
+  required List<BasketLine> lines,
+  required int enrollmentId,
+}) {
+  final billable = lines.where((l) => l.lineTotal > 0);
+  return {
+    'enrollment': enrollmentId,
+    'amount': basketTotal(billable.toList()).toStringAsFixed(2),
+    'items': [
+      for (final l in billable)
+        {
+          'item': l.itemId,
+          'quantity': l.quantity,
+          'amount': l.lineTotal.toStringAsFixed(2),
+        },
+    ],
+  };
+}
+
+/// Actions offered on an authorisation request (PreAuthorization._ALLOWED).
+///
+/// Staff raise and withdraw; only the admin records what the insurer said,
+/// because that answer is what the pharmacy may later bill against. An
+/// itemised request is answered medication by medication and settles itself
+/// once every one is decided, so it is never answered as a whole.
+List<String> preauthActions(String? status, String? role,
+    {bool itemised = false}) {
+  if (!isPharmacyStaff(role)) return const [];
+  final decides = isPharmacyAdmin(role) && !itemised && status == 'requested';
+  return [
+    if (decides) 'approve',
+    if (decides) 'decline',
+    // An answer typed wrong is withdrawn and recorded again. A spent or
+    // withdrawn request stays as it is - the sale it cleared is already made.
+    if (isPharmacyAdmin(role) &&
+        !itemised &&
+        (status == 'approved' || status == 'declined'))
+      'reopen',
+    if (status == 'requested' || status == 'approved') 'cancel',
+  ];
 }
 
 /// Actions offered on a claim in its current state, mirroring the transitions

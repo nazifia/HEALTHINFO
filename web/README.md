@@ -73,6 +73,14 @@ CORS_ALLOWED_ORIGINS=https://<your-project>.web.app,https://<your-project>.fireb
 - Knowledge graph pages for diseases / medications / procedures / specialties
 - Analytics: tenant dashboard + all stats endpoints; platform variants for super admins; CSV exports
 - Admin: user management, tenant approve/reject/suspend (super admin)
+- Pharmacy: counter + dispense (basket sold outright, or sent to a cashier as a
+  payment request), stock items/batches/ledger/checks/transfers, suppliers and
+  purchase orders, sales, returns, dispensing log, cash drawer, cashiers,
+  expenses, customers and their wallets, prescribers with commissions and
+  consultation payouts, branches, HMOs/members/drug cover, pre-authorisations,
+  claims and claim batches
+- Trading reports (`#/trading`, pharmacy staff only): sales, profit, month by
+  day, stock valuation, customers and debt, cashier takings, staff performance
 
 - Charts: analytics arrays render as SVG bar/line charts automatically (one label
   column + 1–4 numeric columns → chart; anything wider stays a table). Hover
@@ -93,3 +101,7 @@ drug with its own directions, and a Cancel button on the row — a detail page
 lists what was prescribed with the drug on screen, and cancelling stops every
 drug on the prescription, bar anything already dispensed. `node prescription.test.js` self-checks the payload the form
 builds; `node picker.test.js` the patient type-ahead; `node columns.test.js` the table/detail column picker.
+
+A stock check is raised over the items to count, counted on its detail page
+(`node stockcount.test.js` self-checks the sheet), then applied by the admin,
+which writes the corrections to stock.

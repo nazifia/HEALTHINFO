@@ -4,6 +4,7 @@ import '../main.dart';
 import '../pharmacy.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/searchable_dropdown.dart';
+import '../shared/widgets/snack.dart';
 import 'pharmacy_stock_screen.dart' show loadStockItems;
 import 'report_scaffold.dart';
 
@@ -26,6 +27,9 @@ class _DispenseSheetState extends State<DispenseSheet> {
   final List<BasketLine> _basket = [];
   List<Map<String, dynamic>> _items = [];
   List<Map<String, dynamic>> _enrollments = [];
+  // Clearances this card already holds, and the one this sale spends. Only
+  // usable ones are offered: an expired or already-spent approval is not.
+  List<Map<String, dynamic>> _auths = [];
   // What the patient's number turned up, and which of it this sale fills.
   // Null until a lookup has run, which is not the same as an empty result.
   List<Map<String, dynamic>>? _orders;
@@ -34,8 +38,10 @@ class _DispenseSheetState extends State<DispenseSheet> {
   int? _itemId;
   int? _patientId;
   int? _enrollmentId;
+  int? _authId;
   String _method = 'cash';
   bool _saving = false;
+  bool _asking = false;
   String? _error;
 
   bool get _insured => _method == 'hmo';
@@ -133,6 +139,66 @@ class _DispenseSheetState extends State<DispenseSheet> {
     } catch (_) {
       // A missing card list is not a reason to block a cash sale.
     }
+    await _loadAuths();
+  }
+
+  /// Clearances the picked card can still spend.
+  ///
+  /// Above the insurer's threshold the sale is refused without one, so the
+  /// list is offered before the pharmacist finds that out at checkout.
+  Future<void> _loadAuths() async {
+    setState(() {
+      _authId = null;
+      _auths = [];
+    });
+    if (_enrollmentId == null) return;
+    try {
+      final rows = await api.getList('/api/pharmacy/pre-authorizations/',
+          {'enrollment': '$_enrollmentId', 'status': 'approved'});
+      if (mounted) {
+        setState(() => _auths = rows
+            .cast<Map<String, dynamic>>()
+            .where((r) => r['is_usable'] == true)
+            .toList());
+      }
+    } catch (_) {
+      // The checkout still says what the insurer wants; an empty list here
+      // only means none was found to offer.
+    }
+  }
+
+  /// Raise the request without leaving the till.
+  ///
+  /// The ask is the basket itself, itemised, so the insurer can answer drug by
+  /// drug. Nothing is dispensed on it yet: the answer arrives as an alert, and
+  /// the clearance shows up here once it does.
+  Future<void> _askInsurer() async {
+    if (_enrollmentId == null) {
+      setState(() => _error = "Pick the patient's scheme card first.");
+      return;
+    }
+    final body = preauthBody(lines: _basket, enrollmentId: _enrollmentId!);
+    if ((body['items'] as List).isEmpty) {
+      setState(() => _error = 'Add the items first — the insurer is asked for '
+          'a figure.');
+      return;
+    }
+    setState(() {
+      _asking = true;
+      _error = null;
+    });
+    try {
+      final auth = await api.post('/api/pharmacy/pre-authorizations/', body);
+      if (mounted) {
+        showSuccess(context,
+            'Requested ${(auth as Map)['reference']} — it appears here once '
+            'the insurer answers.');
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _asking = false);
+    }
   }
 
   void _add() {
@@ -182,6 +248,7 @@ class _DispenseSheetState extends State<DispenseSheet> {
           paymentMethod: _method,
           patientId: _patientId,
           enrollmentId: _enrollmentId,
+          authorizationId: _authId,
           prescriptionId: _fillingId,
           patientNumber: _number.text,
         ),
@@ -355,7 +422,10 @@ class _DispenseSheetState extends State<DispenseSheet> {
                       ' (${e['effective_coverage']}%)'),
                 ),
             ],
-            onChanged: (v) => setState(() => _enrollmentId = v),
+            onChanged: (v) {
+              setState(() => _enrollmentId = v);
+              _loadAuths();
+            },
           ),
           if (_patientId == null)
             Padding(
@@ -363,6 +433,34 @@ class _DispenseSheetState extends State<DispenseSheet> {
               child: Text('Pick the patient first to load their cards.',
                   style: TextStyle(color: context.hintColor, fontSize: 12)),
             ),
+          const SizedBox(height: 12),
+          SearchableDropdown<int?>(
+            initialValue: _authId,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Authorisation',
+              helperText: "Only for a covered sale above the insurer's "
+                  'threshold.',
+            ),
+            items: [
+              const DropdownMenuItem(value: null, child: Text('— none —')),
+              for (final a in _auths)
+                DropdownMenuItem(
+                  value: a['id'] as int,
+                  child: Text('${a['reference']} · ${money(a['amount_approved'])}'
+                      '${a['expires_on'] == null ? '' : ' · to ${a['expires_on']}'}'),
+                ),
+            ],
+            onChanged: (v) => setState(() => _authId = v),
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton.tonal(
+              onPressed: _asking ? null : _askInsurer,
+              child: Text(_asking ? 'Asking…' : 'Ask the insurer'),
+            ),
+          ),
         ],
       ],
     );

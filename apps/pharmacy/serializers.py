@@ -9,6 +9,7 @@ from .models import (
     HmoEnrollment,
     HmoItemRule,
     PreAuthorization,
+    PreAuthorizationItem,
 )
 
 
@@ -147,6 +148,37 @@ class HmoItemRuleSerializer(serializers.ModelSerializer):
         return value
 
 
+class PreAuthorizationItemSerializer(serializers.ModelSerializer):
+    """One ordered medication on a request, and the insurer's answer to it."""
+
+    item_name = serializers.CharField(source="item.name", read_only=True)
+
+    class Meta:
+        model = PreAuthorizationItem
+        exclude = ("tenant", "authorization")
+        # The insurer decides; the pharmacy only asks.
+        read_only_fields = ("amount_approved", "quantity_approved", "status",
+                            "reason", "decided_at", "created_at", "updated_at")
+
+    def validate_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Ask the insurer for a positive amount.")
+        return value
+
+
+class PreAuthItemDecisionSerializer(serializers.Serializer):
+    """The insurer's answer to one medication: an amount, or why it is refused."""
+
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2,
+                                      required=False, allow_null=True)
+    # An insurer clearing 20 of the 30 tablets asked for. Blank stands behind
+    # the whole quantity.
+    quantity = serializers.IntegerField(min_value=1, required=False,
+                                        allow_null=True)
+    reason = serializers.CharField(max_length=255, required=False,
+                                   allow_blank=True, default="")
+
+
 class PreAuthorizationSerializer(serializers.ModelSerializer):
     hmo_name = serializers.CharField(source="hmo.name", read_only=True)
     patient_name = serializers.CharField(source="enrollment.patient.full_name",
@@ -156,6 +188,9 @@ class PreAuthorizationSerializer(serializers.ModelSerializer):
     is_usable = serializers.BooleanField(read_only=True)
     sale_reference = serializers.CharField(source="sale.reference",
                                            read_only=True, default="")
+    # The ordered medications the insurer is being asked about. Optional: a
+    # request may still be one lump sum for a basket.
+    items = PreAuthorizationItemSerializer(many=True, required=False)
 
     class Meta:
         model = PreAuthorization
@@ -163,13 +198,24 @@ class PreAuthorizationSerializer(serializers.ModelSerializer):
         # The insurer decides everything but the ask: what the pharmacy sends is
         # a member and an amount, and the answer arrives through approve/decline.
         read_only_fields = ("reference", "hmo", "amount_approved", "code",
-                            "status", "decided_at", "reason", "created_at",
-                            "updated_at")
+                            "status", "decided_at", "reason", "reopened_count",
+                            "created_at", "updated_at")
 
     def validate_amount(self, value):
         if value <= 0:
             raise serializers.ValidationError("Ask the insurer for a positive amount.")
         return value
+
+    def create(self, validated_data):
+        """An itemised request is worth what its medications add up to."""
+        lines = validated_data.pop("items", [])
+        if lines:
+            validated_data["amount"] = sum(line["amount"] for line in lines)
+        auth = super().create(validated_data)
+        for line in lines:
+            PreAuthorizationItem.objects.create(
+                authorization=auth, tenant=auth.tenant, **line)
+        return auth
 
     def validate_enrollment(self, value):
         if not value.is_valid:

@@ -7,6 +7,7 @@ from .models import (
     HmoEnrollment,
     HmoItemRule,
     PreAuthorization,
+    PreAuthorizationItem,
 )
 
 
@@ -62,6 +63,14 @@ class HmoItemRuleAdmin(admin.ModelAdmin):
     raw_id_fields = ("hmo", "item")
 
 
+class PreAuthorizationItemInline(admin.TabularInline):
+    """The ordered medications, decided where the request is."""
+
+    model = PreAuthorizationItem
+    extra = 0
+    raw_id_fields = ("item",)
+
+
 @admin.register(PreAuthorization)
 class PreAuthorizationAdmin(admin.ModelAdmin):
     list_display = ("reference", "tenant", "hmo", "enrollment", "status",
@@ -69,3 +78,4 @@ class PreAuthorizationAdmin(admin.ModelAdmin):
     list_filter = ("tenant", "status", "hmo")
     search_fields = ("reference", "code", "notes")
     raw_id_fields = ("hmo", "enrollment")
+    inlines = [PreAuthorizationItemInline]

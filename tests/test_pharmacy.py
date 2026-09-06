@@ -21,6 +21,8 @@ from apps.pharmacy.models import (
     HmoEnrollment,
     HmoItemRule,
     PreAuthorization,
+    Notification,
+    PreAuthorizationItem,
     PurchaseOrder,
     PurchaseOrderLine,
     Sale,
@@ -1056,3 +1058,286 @@ def test_a_lapsed_authorisation_does_not_clear_a_sale(pharmacy):
     assert "expired" in stale.content.decode()
     item.refresh_from_db()
     assert item.quantity_on_hand == 80
+
+
+def test_the_insurer_answers_each_ordered_medication_on_its_own(pharmacy):
+    """The pharmacy asks about two drugs, the HMO clears one and refuses the
+    other, and the counter dispenses exactly what came back cleared."""
+    tenant, item = pharmacy["tenant"], pharmacy["item"]
+    vitamin = StockItem.all_objects.create(
+        tenant=tenant, name="Vitamin C", sku="VITC", unit="tablet",
+        cost_price=Decimal("40.00"), unit_price=Decimal("100.00"),
+    )
+    receive_stock(vitamin, 20, batch_number="V-1", cost_price=Decimal("40.00"))
+    patient = Patient.all_objects.create(tenant=tenant, first_name="Bola",
+                                         last_name="Eze")
+    _hmo, enrollment = _scheme(tenant, patient,
+                               coverage_percent=Decimal("100.00"),
+                               preauth_threshold=Decimal("100.00"))
+    staff = _client(pharmacy["staff"], tenant)
+    admin = _client(pharmacy["admin"], tenant)
+
+    asked = staff.post("/api/pharmacy/pre-authorizations/", {
+        "enrollment": enrollment.id,
+        "items": [
+            {"item": item.id, "quantity": 10, "amount": "125.00"},
+            {"item": vitamin.id, "quantity": 2, "amount": "200.00"},
+        ],
+    }, format="json")
+    assert asked.status_code == 201, asked.content
+    auth = PreAuthorization.all_objects.get(pk=asked.json()["id"])
+    # The request is worth what the medications on it add up to.
+    assert auth.amount == Decimal("325.00")
+    para_line, vit_line = PreAuthorizationItem.all_objects.filter(
+        authorization=auth).order_by("id")
+
+    # Only the admin records what the insurer said about a medication.
+    assert staff.post(
+        f"/api/pharmacy/pre-authorization-items/{para_line.pk}/approve/", {},
+        format="json").status_code == 403
+
+    # One drug decided leaves the request open — a half-answer clears nothing.
+    admin.post(f"/api/pharmacy/pre-authorization-items/{para_line.pk}/approve/",
+               {"amount": "125.00"}, format="json")
+    auth.refresh_from_db()
+    assert auth.status == PreAuthorization.Status.REQUESTED
+
+    declined = admin.post(
+        f"/api/pharmacy/pre-authorization-items/{vit_line.pk}/decline/",
+        {"reason": "Supplements are not covered."}, format="json")
+    assert declined.status_code == 200, declined.content
+    # Answered in full, the request settles at what was actually cleared.
+    auth.refresh_from_db()
+    assert (auth.status, auth.amount_approved) == (PreAuthorization.Status.APPROVED,
+                                                   Decimal("125.00"))
+    # And the same answer cannot be given twice.
+    assert admin.post(
+        f"/api/pharmacy/pre-authorization-items/{vit_line.pk}/approve/", {},
+        format="json").status_code == 400
+
+    basket = {"patient": patient.id, "payment_method": "hmo",
+              "enrollment": enrollment.id, "authorization": auth.pk}
+
+    # The refused drug is refused at the till, and its stock goes back.
+    refused = staff.post("/api/pharmacy/sales/", dict(basket, items=[
+        {"item": item.id, "quantity": 10}, {"item": vitamin.id, "quantity": 2},
+    ]), format="json")
+    assert refused.status_code == 400
+    assert "Vitamin C" in refused.content.decode()
+    vitamin.refresh_from_db()
+    assert vitamin.quantity_on_hand == 20
+
+    # The cleared drug alone goes out, on the cover the insurer gave.
+    allowed = staff.post("/api/pharmacy/sales/", dict(basket, items=[
+        {"item": item.id, "quantity": 10},
+    ]), format="json")
+    assert allowed.status_code == 201, allowed.content
+    sale = Sale.all_objects.get(pk=allowed.json()["id"])
+    assert sale.hmo_payable == Decimal("125.00")
+
+
+def test_the_insurer_clears_part_of_a_quantity(pharmacy):
+    """The pharmacy asks for 30 tablets, the HMO stands behind 20, and the till
+    refuses the 30 and passes the 20 - with the requester told the answer."""
+    tenant, item = pharmacy["tenant"], pharmacy["item"]
+    patient = Patient.all_objects.create(tenant=tenant, first_name="Ada",
+                                         last_name="Nwosu")
+    _hmo, enrollment = _scheme(tenant, patient,
+                               coverage_percent=Decimal("100.00"),
+                               preauth_threshold=Decimal("100.00"))
+    staff = _client(pharmacy["staff"], tenant)
+    admin = _client(pharmacy["admin"], tenant)
+
+    asked = staff.post("/api/pharmacy/pre-authorizations/", {
+        "enrollment": enrollment.id,
+        "items": [{"item": item.id, "quantity": 30, "amount": "375.00"}],
+    }, format="json")
+    assert asked.status_code == 201, asked.content
+    auth = PreAuthorization.all_objects.get(pk=asked.json()["id"])
+    line = PreAuthorizationItem.all_objects.get(authorization=auth)
+
+    # More than was asked for is not an answer the insurer can give.
+    assert admin.post(
+        f"/api/pharmacy/pre-authorization-items/{line.pk}/approve/",
+        {"quantity": 40}, format="json").status_code == 400
+
+    cleared = admin.post(
+        f"/api/pharmacy/pre-authorization-items/{line.pk}/approve/",
+        {"quantity": 20}, format="json")
+    assert cleared.status_code == 200, cleared.content
+    line.refresh_from_db()
+    auth.refresh_from_db()
+    # A cut quantity cuts the bill with it, pro rata.
+    assert (line.quantity_approved, line.amount_approved) == (20, Decimal("250.00"))
+    assert (auth.status, auth.amount_approved) == (PreAuthorization.Status.APPROVED,
+                                                   Decimal("250.00"))
+
+    # Whoever raised the request hears the answer without reloading it.
+    told = Notification.all_objects.filter(user=pharmacy["staff"]).latest("id")
+    assert auth.reference in told.title and "authorised" in told.title
+
+    basket = {"patient": patient.id, "payment_method": "hmo",
+              "enrollment": enrollment.id, "authorization": auth.pk}
+    over = staff.post("/api/pharmacy/sales/",
+                      dict(basket, items=[{"item": item.id, "quantity": 30}]),
+                      format="json")
+    assert over.status_code == 400
+    assert "20 of 30 cleared" in over.content.decode()
+
+    within = staff.post("/api/pharmacy/sales/",
+                        dict(basket, items=[{"item": item.id, "quantity": 20}]),
+                        format="json")
+    assert within.status_code == 201, within.content
+    assert Sale.all_objects.get(pk=within.json()["id"]).hmo_payable == Decimal("250.00")
+
+
+def test_a_withdrawn_request_is_told_back_to_whoever_raised_it(pharmacy):
+    """The counter withdraws its own request; the notification is what the bell
+    counts, so it is raised for the sale that never happened too."""
+    tenant, item = pharmacy["tenant"], pharmacy["item"]
+    patient = Patient.all_objects.create(tenant=tenant, first_name="Ife",
+                                         last_name="Okoro")
+    _hmo, enrollment = _scheme(tenant, patient,
+                               coverage_percent=Decimal("100.00"),
+                               preauth_threshold=Decimal("100.00"))
+    staff = _client(pharmacy["staff"], tenant)
+    asked = staff.post("/api/pharmacy/pre-authorizations/", {
+        "enrollment": enrollment.id,
+        "items": [{"item": item.id, "quantity": 10, "amount": "125.00"}],
+    }, format="json")
+    auth = PreAuthorization.all_objects.get(pk=asked.json()["id"])
+
+    gone = staff.post(f"/api/pharmacy/pre-authorizations/{auth.pk}/cancel/",
+                      {"reason": "The patient left."}, format="json")
+    assert gone.status_code == 200, gone.content
+
+    told = Notification.all_objects.filter(user=pharmacy["staff"]).latest("id")
+    assert told.title == f"{auth.reference} withdrawn"
+    assert told.message == "The patient left."
+    # And it is the requester's own bell, not the whole counter's.
+    unread = staff.get("/api/pos/notifications/", {"is_read": "false"})
+    assert unread.status_code == 200, unread.content
+    assert unread.json()["count"] == 1
+
+
+def test_a_wrong_answer_is_reopened_and_recorded_again(pharmacy):
+    """An amount typed wrong is withdrawn and recorded properly - until the
+    clearance has been spent on a sale, after which it stands."""
+    tenant, item = pharmacy["tenant"], pharmacy["item"]
+    patient = Patient.all_objects.create(tenant=tenant, first_name="Chidi",
+                                         last_name="Obi")
+    _hmo, enrollment = _scheme(tenant, patient,
+                               coverage_percent=Decimal("100.00"),
+                               preauth_threshold=Decimal("100.00"))
+    staff = _client(pharmacy["staff"], tenant)
+    admin = _client(pharmacy["admin"], tenant)
+
+    asked = staff.post("/api/pharmacy/pre-authorizations/", {
+        "enrollment": enrollment.id,
+        "items": [{"item": item.id, "quantity": 10, "amount": "125.00"}],
+    }, format="json")
+    assert asked.status_code == 201, asked.content
+    auth = PreAuthorization.all_objects.get(pk=asked.json()["id"])
+    line = PreAuthorizationItem.all_objects.get(authorization=auth)
+
+    # The insurer cleared 5, the admin typed 10. The one line settles the
+    # request, so the wrong figure is now the request's figure too.
+    admin.post(f"/api/pharmacy/pre-authorization-items/{line.pk}/approve/",
+               {"quantity": 10}, format="json")
+    auth.refresh_from_db()
+    assert (auth.status, auth.amount_approved) == (PreAuthorization.Status.APPROVED,
+                                                   Decimal("125.00"))
+
+    # Counter staff cannot unpick an insurer's answer any more than they can
+    # record one.
+    assert staff.post(
+        f"/api/pharmacy/pre-authorization-items/{line.pk}/reopen/", {},
+        format="json").status_code == 403
+
+    reopened = admin.post(
+        f"/api/pharmacy/pre-authorization-items/{line.pk}/reopen/",
+        {"reason": "Typed 10, they cleared 5."}, format="json")
+    assert reopened.status_code == 200, reopened.content
+
+    # Who undid what is answerable afterwards: the medication and the request
+    # it settled both name the admin who withdrew the answer.
+    trail = admin.get(f"/api/pharmacy/pre-authorizations/{auth.pk}/history/")
+    assert trail.status_code == 200, trail.content
+    rows = trail.json()
+    assert len(rows) == 2
+    assert {r["user"] for r in rows} == {pharmacy["admin"].pk}
+    assert all(r["to_status"] == "requested" for r in rows)
+    assert any("Typed 10, they cleared 5." in r["note"] for r in rows)
+    line.refresh_from_db()
+    auth.refresh_from_db()
+    assert (line.status, line.quantity_approved) == (
+        PreAuthorizationItem.Status.REQUESTED, 0)
+    # The counter reads how often an answer here was withdrawn without going
+    # near the trail.
+    assert auth.reopened_count == 1
+    # The request goes back with it: a corrected line under a stale total
+    # would clear a sale for money nobody agreed to.
+    assert (auth.status, auth.amount_approved) == (PreAuthorization.Status.REQUESTED,
+                                                   Decimal("0.00"))
+
+    right = admin.post(f"/api/pharmacy/pre-authorization-items/{line.pk}/approve/",
+                       {"quantity": 5}, format="json")
+    assert right.status_code == 200, right.content
+    auth.refresh_from_db()
+    assert (auth.status, auth.amount_approved) == (PreAuthorization.Status.APPROVED,
+                                                   Decimal("62.50"))
+
+    # Spent on a sale, the answer is history - the drugs left the shelf on it.
+    sold = staff.post("/api/pharmacy/sales/", {
+        "patient": patient.id, "payment_method": "hmo",
+        "enrollment": enrollment.id, "authorization": auth.pk,
+        "items": [{"item": item.id, "quantity": 5}],
+    }, format="json")
+    assert sold.status_code == 201, sold.content
+    auth.refresh_from_db()
+    assert auth.status == PreAuthorization.Status.USED
+    stuck = admin.post(
+        f"/api/pharmacy/pre-authorization-items/{line.pk}/reopen/", {},
+        format="json")
+    assert stuck.status_code == 400
+    assert "new request" in stuck.content.decode()
+
+
+def test_a_lump_sum_answer_is_reopened_too(pharmacy):
+    """A request with no medications on it is answered as a whole, and that
+    answer is withdrawn the same way."""
+    tenant = pharmacy["tenant"]
+    patient = Patient.all_objects.create(tenant=tenant, first_name="Ngozi",
+                                         last_name="Uche")
+    _hmo, enrollment = _scheme(tenant, patient,
+                               coverage_percent=Decimal("100.00"),
+                               preauth_threshold=Decimal("100.00"))
+    admin = _client(pharmacy["admin"], tenant)
+    auth = PreAuthorization.all_objects.create(
+        tenant=tenant, enrollment=enrollment, hmo=enrollment.hmo,
+        amount=Decimal("500.00"), requested_by=pharmacy["staff"],
+    )
+    auth.approve(code="WRONG-1", amount=Decimal("500.00"))
+
+    undone = admin.post(f"/api/pharmacy/pre-authorizations/{auth.pk}/reopen/",
+                        {"reason": "Wrong scheme quoted."}, format="json")
+    assert undone.status_code == 200, undone.content
+    auth.refresh_from_db()
+    assert (auth.status, auth.amount_approved, auth.code) == (
+        PreAuthorization.Status.REQUESTED, Decimal("0.00"), "")
+    # Whoever raised it hears that the answer they were given no longer stands.
+    told = Notification.all_objects.filter(user=pharmacy["staff"]).latest("id")
+    assert "reopened" in told.title
+    # The withdrawn amount is on the trail, which is the whole point of it -
+    # the request itself no longer carries the figure that was erased.
+    logged = admin.get(f"/api/pharmacy/pre-authorizations/{auth.pk}/history/")
+    assert logged.status_code == 200, logged.content
+    assert logged.json()[0]["from_status"] == "approved"
+    assert "500.00" in logged.json()[0]["note"]
+    assert auth.reopened_count == 1
+
+    auth.approve(code="RIGHT-1", amount=Decimal("400.00"))
+    auth.mark_used()
+    # A spent clearance is not unpicked, and neither is a withdrawn request.
+    assert admin.post(f"/api/pharmacy/pre-authorizations/{auth.pk}/reopen/", {},
+                      format="json").status_code == 400

@@ -168,6 +168,47 @@ const RESOURCES = {
                                         { name: 'approve', label: 'Approve all', adminOnly: true, when: ['submitted'] },
                                         { name: 'pay', label: 'Allocate remittance', ask: 'amount', adminOnly: true, when: ['submitted', 'approved'] },
                                         { name: 'cancel', label: 'Cancel batch', danger: true, when: ['draft', 'submitted', 'approved'] }] },
+  // The counter's customer list and their wallets. A balance is the total of
+  // the ledger below it, so money moves through the actions — never by typing
+  // over the field.
+  'pharmacy-customers':     { title: 'Customers',       group: 'Pharmacy', path: 'customers',                roles: 'staff', search: true,
+                              actions: [{ name: 'top-up', label: 'Top up wallet', ask: 'amount,note', choose: 'method:cash,pos,transfer' },
+                                        { name: 'deduct', label: 'Deduct from wallet', ask: 'amount,note', adminOnly: true, danger: true }] },
+  'pharmacy-wallet':        { title: 'Wallet Ledger',   group: 'Pharmacy', path: 'wallet-transactions',      roles: 'staff', readOnly: true, noLink: true },
+  // Raise a stocktake over a set of items, count them, then apply the gaps.
+  // ``extra: 'count'`` is the counting sheet; ``complete`` writes the
+  // corrections to stock, which is why it sits with the admin.
+  'pharmacy-stock-checks':  { title: 'Stock Checks',    group: 'Pharmacy', path: 'pharmacy/stock-checks',    roles: 'staff', extra: 'count',
+                              actions: [{ name: 'complete', label: 'Apply and close', adminOnly: true, when: ['pending', 'in_progress'] },
+                                        { name: 'cancel', label: 'Abandon count', danger: true, when: ['pending', 'in_progress'] }] },
+  // Stock asked for from the other store. Approving moves it in the same
+  // breath, so the quantity prompt is the sending store's answer.
+  'pharmacy-transfers':     { title: 'Transfers',       group: 'Pharmacy', path: 'pharmacy/transfers',       roles: 'staff',
+                              actions: [{ name: 'approve', label: 'Approve and send', ask: 'quantity', when: ['pending'] },
+                                        { name: 'reject', label: 'Refuse', ask: 'reason', danger: true, when: ['pending'] },
+                                        { name: 'receive', label: 'Confirm received', when: ['approved'] }] },
+  'pharmacy-returns':       { title: 'Returns',         group: 'Pharmacy', path: 'pharmacy/returns',         roles: 'staff', readOnly: true, noLink: true },
+  'pharmacy-dispensing-log':{ title: 'Dispensing Log',  group: 'Pharmacy', path: 'pharmacy/dispensing-log',  roles: 'staff', search: true, readOnly: true, noLink: true },
+  'pharmacy-cashiers':      { title: 'Cashiers',        group: 'Pharmacy', path: 'pharmacy/cashiers',        roles: 'admin', search: true },
+  // The dispenser's basket. Nothing leaves the shelf until ``complete`` —
+  // until then this is an intention to sell, not a sale.
+  // Read-only here: a basket is built at the counter (Dispense -> "Send to a
+  // cashier"), where the prices and the stock are on screen.
+  'pharmacy-requests':      { title: 'Payment Requests', group: 'Pharmacy', path: 'pharmacy/payment-requests', roles: 'staff', search: true, readOnly: true,
+                              actions: [{ name: 'accept', label: 'Take the basket', when: ['pending'] },
+                                        { name: 'reject', label: 'Refuse', ask: 'reason', danger: true, when: ['pending'] },
+                                        { name: 'cancel', label: 'Withdraw', danger: true, when: ['pending', 'accepted'] },
+                                        { name: 'complete', label: 'Turn into a sale', choose: 'payment_method:cash,card,transfer,wallet,hmo,split', when: ['accepted'] }] },
+  'pharmacy-expense-cats':  { title: 'Expense Types',   group: 'Pharmacy', path: 'pharmacy/expense-categories', roles: 'admin', search: true },
+  'pharmacy-expenses':      { title: 'Expenses',        group: 'Pharmacy', path: 'pharmacy/expenses',        roles: 'staff', search: true },
+  // Money owed to a prescriber, raised by a sale. Read is staff-wide; paying
+  // it out is the pharmacy's money leaving, so it is the admin's.
+  'pharmacy-commissions':   { title: 'Prescriber Commissions', group: 'Pharmacy', path: 'prescriptions/commissions', roles: 'staff', readOnly: true,
+                              actions: [{ name: 'pay', label: 'Mark paid', adminOnly: true, when: ['pending'] }] },
+  'pharmacy-payouts':       { title: 'Consultation Payouts',   group: 'Pharmacy', path: 'prescriptions/consultation-payouts', roles: 'staff', readOnly: true,
+                              actions: [{ name: 'pay', label: 'Mark paid', adminOnly: true, when: ['pending'] }] },
+  'pharmacy-commission-configs': { title: 'Staff Commission Rates', group: 'Pharmacy', path: 'reports/commission-configs', roles: 'admin' },
+  'branches':          { title: 'Branches',           group: 'Pharmacy', roles: 'admin', search: true },
   'patients':          { title: 'Patients',           group: 'Clinical', roles: 'clinical', search: true, history: true,
                           fileFrom: ['consultations', 'case-reports', 'prescriptions', 'lab-results', 'appointments'],
                           actions: [{ name: 'merge', label: 'Merge a duplicate into this record', ask: 'source', adminOnly: true }] },
@@ -204,7 +245,8 @@ const rdetail = (slug, suffix) => slug.startsWith('tenants-')
 // M2M PK-list fields (catalog serializers). OPTIONS metadata can't tell
 // many-related from single-related, so name them.
 // ponytail: hardcoded set; derive from /api/schema/ if the model graph grows.
-const M2M_FIELDS = new Set(['symptoms', 'medications', 'procedures', 'lab_tests', 'specialties', 'articles']);
+// ``items`` is the stock check's write-only list of what to count.
+const M2M_FIELDS = new Set(['symptoms', 'medications', 'procedures', 'lab_tests', 'specialties', 'articles', 'items']);
 
 // Fields whose blank or zero means something the generated label cannot say.
 // DRF sends help_text when the model carries one; this fills in where it
@@ -268,6 +310,20 @@ const PLATFORM = [
   { key: 'insurance',     label: 'Insurance Stats',    path: '/api/analytics/platform/insurance/', dates: true },
   { key: 'appointments',  label: 'Appointment Stats',  path: '/api/analytics/platform/appointments/', dates: true },
   { key: 'consultations', label: 'Visit Stats',        path: '/api/analytics/platform/consultations/', dates: true },
+];
+
+/* The trading reports (/api/reports/*). Kept out of ANALYTICS because the API
+   admits pharmacy staff only — a nurse opening the analytics index would get a
+   page of 403s. ``ym`` is the monthly report's year/month pair; everything else
+   takes the same from/to as the rest. */
+const PHARMACY_REPORTS = [
+  { key: 'sales',      label: 'Sales',            path: '/api/reports/sales/', dates: true },
+  { key: 'profit',     label: 'Profit',           path: '/api/reports/profit/', dates: true },
+  { key: 'monthly',    label: 'Month by Day',     path: '/api/reports/monthly/', ym: true },
+  { key: 'inventory',  label: 'Stock Valuation',  path: '/api/reports/inventory/' },
+  { key: 'customers',  label: 'Customers & Debt', path: '/api/reports/customers/' },
+  { key: 'cashiers',   label: 'Cashier Takings',  path: '/api/reports/cashier-sales/', dates: true },
+  { key: 'staff',      label: 'Staff Performance', path: '/api/reports/staff-performance/', dates: true },
 ];
 
 /* ----------------------------------------------------------------- layout */
@@ -339,6 +395,7 @@ function navHtml() {
     html += navGroup('Pharmacy',
       `<a href="#/pharmacy" data-route="/pharmacy">${ico('pill')}Counter</a>` +
       `<a href="#/pharmacy/sell" data-route="/pharmacy/sell">${ico('pill')}Dispense</a>` +
+      `<a href="#/trading" data-route="/trading">${ico('chart')}Trading Reports</a>` +
       groups.Pharmacy.join(''));
   }
   const clinical = (isClinicalStaff() ? `<a href="#/clinical" data-route="/clinical">${ico('activity')}Ward</a>` : '')
@@ -350,7 +407,9 @@ function navHtml() {
   if (groups.Admin?.length) html += navGroup('Admin', groups.Admin.join(''));
   // The only route the sidebar did not reach: the topbar badge opens it, which
   // is not obvious on a phone where the badge is a username and nothing else.
-  html += navGroup('Account', `<a href="#/profile" data-route="/profile">${ico('users')}Profile</a>`);
+  html += navGroup('Account', `<a href="#/profile" data-route="/profile">${ico('users')}Profile</a>`
+    + (PHARMACY_STAFF_ROLES.has(ME?.role)
+      ? `<a href="#/notifications" data-route="/notifications">${ico('flag')}Notifications</a>` : ''));
   return html;
 }
 
@@ -377,6 +436,7 @@ async function ensureChrome() {
     location.reload();
   } : null;
   $('#user-badge').textContent = `${ME.phone || ME.username || 'me'} · ${ME.role}`;
+  refreshBell();
   $('#sidebar').innerHTML = navHtml();
   const route = location.hash.slice(1) || '/';
   for (const a of document.querySelectorAll('#sidebar a')) {
@@ -1157,10 +1217,17 @@ async function viewDetail(slug, id) {
         <div id="rx-group"><p class="loading">Loading…</p></div></div>` : ''}
       ${res.history ? '<div class="card"><h3>Clinical history</h3><div id="rec-history"><p class="loading">Loading…</p></div></div>' : ''}
       ${res.extra === 'purchase' ? purchaseReceiveHtml(obj) : ''}
-      ${res.extra === 'preauth' ? preauthDecisionHtml(obj) : ''}`);
+      ${res.extra === 'count' ? stockCountHtml(obj) : ''}
+      ${res.extra === 'preauth' ? preauthItemsHtml(obj) + preauthDecisionHtml(obj)
+        + preauthTrailHtml() : ''}`);
     if (res.receipt) $('#receipt').onclick = () => printReceipt(id);
     if (res.extra === 'purchase') wirePurchaseReceive(id, () => viewDetail(slug, id));
-    if (res.extra === 'preauth') wirePreauthDecision(slug, id, () => viewDetail(slug, id));
+    if (res.extra === 'count') wireStockCount(id, () => viewDetail(slug, id));
+    if (res.extra === 'preauth') {
+      wirePreauthItems(() => viewDetail(slug, id));
+      wirePreauthDecision(slug, id, () => viewDetail(slug, id));
+      loadPreauthTrail(id);
+    }
     for (const b of document.querySelectorAll('[data-pa]')) {
       b.onclick = async () => {
         const body = {};
@@ -1809,7 +1876,9 @@ async function viewAnalytics(registry, prefix, key) {
     let dash = '';
     try { dash = renderData(await Api.get(registry[0].path)); }
     catch (e) { dash = `<p class="err">${esc(e.message)}</p>`; }
-    return render(statIndex(prefix === '/platform' ? 'Platform Analytics' : 'Tenant Analytics', registry, prefix) +
+    const indexTitle = prefix === '/platform' ? 'Platform Analytics'
+      : prefix === '/trading' ? 'Trading Reports' : 'Tenant Analytics';
+    return render(statIndex(indexTitle, registry, prefix) +
       `<h3>${esc(registry[0].label)}</h3>` + dash);
   }
   const m = registry.find((x) => x.key === key);
@@ -1817,6 +1886,11 @@ async function viewAnalytics(registry, prefix, key) {
   const controls = [];
   if (m.dates) controls.push('<label>From <input type="date" name="from"></label>', '<label>To <input type="date" name="to"></label>');
   if (m.days) controls.push('<label>Days <input type="number" name="days" min="1" value="30"></label>');
+  if (m.ym) {
+    const now = new Date();
+    controls.push(`<label>Year <input type="number" name="year" min="2000" value="${now.getFullYear()}"></label>`,
+                  `<label>Month <input type="number" name="month" min="1" max="12" value="${now.getMonth() + 1}"></label>`);
+  }
   render(`<div class="page-head"><h2>${esc(m.label)}</h2>
       <a class="btn ghost" href="#${prefix}">&larr; All metrics</a></div>
     <form id="f" class="toolbar">${controls.join('')}
@@ -1827,7 +1901,7 @@ async function viewAnalytics(registry, prefix, key) {
   const params = () => {
     const fd = new FormData($('#f'));
     const q = {};
-    for (const k of ['from', 'to', 'days']) if (fd.get(k)) q[k] = fd.get(k);
+    for (const k of ['from', 'to', 'days', 'year', 'month']) if (fd.get(k)) q[k] = fd.get(k);
     return q;
   };
   const load = async () => {
@@ -2090,6 +2164,7 @@ async function viewSell() {
           <select name="authorization">${authOptions()}</select></label>
         <div class="actions">
           <button type="button" class="btn ghost" id="ask-auth">Ask the insurer</button>
+          <button type="button" class="btn ghost" id="to-cashier">Send to a cashier</button>
           <button class="btn">Complete sale</button></div>
       </form>`);
 
@@ -2160,13 +2235,35 @@ async function viewSell() {
     // itself — an approval for more than is billed still covers the sale.
     $('#ask-auth').onclick = async () => {
       if (!schemeId) return toast('Pick the scheme membership first.', true);
-      const amount = basket.reduce(
-        (a, b) => a + Math.max(b.price * b.quantity - b.discount, 0), 0);
+      const items = basket.map((b) => ({
+        item: b.item, quantity: b.quantity,
+        amount: Math.max(b.price * b.quantity - b.discount, 0),
+      }));
+      const amount = items.reduce((a, b) => a + b.amount, 0);
       if (!amount) return toast('Add the items first — the insurer is asked for a figure.', true);
       try {
+        // Itemised: the insurer answers drug by drug, so a refusal on one
+        // medication does not cost the pharmacy the rest of the basket.
         const auth = await Api.post('/api/pharmacy/pre-authorizations/',
-                                    { enrollment: Number(schemeId), amount });
+                                    { enrollment: Number(schemeId), amount, items });
         toast(`Requested ${auth.reference} — it appears above once the insurer answers.`);
+      } catch (err) { toast(err.message, true); }
+    };
+
+    // Where the dispenser doesn't hold the till: the basket goes to whoever
+    // does, and nothing leaves the shelf until the cashier completes it.
+    $('#to-cashier').onclick = async () => {
+      if (!basket.length) return toast('Add at least one item.', true);
+      try {
+        const req = await Api.post('/api/pharmacy/payment-requests/', {
+          buyer_name: patient ? patient.full_name : '',
+          items: basket.map((b) => ({
+            item: b.item, name: b.name, quantity: b.quantity,
+            unit_price: b.price.toFixed(2),
+          })),
+        });
+        toast(`Request ${req.reference} is with the cashiers.`);
+        location.hash = `#/r/pharmacy-requests/${req.id}`;
       } catch (err) { toast(err.message, true); }
     };
 
@@ -2200,12 +2297,98 @@ async function viewSell() {
   draw();
 }
 
+/* The ordered medications on one request, each with the insurer's answer.
+   Everyone sees the answers — that is the feedback the counter dispenses on —
+   but only the admin gets the buttons, because only they may record a decision. */
+function preauthItemsHtml(auth) {
+  const items = auth.items || [];
+  if (!items.length) return '';
+  const decides = isPharmacyAdmin() && auth.status === 'requested';
+  // A wrong answer is undone rather than lived with, right up until the
+  // clearance is spent on a sale.
+  const reopens = isPharmacyAdmin()
+    && auth.status !== 'used' && auth.status !== 'cancelled';
+  const row = (it) => `<tr>
+    <td>${esc(it.item_name || it.item)}</td><td>${it.quantity}</td>
+    <td>${money(it.amount)}</td>
+    <td>${it.status === 'requested' ? 'Awaiting the insurer'
+      : `${esc(it.status)}${it.status === 'approved'
+        ? ` · ${it.quantity_approved} · ${money(it.amount_approved)}` : ''}${
+        it.reason ? ` · ${esc(it.reason)}` : ''}`}</td>
+    ${decides || reopens ? `<td>${it.status !== 'requested'
+      ? (reopens ? `<input name="reason" maxlength="255" data-for="${it.id}"
+             aria-label="Reason" autocomplete="off" placeholder="Reason (optional)">
+         <button class="btn danger" data-item="${it.id}" data-decide="reopen">Reopen</button>`
+        : '')
+      : !decides ? ''
+      : `<input name="quantity" type="number" step="1" min="1" max="${it.quantity}"
+             value="${it.quantity}" data-for="${it.id}" aria-label="Quantity authorised">
+         <input name="amount" type="number" step="0.01" min="0" value=""
+             data-for="${it.id}" aria-label="Amount authorised"
+             placeholder="${esc(it.amount)}">
+         <input name="reason" maxlength="255" data-for="${it.id}" aria-label="Reason"
+             autocomplete="off" placeholder="Reason (a refusal)">
+         <button class="btn" data-item="${it.id}" data-decide="approve">Approve</button>
+         <button class="btn danger" data-item="${it.id}" data-decide="decline">Decline</button>`}</td>` : ''}
+  </tr>`;
+  return `<div class="card"><h3>Ordered medications</h3>
+    <table><thead><tr><th>Medication</th><th>Qty</th><th>Asked</th><th>Insurer</th>
+      ${decides || reopens ? '<th></th>' : ''}</tr></thead>
+      <tbody>${items.map(row).join('')}</tbody></table>
+    <p class="muted">The insurer answers each medication on its own, and may
+      clear less than was asked for. The counter dispenses up to the quantity
+      cleared; a declined medication is refused at the till.</p>
+  </div>`;
+}
+
+function wirePreauthItems(reload) {
+  for (const b of document.querySelectorAll('[data-item]')) {
+    b.onclick = async (e) => {
+      e.preventDefault();
+      const id = b.dataset.item;
+      const field = (name) => document.querySelector(`[name="${name}"][data-for="${id}"]`);
+      const approving = b.dataset.decide === 'approve';
+      const body = {};
+      if (approving) {
+        // Blank stands behind the whole ask, which is the API default. A cut
+        // quantity with no amount typed bills pro rata, server-side.
+        if (field('quantity').value) body.quantity = Number(field('quantity').value);
+        if (field('amount').value) body.amount = field('amount').value;
+      } else if (field('reason')?.value.trim()) {
+        body.reason = field('reason').value.trim();
+      }
+      try {
+        const r = await Api.post(
+          `/api/pharmacy/pre-authorization-items/${id}/${b.dataset.decide}/`, body);
+        toast(r?.message || 'Done.');
+        reload();
+      } catch (err) { toast(err.message, true); }
+    };
+  }
+}
+
 /* Recording what the insurer said about one pre-authorization request.
    Rendered under its detail page, admin only — the answer is what the pharmacy
    is later allowed to bill against, so the API refuses anyone else. A request
    already decided has nothing left to record. */
 function preauthDecisionHtml(auth) {
-  if (auth.status !== 'requested' || !isPharmacyAdmin()) return '';
+  if (!isPharmacyAdmin()) return '';
+  // An itemised request is answered drug by drug and settles itself once every
+  // medication is decided — answering it twice over would contradict that.
+  if ((auth.items || []).length) return '';
+  // An answer typed wrong is withdrawn and recorded again, until it has been
+  // spent on a sale.
+  if (auth.status === 'approved' || auth.status === 'declined') {
+    return `<div class="card"><h3>The insurer's answer</h3>
+      <p class="muted">Recorded wrongly? Withdraw it and record it again.</p>
+      <form id="preauth-decide" class="form-card">
+        <label>Reason<input name="reason" maxlength="255" autocomplete="off"></label>
+        <div class="actions">
+          <button class="btn danger" data-decide="reopen">Reopen</button>
+        </div>
+      </form></div>`;
+  }
+  if (auth.status !== 'requested') return '';
   return `<div class="card"><h3>Record the insurer's answer</h3>
     <form id="preauth-decide" class="form-card">
       <label>Their code<input name="code" maxlength="60" autocomplete="off"></label>
@@ -2251,6 +2434,24 @@ function wirePreauthDecision(slug, id, reload) {
   }
 }
 
+/* Who withdrew an answer on this request, and why. An answer is typed by
+   hand, and the record itself keeps only the latest one - so when the insurer
+   disputes what they were told, this is the only place that remembers. */
+function preauthTrailHtml() {
+  return `<div class="card"><h3>Withdrawn answers</h3>
+    <div id="preauth-trail"><p class="loading">Loading…</p></div></div>`;
+}
+
+async function loadPreauthTrail(id) {
+  const box = $('#preauth-trail');
+  if (!box) return;
+  try {
+    const rows = await Api.get(`/api/pharmacy/pre-authorizations/${id}/history/`);
+    box.innerHTML = rows.length ? tableHtml(rows)
+      : '<p class="muted">No answer on this request has been withdrawn.</p>';
+  } catch (e) { box.innerHTML = `<p class="err">${esc(e.message)}</p>`; }
+}
+
 /* Receiving a delivery against a purchase order line. Rendered under the
    order's detail page, where the outstanding quantities are already listed. */
 function purchaseReceiveHtml(order) {
@@ -2283,6 +2484,54 @@ function wirePurchaseReceive(orderId, reload) {
     try {
       const r = await Api.post(`/api/pharmacy/purchase-orders/${orderId}/receive/`, body);
       toast(r?.message || 'Received.');
+      reload();
+    } catch (err) { toast(err.message, true); }
+  };
+}
+
+/* The counting sheet. Expected is what the shelf said when the line was
+   raised — the server snapshots it, so a sale mid-count doesn't move the
+   target — and the counter fills in what was actually there.
+
+   ponytail: counts the lines the check was raised over. Finding an item the
+   sheet doesn't list means raising it on the check first; add an item picker
+   here if that turns out to be the common case rather than the exception. */
+function stockCountHtml(check) {
+  const lines = check.lines || [];
+  if (!lines.length || ['completed', 'cancelled'].includes(check.status)) return '';
+  return `<div class="card"><h3>Count</h3>
+    <form id="count" class="form-card">
+      <div class="table-wrap"><table><thead><tr>
+        <th>Item</th><th>Expected</th><th>Counted</th><th>Note</th></tr></thead>
+        <tbody>${lines.map((l) => `<tr>
+          <td>${esc(l.item_name || `#${l.item}`)}</td>
+          <td>${l.expected_quantity ?? '—'}</td>
+          <td><input type="number" min="0" data-item="${l.item}"
+                     value="${l.actual_quantity ?? ''}" style="width:6rem"></td>
+          <td><input data-note="${l.item}" value="${esc(l.notes || '')}"></td>
+        </tr>`).join('')}</tbody></table></div>
+      <div class="actions"><button class="btn">Save count</button></div>
+    </form></div>`;
+}
+
+function wireStockCount(checkId, reload) {
+  const form = $('#count');
+  if (!form) return;
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    // Only the lines someone actually put a number against: a blank box is
+    // "not counted yet", not a count of zero.
+    const rows = [...form.querySelectorAll('[data-item]')]
+      .filter((i) => i.value !== '')
+      .map((i) => ({
+        item: Number(i.dataset.item),
+        quantity: Number(i.value),
+        notes: form.querySelector(`[data-note="${i.dataset.item}"]`).value,
+      }));
+    if (!rows.length) return toast('Nothing counted yet.', true);
+    try {
+      const r = await Api.post(`/api/pharmacy/stock-checks/${checkId}/count/`, rows);
+      toast(r?.message || 'Counted.');
       reload();
     } catch (err) { toast(err.message, true); }
   };
@@ -2410,6 +2659,67 @@ async function viewPortal() {
   }
 }
 
+/* What the app is telling this user: low stock, an expiry, an insurer's answer
+   to a request they raised. The API scopes notifications to the caller and
+   admits pharmacy staff only, so everyone else keeps a hidden bell rather than
+   a 403 on every page. */
+let bellTimer = null;
+
+async function refreshBell() {
+  const bell = $('#bell');
+  bell.hidden = !PHARMACY_STAFF_ROLES.has(ME?.role);
+  if (bell.hidden) return;
+  // ponytail: one poll for the whole session, cleared on reload. Swap for a
+  // websocket if a minute of staleness ever matters.
+  if (!bellTimer) bellTimer = setInterval(refreshBell, 60000);
+  try {
+    const { count } = await Api.list('/api/pos/notifications/',
+                                     { is_read: false, page_size: 1 });
+    bell.textContent = count ? `\u{1F514} ${count}` : '\u{1F514}';
+    bell.classList.toggle('unread', !!count);
+  } catch { bell.hidden = true; }
+}
+
+function notificationsHtml(rows) {
+  if (!rows.length) return '<p class="muted">Nothing waiting.</p>';
+  return rows.map((n) => `<div class="card${n.is_read ? '' : ' unread'}">
+    <h3>${esc(n.title)}</h3>
+    ${n.message ? `<p>${esc(n.message)}</p>` : ''}
+    <p class="muted">${esc(n.priority)} · ${esc(n.created_at)}</p>
+    ${n.is_read ? '' : `<button class="ghost mark-read" data-id="${n.id}">Mark read</button>`}
+    </div>`).join('');
+}
+
+async function viewNotifications() {
+  if (!await ensureChrome()) return;
+  render(`<h2>Notifications</h2>
+    <div class="toolbar"><button id="read-all" class="ghost">Mark all read</button></div>
+    <div id="out"><p class="loading">Loading…</p></div>`);
+  const load = async () => {
+    try {
+      const { rows } = await Api.list('/api/pos/notifications/');
+      $('#out').innerHTML = notificationsHtml(rows);
+      for (const b of $('#out').querySelectorAll('.mark-read')) {
+        b.onclick = async () => {
+          try {
+            await Api.patch(`/api/pos/notifications/${b.dataset.id}/`, { is_read: true });
+            await refreshBell();
+            load();
+          } catch (err) { toast(err.message, true); }
+        };
+      }
+    } catch (err) { $('#out').innerHTML = `<p class="err">${esc(err.message)}</p>`; }
+  };
+  $('#read-all').onclick = async () => {
+    try {
+      await Api.post('/api/pos/notifications/read-all/');
+      await refreshBell();
+      load();
+    } catch (err) { toast(err.message, true); }
+  };
+  load();
+}
+
 /* ----------------------------------------------------------------- router */
 
 const routes = [
@@ -2427,6 +2737,7 @@ const routes = [
   [/^\/differential$/, viewDifferential],
   [/^\/interaction-check$/, viewInteractionCheck],
   [/^\/notifiable$/, viewNotifiable],
+  [/^\/notifications$/, viewNotifications],
   [/^\/graph\/([a-z]+)\/(\d+)$/, (m) => viewGraph(m[1], m[2])],
   [/^\/clinical$/, viewClinical],
   [/^\/portal$/, viewPortal],
@@ -2434,6 +2745,7 @@ const routes = [
   [/^\/pharmacy\/sell$/, viewSell],
   [/^\/analytics(?:\/([a-z-]+))?$/, (m) => viewAnalytics(ANALYTICS, '/analytics', m[1])],
   [/^\/platform(?:\/([a-z-]+))?$/, (m) => viewAnalytics(PLATFORM, '/platform', m[1])],
+  [/^\/trading(?:\/([a-z-]+))?$/, (m) => viewAnalytics(PHARMACY_REPORTS, '/trading', m[1])],
 ];
 
 /* Where a role starts work: the platform owner on cross-tenant analytics, the

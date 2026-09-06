@@ -19,6 +19,7 @@ from .views import (
     HMOViewSet,
     HmoEnrollmentViewSet,
     HmoItemRuleViewSet,
+    PreAuthorizationItemViewSet,
     PreAuthorizationViewSet,
 )
 
@@ -30,6 +31,8 @@ router.register("pharmacy/item-rules", HmoItemRuleViewSet,
                 basename="pharmacy-item-rule")
 router.register("pharmacy/pre-authorizations", PreAuthorizationViewSet,
                 basename="pharmacy-preauth")
+router.register("pharmacy/pre-authorization-items", PreAuthorizationItemViewSet,
+                basename="pharmacy-preauth-item")
 router.register("pharmacy/claims", ClaimViewSet, basename="pharmacy-claim")
 router.register("pharmacy/claim-batches", ClaimBatchViewSet,
                 basename="pharmacy-claim-batch")

@@ -72,6 +72,8 @@ a:hover { text-decoration: underline; }
   padding: 3px 12px; font-size: 13px; border: 1px solid rgba(255,255,255,.18);
 }
 a.badge:hover { background: rgba(255,255,255,.3); text-decoration: none; }
+.badge.unread { background: var(--danger, #c0392b); border-color: transparent; }
+.card.unread { border-left: 3px solid var(--danger, #c0392b); }
 .badge.clickable { cursor: pointer; }
 .badge.clickable:hover { background: rgba(255,255,255,.3); }
 

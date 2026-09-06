@@ -6,7 +6,8 @@ a client type an amount an insurer owes.
 """
 from decimal import Decimal
 
-from django.db.models import Count, Sum
+from django.contrib.contenttypes.models import ContentType
+from django.db.models import Count, Q, Sum
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -18,6 +19,8 @@ from apps.accounts.permissions import (
     IsTenantMember,
     is_pharmacy_admin,
 )
+from apps.governance.models import AuditLog
+from apps.governance.serializers import AuditLogSerializer
 from apps.inventory.views import PharmacyViewSet, body
 from config.ranges import apply_range as _apply_range, date_range as _range
 from config.responses import success
@@ -29,6 +32,7 @@ from .models import (
     HmoEnrollment,
     HmoItemRule,
     PreAuthorization,
+    PreAuthorizationItem,
 )
 from .serializers import (
     AddClaimsSerializer,
@@ -40,6 +44,8 @@ from .serializers import (
     HmoEnrollmentSerializer,
     HmoItemRuleSerializer,
     PreAuthDecisionSerializer,
+    PreAuthItemDecisionSerializer,
+    PreAuthorizationItemSerializer,
     PreAuthorizationSerializer,
 )
 
@@ -93,6 +99,10 @@ class PreAuthorizationViewSet(PharmacyViewSet):
             "hmo", "enrollment", "enrollment__patient", "sale"
         )
 
+    def perform_create(self, serializer):
+        """The insurer's answer goes back to whoever asked."""
+        serializer.save(requested_by=self.request.user)
+
     def _transition(self, call, message):
         auth = self.get_object()
         try:
@@ -127,12 +137,95 @@ class PreAuthorizationViewSet(PharmacyViewSet):
         return self._transition(lambda a: a.decline(data.get("reason", "")),
                                 "Authorisation declined.")
 
+    @action(detail=True, methods=["post"], url_path="reopen")
+    def reopen(self, request, pk=None):
+        """Undo a wrong answer so the right one can be recorded."""
+        self._require_admin(request)
+        data = body(PreAuthDecisionSerializer, request)
+        return self._transition(
+            lambda a: a.reopen(data.get("reason", ""), by=request.user),
+            "Answer withdrawn - record it again.")
+
+    @action(detail=True, methods=["get"], url_path="history")
+    def history(self, request, pk=None):
+        """Who withdrew an answer on this request, and when. Newest first.
+
+        The request and its medications share one trail: an answer undone on a
+        medication is what put the request itself back to unanswered, so a
+        dispute over what the insurer was told reads both in one place.
+        """
+        auth = self.get_object()
+        logs = AuditLog.objects.filter(
+            Q(content_type=ContentType.objects.get_for_model(PreAuthorization),
+              object_id=auth.pk)
+            | Q(content_type=ContentType.objects.get_for_model(
+                    PreAuthorizationItem),
+                object_id__in=auth.items.values_list("pk", flat=True))
+        )
+        return Response(AuditLogSerializer(logs, many=True).data)
+
     @action(detail=True, methods=["post"], url_path="cancel")
     def cancel(self, request, pk=None):
         """Withdraw the request - the sale was not made after all."""
         data = body(PreAuthDecisionSerializer, request)
         return self._transition(lambda a: a.cancel(data.get("reason", "")),
                                 "Request withdrawn.")
+
+
+class PreAuthorizationItemViewSet(mixins.ListModelMixin,
+                                  mixins.RetrieveModelMixin,
+                                  viewsets.GenericViewSet):
+    """The insurer's answer to one ordered medication on a request.
+
+    Lines are raised with the request itself, so there is no create here. Only
+    the admin records a decision — the same rule the request as a whole follows,
+    because a cleared drug is money the pharmacy may bill for.
+    """
+
+    serializer_class = PreAuthorizationItemSerializer
+    permission_classes = [IsTenantMember, IsPharmacyStaff]
+    filterset_fields = ("authorization", "status", "item")
+    ordering_fields = ("created_at",)
+
+    def get_queryset(self):
+        return PreAuthorizationItem.objects.select_related("item", "authorization")
+
+    def _decide(self, request, call, message):
+        if not is_pharmacy_admin(request.user):
+            raise PermissionDenied(
+                "Only the pharmacy admin can record an insurer's decision."
+            )
+        line = self.get_object()
+        try:
+            call(line)
+        except ValueError as exc:
+            raise ValidationError({"status": str(exc)}) from exc
+        return success(message, PreAuthorizationItemSerializer(line).data)
+
+    @action(detail=True, methods=["post"], url_path="approve")
+    def approve(self, request, pk=None):
+        """Clear this medication, for all or part of what was asked for it."""
+        data = body(PreAuthItemDecisionSerializer, request)
+        return self._decide(
+            request,
+            lambda l: l.approve(data.get("amount"), data.get("quantity")),
+            "Medication authorised.")
+
+    @action(detail=True, methods=["post"], url_path="decline")
+    def decline(self, request, pk=None):
+        """Refuse this medication and say why — it is not dispensed on cover."""
+        data = body(PreAuthItemDecisionSerializer, request)
+        return self._decide(request, lambda l: l.decline(data.get("reason", "")),
+                            "Medication declined.")
+
+    @action(detail=True, methods=["post"], url_path="reopen")
+    def reopen(self, request, pk=None):
+        """Undo a wrong answer to this medication so it can be recorded again."""
+        data = body(PreAuthItemDecisionSerializer, request)
+        return self._decide(
+            request,
+            lambda l: l.reopen(data.get("reason", ""), by=request.user),
+            "Answer withdrawn - record it again.")
 
 
 class HmoEnrollmentViewSet(PharmacyViewSet):

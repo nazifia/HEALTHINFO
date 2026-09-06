@@ -257,4 +257,58 @@ void main() {
             mine: true, cashier: true),
         isEmpty);
   });
+
+  test('an authorisation asks for the basket, drug by drug', () {
+    final body = preauthBody(
+      lines: [
+        const BasketLine(
+            itemId: 3, name: 'Amoxicillin', unitPrice: 100, quantity: 30),
+        const BasketLine(
+            itemId: 4, name: 'Syrup', unitPrice: 500, quantity: 2, discount: 200),
+        // Given away — the insurer is asked for a positive figure only, and
+        // the API refuses a zero line.
+        const BasketLine(
+            itemId: 5, name: 'Sample', unitPrice: 50, quantity: 1, discount: 50),
+      ],
+      enrollmentId: 8,
+    );
+    expect(body['enrollment'], 8);
+    expect(body['amount'], '3800.00');
+    expect(body['items'], [
+      {'item': 3, 'quantity': 30, 'amount': '3000.00'},
+      {'item': 4, 'quantity': 2, 'amount': '800.00'},
+    ]);
+  });
+
+  test('only an insured sale spends a clearance', () {
+    final lines = [
+      const BasketLine(itemId: 7, name: 'ORS', unitPrice: 150, quantity: 3),
+    ];
+    final cash = saleBody(
+        lines: lines, paymentMethod: 'cash', enrollmentId: 9, authorizationId: 2);
+    expect(cash.containsKey('authorization'), isFalse);
+    final insured = saleBody(
+        lines: lines, paymentMethod: 'hmo', enrollmentId: 9, authorizationId: 2);
+    expect(insured['authorization'], 2);
+  });
+
+  test('only the admin answers a request, and never an itemised one', () {
+    // Staff raise and withdraw; the answer is the admin's to record.
+    expect(preauthActions('requested', 'pharmacist'), ['cancel']);
+    expect(preauthActions('requested', 'tenant_admin'),
+        ['approve', 'decline', 'cancel']);
+    // Itemised: it settles itself once every medication is decided.
+    expect(preauthActions('requested', 'tenant_admin', itemised: true),
+        ['cancel']);
+    // An approval is still withdrawable until it is spent; a spent one is not.
+    expect(preauthActions('approved', 'tenant_admin'), ['reopen', 'cancel']);
+    expect(preauthActions('used', 'tenant_admin'), isEmpty);
+    // An answer typed wrong is withdrawn and recorded again. Only the admin
+    // may, and only where the whole request carries the answer.
+    expect(preauthActions('declined', 'tenant_admin'), ['reopen']);
+    expect(preauthActions('declined', 'pharmacist'), isEmpty);
+    expect(preauthActions('approved', 'tenant_admin', itemised: true), ['cancel']);
+    expect(preauthActions('cancelled', 'tenant_admin'), isEmpty);
+    expect(preauthActions('requested', 'cashier'), isEmpty);
+  });
 }

@@ -365,13 +365,33 @@ class Sale(TenantOwnedModel):
         nothing is asked for; above it the sale must carry an approval that is
         this member's, still good, and large enough to cover what is billed.
         """
+        auth = self.authorization
+        if auth is not None:
+            # An itemised request is answered drug by drug: a refused drug is
+            # not dispensed under cover, and a drug cleared for 20 tablets does
+            # not cover 30, whatever the request as a whole says.
+            limits = auth.item_limits
+            if limits:
+                taken, names = {}, {}
+                for line in SaleItem.all_objects.filter(sale=self,
+                                                        item_id__in=limits):
+                    taken[line.item_id] = taken.get(line.item_id, 0) + line.quantity
+                    names[line.item_id] = line.name
+                over = [
+                    f"{names[i]} (declined)" if not limits[i]
+                    else f"{names[i]} ({limits[i]} of {q} cleared)"
+                    for i, q in taken.items() if q > limits[i]
+                ]
+                if over:
+                    return (f"The insurer did not clear {', '.join(over)} on "
+                            f"{auth.reference}. Take that off the sale — the "
+                            f"rest of the basket is cleared.")
         if not self.enrollment_id:
             return ""
         hmo = self.enrollment.hmo
         threshold = hmo.preauth_threshold
         if not threshold or self.hmo_payable <= threshold:
             return ""
-        auth = self.authorization
         if auth is None:
             return (f"{hmo.name} authorises any covered sale above {threshold}. "
                     f"This one bills them {self.hmo_payable} — raise a "
