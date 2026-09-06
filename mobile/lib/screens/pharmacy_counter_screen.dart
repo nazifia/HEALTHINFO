@@ -28,8 +28,9 @@ class _CounterData {
   final Map<String, dynamic> valuation;
   final List<Map<String, dynamic>> reorder;
   final List<Map<String, dynamic>> expiring;
-  const _CounterData(
-      this.sales, this.claims, this.valuation, this.reorder, this.expiring);
+  final Map<String, dynamic> scripts;
+  const _CounterData(this.sales, this.claims, this.valuation, this.reorder,
+      this.expiring, this.scripts);
 }
 
 class _PharmacyCounterScreenState extends State<PharmacyCounterScreen> {
@@ -105,6 +106,8 @@ class _PharmacyCounterScreenState extends State<PharmacyCounterScreen> {
       obj('/api/pharmacy/items/valuation/'),
       rows('/api/pharmacy/items/low-stock/'),
       rows('/api/pharmacy/batches/expiring/', {'days': '60'}),
+      // The count alone, not the scripts: a badge must not cost a page.
+      obj('/api/prescriptions/scripts/pending-count/'),
     ]);
     return _CounterData(
       results[0] as Map<String, dynamic>,
@@ -112,6 +115,7 @@ class _PharmacyCounterScreenState extends State<PharmacyCounterScreen> {
       results[2] as Map<String, dynamic>,
       results[3] as List<Map<String, dynamic>>,
       results[4] as List<Map<String, dynamic>>,
+      results[5] as Map<String, dynamic>,
     );
   }
 
@@ -185,9 +189,14 @@ class _PharmacyCounterScreenState extends State<PharmacyCounterScreen> {
                   subtitle: 'Today, ${_today()}',
                   color: EnhancedTheme.primaryTeal,
                 ),
-                // One row of six: KpiRow lays tiles two to a line, so six fill
-                // three even lines where two rows of three left a gap.
+                // KpiRow lays tiles two to a line. Scripts to fill leads: it
+                // is the only tile that is work waiting rather than a figure.
                 KpiRow(tiles: [
+                  KpiTile(
+                      icon: Icons.description_outlined,
+                      label: 'Scripts to fill',
+                      value: units(d.scripts['total'] ?? 0),
+                      color: EnhancedTheme.successGreen),
                   KpiTile(
                       icon: Icons.receipt_long_outlined,
                       label: 'Sales today',

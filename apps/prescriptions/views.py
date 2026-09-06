@@ -7,6 +7,7 @@ transition that settles one.
 """
 from decimal import Decimal
 
+import django_filters
 from django.db import transaction
 from django.db.models import Count, Q, Sum
 from rest_framework import mixins, viewsets
@@ -49,6 +50,39 @@ from .serializers import (
 )
 
 ZERO = Decimal("0.00")
+
+# What a dispenser can still act on. Cancelled and fully dispensed scripts are
+# history; these two are work.
+OPEN = (Prescription.Status.PENDING, Prescription.Status.PARTIAL)
+OPEN_ORDERS = (DrugOrder.Status.PRESCRIBED, DrugOrder.Status.PARTIAL)
+
+
+def _is_true(value):
+    return (value or "").strip().lower() in ("1", "true", "yes")
+
+
+class PrescriptionFilter(django_filters.FilterSet):
+    """Script filters, plus the one the counter actually asks for.
+
+    "Is this still owed?" spans two states, so ``?status=undispensed`` and
+    ``?undispensed=1`` both mean pending or part-filled. Without the alias a
+    client has to ask twice and stitch the pages together.
+    """
+
+    status = django_filters.CharFilter(method="filter_status")
+    undispensed = django_filters.BooleanFilter(method="filter_open")
+
+    class Meta:
+        model = Prescription
+        fields = ("status", "source", "prescriber", "customer", "patient", "branch")
+
+    def filter_status(self, qs, name, value):
+        if value == "undispensed":
+            return qs.filter(status__in=OPEN)
+        return qs.filter(status=value)
+
+    def filter_open(self, qs, name, value):
+        return qs.filter(status__in=OPEN) if value else qs
 
 
 class HospitalViewSet(PharmacyViewSet):
@@ -107,8 +141,7 @@ class PrescriptionViewSet(PharmacyViewSet):
 
     model = Prescription
     serializer_class = PrescriptionSerializer
-    filterset_fields = ("status", "source", "prescriber", "customer", "patient",
-                        "branch")
+    filterset_class = PrescriptionFilter
     search_fields = ("customer_name", "customer_phone", "doctor_name", "diagnosis")
     ordering_fields = ("created_at",)
 
@@ -119,6 +152,26 @@ class PrescriptionViewSet(PharmacyViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+    @action(detail=False, url_path="pending-count")
+    def pending_count(self, request):
+        """How much is still owed at the counter: ``{pending, partial, total}``.
+
+        An aggregate, not a list: this is what a header badge reads on every
+        screen, and it must not cost a page of scripts to answer.
+        ``?branch=<id>`` scopes it to one counter.
+        """
+        qs = self.model.objects.filter(status__in=OPEN)
+        branch = (request.query_params.get("branch") or "").strip()
+        if branch.isdigit():
+            qs = qs.filter(branch_id=int(branch))
+        counts = qs.aggregate(
+            pending=Count("id", filter=Q(status=Prescription.Status.PENDING)),
+            partial=Count("id", filter=Q(status=Prescription.Status.PARTIAL)),
+        )
+        pending, partial = counts["pending"] or 0, counts["partial"] or 0
+        return Response({"pending": pending, "partial": partial,
+                         "total": pending + partial})
 
     @action(detail=False, url_path="by-number")
     def by_number(self, request):
@@ -169,6 +222,13 @@ class PrescriptionViewSet(PharmacyViewSet):
         ).exclude(tenant_id=getattr(request.tenant, "id", None)).select_related(
             "medication", "reporter", "tenant"
         )
+        # ``?undispensed=1`` — what the patient standing there can still be
+        # handed. The counter asks this far more often than it asks for
+        # everything ever written to a number.
+        if _is_true(request.query_params.get("undispensed")):
+            scripts = scripts.filter(status__in=OPEN)
+            orders = orders.filter(status__in=OPEN_ORDERS)
+            elsewhere = elsewhere.filter(status__in=OPEN_ORDERS)
         body = {
             "number": number,
             "scripts": PrescriptionSerializer(scripts, many=True).data,

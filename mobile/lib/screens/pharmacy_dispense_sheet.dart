@@ -22,9 +22,15 @@ class DispenseSheet extends StatefulWidget {
 class _DispenseSheetState extends State<DispenseSheet> {
   final _quantity = TextEditingController(text: '1');
   final _discount = TextEditingController(text: '0');
+  final _number = TextEditingController();
   final List<BasketLine> _basket = [];
   List<Map<String, dynamic>> _items = [];
   List<Map<String, dynamic>> _enrollments = [];
+  // What the patient's number turned up, and which of it this sale fills.
+  // Null until a lookup has run, which is not the same as an empty result.
+  List<Map<String, dynamic>>? _orders;
+  int? _fillingId;
+  bool _finding = false;
   int? _itemId;
   int? _patientId;
   int? _enrollmentId;
@@ -44,8 +50,56 @@ class _DispenseSheetState extends State<DispenseSheet> {
   void dispose() {
     _quantity.dispose();
     _discount.dispose();
+    _number.dispose();
     super.dispose();
   }
+
+  /// What the number the patient handed over is still owed.
+  ///
+  /// Asks with ?undispensed=1, so what comes back is only what can still be
+  /// handed over — here and, for an order written at another facility, there.
+  /// The counter scripts also returned are left alone: those are dispensed off
+  /// their own screen, line by line.
+  Future<void> _find() async {
+    final number = _number.text.trim();
+    if (number.isEmpty) return;
+    setState(() {
+      _finding = true;
+      _error = null;
+    });
+    try {
+      final found = await api.get('/api/prescriptions/scripts/by-number/',
+          {'number': number, 'undispensed': '1'});
+      final body = (found as Map).cast<String, dynamic>();
+      final here = ((body['orders'] ?? []) as List)
+          .map((o) => {...(o as Map).cast<String, dynamic>(), 'facility': 'Here'});
+      final elsewhere = ((body['orders_elsewhere'] ?? []) as List)
+          .map((o) => (o as Map).cast<String, dynamic>());
+      if (!mounted) return;
+      setState(() {
+        _orders = [...here, ...elsewhere];
+        // A number the pharmacist has re-typed may not carry the old pick.
+        if (!_orders!.any((o) => o['id'] == _fillingId)) _fillingId = null;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _orders = null;
+          _fillingId = null;
+          _error = '$e';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _finding = false);
+    }
+  }
+
+  String _orderLabel(Map<String, dynamic> o) => [
+        '${o['medication_name'] ?? ''}',
+        '${o['dose'] ?? ''}',
+        '${o['frequency'] ?? ''}',
+        o['duration_days'] == null ? '' : '${o['duration_days']} days',
+      ].where((p) => p.trim().isNotEmpty).join(' · ');
 
   Future<void> _loadItems() async {
     var rows = <Map<String, dynamic>>[];
@@ -128,6 +182,8 @@ class _DispenseSheetState extends State<DispenseSheet> {
           paymentMethod: _method,
           patientId: _patientId,
           enrollmentId: _enrollmentId,
+          prescriptionId: _fillingId,
+          patientNumber: _number.text,
         ),
       );
       if (mounted) Navigator.of(context).pop(sale as Map<String, dynamic>?);
@@ -149,6 +205,56 @@ class _DispenseSheetState extends State<DispenseSheet> {
       submitLabel: 'Complete sale',
       onSubmit: _submit,
       children: [
+        Row(children: [
+          Expanded(
+            child: TextField(
+              controller: _number,
+              keyboardType: TextInputType.phone,
+              textInputAction: TextInputAction.search,
+              onSubmitted: (_) => _find(),
+              decoration: const InputDecoration(
+                labelText: "Patient's number (optional)",
+                hintText: 'Phone or hospital number…',
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          FilledButton.tonal(
+              onPressed: _finding ? null : _find,
+              child: Text(_finding ? 'Finding…' : 'Find')),
+        ]),
+        if (_orders != null) ...[
+          const SizedBox(height: 8),
+          if (_orders!.isEmpty)
+            Text('Nothing outstanding for that number.',
+                style: TextStyle(color: context.hintColor, fontSize: 13))
+          else
+            // One order per sale: the API takes one, and the drugs written
+            // with it are marked off by the basket lines that match them.
+            RadioGroup<int?>(
+              groupValue: _fillingId,
+              onChanged: (v) => setState(() => _fillingId = v),
+              child: Column(children: [
+                for (final o in _orders!)
+                  RadioListTile<int?>(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    value: o['id'] as int?,
+                    title: Text(_orderLabel(o),
+                        style:
+                            TextStyle(color: context.labelColor, fontSize: 14)),
+                    subtitle: Text('From ${o['facility'] ?? '—'}',
+                        style:
+                            TextStyle(color: context.hintColor, fontSize: 12)),
+                  ),
+              ]),
+            ),
+          if (_fillingId != null)
+            Text('This sale fills that order — it is marked dispensed when the '
+                'sale completes.',
+                style: TextStyle(color: context.hintColor, fontSize: 12)),
+        ],
+        const SizedBox(height: 12),
         SearchableDropdown<int?>(
           initialValue: _itemId,
           isExpanded: true,

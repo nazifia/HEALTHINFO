@@ -65,17 +65,27 @@ double basketTotal(List<BasketLine> lines) =>
 /// Omits what the server owns: no totals, no batch choice. An HMO sale carries
 /// the membership; every other method must not, and the API rejects it if it
 /// does — so the caller's payment method decides whether the card travels.
+///
+/// A sale that fills a prescription names it, and carries the number the
+/// patient handed over: an order written at another facility is dispensed on
+/// that number alone, and the API asks for it as the proof the patient is
+/// standing there.
 Map<String, dynamic> saleBody({
   required List<BasketLine> lines,
   required String paymentMethod,
   int? patientId,
   int? enrollmentId,
+  int? prescriptionId,
+  String? patientNumber,
 }) {
   final insured = paymentMethod == 'hmo';
+  final number = (patientNumber ?? '').trim();
   return {
     'payment_method': paymentMethod,
     'patient': ?patientId,
     if (insured && enrollmentId != null) 'enrollment': enrollmentId,
+    'prescription': ?prescriptionId,
+    if (prescriptionId != null && number.isNotEmpty) 'patient_number': number,
     'items': [
       for (final l in lines)
         {

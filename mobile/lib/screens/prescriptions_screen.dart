@@ -34,6 +34,9 @@ class PrescriptionsScreen extends StatelessWidget {
           savedMessage: 'Prescription saved.',
           filters: const [
             ReportFilter(param: 'status', anyLabel: 'Any state', options: {
+              // The API's alias for pending+partial: "still owed" is one
+              // question at the counter, so it is one filter here too.
+              'undispensed': 'Still owed',
               'pending': 'Pending',
               'partial': 'Part-filled',
               'dispensed': 'Dispensed',

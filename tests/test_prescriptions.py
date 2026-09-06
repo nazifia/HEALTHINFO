@@ -481,3 +481,58 @@ def test_the_number_lookup_leaves_a_trail(db_clean):
     assert r.status_code == 200, r.content
     log = PatientAccessLog.all_objects.get(action=PatientAccessLog.Action.LOOKUP)
     assert log.user_id == pharmacist.id and log.query == "08031234567"
+
+
+def test_the_counter_asks_for_what_is_still_owed(db_clean):
+    """One question, one call: which scripts can still be handed over.
+
+    "Undispensed" spans pending and part-filled, so the list takes it as one
+    filter, the number lookup narrows to it, and the badge counts it without
+    reading a page of scripts.
+    """
+    from apps.prescriptions.models import Prescription as Script
+    from apps.prescriptions.models import PrescriptionItem
+
+    a = Tenant.objects.create(name="A", slug="a")
+    pharmacist = User.objects.create_user(phone="08030000601", password="x",
+                                          tenant=a, role=Role.PHARMACIST)
+    patient = Patient.objects.create(tenant=a, first_name="Ada", last_name="Obi",
+                                     phone="08031234567")
+    client = _client(pharmacist, a)
+
+    def write(name, drugs):
+        r = client.post("/api/prescriptions/scripts/", {
+            "customer_name": name, "patient": patient.id, "medications": drugs,
+        }, format="json")
+        assert r.status_code == 201, r.content
+        return r.json()["id"]
+
+    pending = write("Ada Obi", [{"name": "Artemether", "quantity": 6}])
+    part = write("Ada Obi", [{"name": "Paracetamol", "quantity": 10},
+                             {"name": "Vitamin C", "quantity": 10}])
+    done = write("Ada Obi", [{"name": "Ibuprofen", "quantity": 4}])
+
+    first = PrescriptionItem.all_objects.filter(prescription_id=part).first()
+    assert client.post(f"/api/prescriptions/scripts/{part}/dispense/",
+                       {"lines": [first.pk]}, format="json").status_code == 200
+    assert client.post(f"/api/prescriptions/scripts/{done}/dispense/",
+                       {}, format="json").status_code == 200
+    assert Script.all_objects.get(pk=part).status == "partial"
+    assert Script.all_objects.get(pk=done).status == "dispensed"
+
+    open_ids = {pending, part}
+    for params in ({"status": "undispensed"}, {"undispensed": "true"}):
+        listed = client.get("/api/prescriptions/scripts/", params)
+        assert listed.status_code == 200, listed.content
+        assert {r["id"] for r in listed.json()["results"]} == open_ids
+
+    # The plain status filter still means exactly one state.
+    only_partial = client.get("/api/prescriptions/scripts/", {"status": "partial"})
+    assert {r["id"] for r in only_partial.json()["results"]} == {part}
+
+    narrowed = client.get("/api/prescriptions/scripts/by-number/",
+                          {"number": "08031234567", "undispensed": "1"})
+    assert {r["id"] for r in narrowed.json()["scripts"]} == open_ids
+
+    count = client.get("/api/prescriptions/scripts/pending-count/")
+    assert count.json() == {"pending": 1, "partial": 1, "total": 2}

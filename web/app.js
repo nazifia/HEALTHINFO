@@ -250,6 +250,27 @@ const PLATFORM = [
 
 let ME = null; // current user object
 
+/* Sign out after ME.idle_logout_minutes of no input (0 = never). The tenant
+   sets the number; this only counts down to it. Client-side by design: the
+   tokens stay valid, this just stops an unattended screen showing records. */
+let idleTimer = null;
+function armIdleLogout() {
+  clearTimeout(idleTimer);
+  const mins = ME?.idle_logout_minutes;
+  if (!mins) return;
+  idleTimer = setTimeout(async () => {
+    await Api.logout();
+    ME = null;
+    toast('Signed out after inactivity.');
+    location.hash = '#/login';
+  }, mins * 60000);
+}
+// ponytail: one listener per event, re-arming on every input. Throttle only if
+// a profiler ever blames it — clearTimeout/setTimeout is cheap.
+for (const ev of ['click', 'keydown', 'mousemove', 'touchstart', 'scroll']) {
+  addEventListener(ev, armIdleLogout, { passive: true });
+}
+
 // Collapsed nav groups persist across reloads; <details> does the open/close itself.
 const NAV_CLOSED = new Set(JSON.parse(localStorage.getItem('navClosed') || '[]'));
 /* True when a super-admin is working platform-wide — signed in as one and
@@ -308,6 +329,7 @@ async function ensureChrome() {
     try { ME = await Api.myself(); } catch { /* token dead */ }
     if (!ME) { await Api.logout(); location.hash = '#/login'; return false; }
   }
+  armIdleLogout();
   $('#topbar').hidden = false;
   $('#sidebar').hidden = false;
   const badge = $('#tenant-badge');
@@ -753,10 +775,30 @@ async function viewProfile() {
   spinner();
   try {
     const me = await Api.myself();
+    // The tenant's admin sets the idle timeout for everyone in it; a
+    // super-admin sets it for whichever organization they have open.
+    const canSetIdle = ['tenant_admin', 'super_admin'].includes(me.role) && Api.tenant;
     render(`<h2>Profile</h2><div class="card">${dlHtml(me)}</div>
+      ${canSetIdle ? `<div class="card"><h3>Auto sign-out</h3>
+        <form id="idle-form">
+          <label>Minutes of inactivity before sign-out (0 = never)
+            <input name="idle_logout_minutes" type="number" min="0" max="1440"
+                   value="${esc(me.idle_logout_minutes ?? 30)}" required></label>
+          <button type="submit">Save</button>
+        </form></div>` : ''}
       <div class="actions">
         <button id="logout" class="danger">Sign out</button>
       </div>`);
+    if (canSetIdle) $('#idle-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const mins = Number(new FormData(e.target).get('idle_logout_minutes'));
+      try {
+        const r = await Api.patch('/api/tenants/settings/', { idle_logout_minutes: mins });
+        me.idle_logout_minutes = ME.idle_logout_minutes = mins;
+        armIdleLogout();
+        toast(r?.message || 'Settings saved.');
+      } catch (err) { toast(err.message, true); }
+    };
     $('#logout').onclick = async () => { await Api.logout(); ME = null; location.hash = '#/login'; };
   } catch (e) { errorBox(e); }
 }
@@ -1803,12 +1845,15 @@ async function viewPharmacy() {
   spinner();
   const today = new Date().toISOString().slice(0, 10);
   try {
-    const [low, expiring, sales, claims, value] = await Promise.all([
+    const [low, expiring, sales, claims, value, scripts] = await Promise.all([
       Api.get('/api/pharmacy/items/low-stock/').catch(() => []),
       Api.get('/api/pharmacy/batches/expiring/', { days: 60 }).catch(() => []),
       Api.get('/api/pharmacy/sales/summary/', { from: today, to: today }).catch(() => null),
       Api.get('/api/pharmacy/claims/summary/').catch(() => null),
       Api.get('/api/pharmacy/items/valuation/').catch(() => null),
+      // An aggregate, not a page of scripts: the counter only wants the number
+      // of prescriptions it still owes someone.
+      Api.get('/api/prescriptions/scripts/pending-count/').catch(() => null),
     ]);
     const tile = (label, value) =>
       `<div class="tile"><span class="tile-label">${esc(label)}</span><span class="tile-val">${esc(value)}</span></div>`;
@@ -1816,6 +1861,7 @@ async function viewPharmacy() {
       <div class="page-head"><h2>Pharmacy</h2>
         <a class="btn" href="#/pharmacy/sell">+ Dispense</a></div>
       <div class="tiles">
+        ${tile('Scripts to fill', scripts ? scripts.total : '—')}
         ${tile('Sales today', sales ? sales.sales : '—')}
         ${tile('Billed today', sales ? money(sales.billed) : '—')}
         ${tile('Collected today', sales ? money(sales.collected) : '—')}
@@ -1892,11 +1938,12 @@ async function viewSell() {
   let filling = null;      // { id, label } of the order being filled
 
   // Rows of both kinds read the same at the counter: a drug, its directions,
-  // and where it was written. Only the ones still open can be filled.
+  // and where it was written. The lookup asks for ?undispensed=1, so what
+  // comes back is already only what can still be handed over.
   const rxRows = () => [
     ...(rxFound?.orders || []).map((o) => ({ ...o, facility: 'Here' })),
     ...(rxFound?.orders_elsewhere || []),
-  ].filter((o) => o.status === 'prescribed' || o.status === 'partially_dispensed');
+  ];
 
   const rxLabel = (o) => [o.medication_name, o.dose, o.frequency,
     o.duration_days ? `${o.duration_days} days` : ''].filter(Boolean).join(' · ');
@@ -1957,7 +2004,7 @@ async function viewSell() {
       $('#rx-hits').innerHTML = '<div class="loading">Loading…</div>';
       try {
         rxFound = await Api.get('/api/prescriptions/scripts/by-number/',
-                                { number: rxNumber });
+                                { number: rxNumber, undispensed: 1 });
       } catch (err) { rxFound = null; return toast(err.message, true); }
       draw();
     };

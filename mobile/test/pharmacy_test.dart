@@ -36,6 +36,28 @@ void main() {
     expect(insured['enrollment'], 9);
   });
 
+  test('a sale that fills an order carries the number it was found on', () {
+    final lines = [
+      const BasketLine(itemId: 7, name: 'ORS', unitPrice: 150, quantity: 3),
+    ];
+    final filling = saleBody(
+      lines: lines,
+      paymentMethod: 'cash',
+      prescriptionId: 12,
+      patientNumber: ' 08031234567 ',
+    );
+    // The number is the proof the patient is standing there; the API asks for
+    // it when the order belongs to another facility.
+    expect(filling['prescription'], 12);
+    expect(filling['patient_number'], '08031234567');
+
+    // No order picked: neither field travels, and a stray number goes nowhere.
+    final plain = saleBody(
+        lines: lines, paymentMethod: 'cash', patientNumber: '08031234567');
+    expect(plain.containsKey('prescription'), isFalse);
+    expect(plain.containsKey('patient_number'), isFalse);
+  });
+
   test('a walk-in carries no patient, and totals stay server-side', () {
     final body = saleBody(
       lines: [
