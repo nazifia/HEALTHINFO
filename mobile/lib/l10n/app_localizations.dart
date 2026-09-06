@@ -228,12 +228,6 @@ abstract class AppLocalizations {
   /// **'Ask a health question…'**
   String get askHint;
 
-  /// No description provided for @semanticSearchHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Search by meaning…'**
-  String get semanticSearchHint;
-
   /// No description provided for @selectSymptoms.
   ///
   /// In en, this message translates to:

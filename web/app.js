@@ -298,7 +298,6 @@ function navHtml() {
   }
   const tools = [
     `<a href="#/search" data-route="/search">${ico('search')}Search</a>`,
-    `<a href="#/semantic" data-route="/semantic">${ico('grid')}Semantic Search</a>`,
     `<a href="#/ask" data-route="/ask">${ico('chat')}Ask AI</a>`,
     `<a href="#/differential" data-route="/differential">${ico('activity')}Differential Dx</a>`,
     `<a href="#/interaction-check" data-route="/interaction-check">${ico('pill')}Interaction Check</a>`,
@@ -1555,21 +1554,6 @@ async function viewSearch() {
   };
 }
 
-async function viewSemantic() {
-  if (!await ensureChrome()) return;
-  render(`<h2>Semantic Search</h2>
-    <form id="f" class="toolbar"><input name="q" placeholder="Describe what you need…" required autofocus>
-    <button>Search</button></form><div id="out"></div>`);
-  $('#f').onsubmit = async (e) => {
-    e.preventDefault();
-    $('#out').innerHTML = '<div class="loading">Searching…</div>';
-    try {
-      const data = await Api.get('/api/ai/semantic-search/', { q: new FormData(e.target).get('q').trim() });
-      $('#out').innerHTML = renderData(data.results ?? data);
-    } catch (err) { $('#out').innerHTML = `<p class="err">${esc(err.message)}</p>`; }
-  };
-}
-
 async function viewAsk() {
   if (!await ensureChrome()) return;
   render(`<h2>Ask AI</h2>
@@ -2135,7 +2119,6 @@ const routes = [
   [/^\/r\/([a-z-]+)\/(\d+)$/, (m) => viewDetail(m[1], m[2])],
   [/^\/r\/([a-z-]+)$/, (m) => viewList(m[1])],
   [/^\/search$/, viewSearch],
-  [/^\/semantic$/, viewSemantic],
   [/^\/ask$/, viewAsk],
   [/^\/differential$/, viewDifferential],
   [/^\/interaction-check$/, viewInteractionCheck],

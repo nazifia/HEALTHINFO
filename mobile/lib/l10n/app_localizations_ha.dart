@@ -72,9 +72,6 @@ class AppLocalizationsHa extends AppLocalizations {
   String get askHint => 'Ask a health question…';
 
   @override
-  String get semanticSearchHint => 'Search by meaning…';
-
-  @override
   String get selectSymptoms => 'Select symptoms';
 
   @override

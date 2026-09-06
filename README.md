@@ -42,9 +42,8 @@ python manage.py runserver
   content modules, tenant-scoped, returns disclaimer
 - `GET  /api/graph/diseases/{id}/`, `/api/graph/medications/{id}/` — graph traversal
 - `POST /api/diseases/{id}/transition/` `{to,note}` · `GET .../history/` — workflow
-- `GET  /api/ai/semantic-search/?q=...` — embedding cosine nearest-neighbour
-  (computed in Python over the tenant's rows)
-- `GET  /api/ai/ask/?q=headache and fever` — RAG (answer + sources + disclaimer)
+- `GET  /api/ai/ask/?q=headache and fever` — RAG: embedding cosine nearest-neighbour
+  (computed in Python over the tenant's rows) + answer + sources + disclaimer
 - `GET  /api/health/` (alias `/healthz`) — DB-backed liveness probe (200/503), no auth
 - `GET  /api/docs/` — Swagger UI
 
@@ -428,7 +427,7 @@ screen strings fall back to English until translated (mechanical drop-in).
 ## Next steps
 Done: content modules, draft/review workflow + audit log, knowledge-graph
 relations, semantic search + RAG, Celery (async embeddings, analytics), Flutter
-client (incl. differential dx, interaction checker, semantic search screens),
+client (incl. differential dx, interaction checker, Ask AI),
 i18n pipeline (4 languages, UI shell translated).
 Remaining roadmap: native-reviewed translations for all screens → CI/CD →
 Nginx/Gunicorn prod compose.
