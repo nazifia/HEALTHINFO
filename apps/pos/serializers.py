@@ -166,6 +166,10 @@ class SaleSerializer(NamedRelationsMixin, serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"enrollment": "Only an HMO sale carries a scheme membership."}
             )
+        if attrs.get("authorization") and method != Sale.PaymentMethod.HMO:
+            raise serializers.ValidationError(
+                {"authorization": "Only an HMO sale carries an authorisation."}
+            )
         if method == Sale.PaymentMethod.WALLET and not attrs.get("customer"):
             raise serializers.ValidationError(
                 {"customer": "A wallet sale needs the customer whose wallet pays."}
@@ -225,6 +229,15 @@ class SaleSerializer(NamedRelationsMixin, serializers.ModelSerializer):
                 )
             except OutOfStock as exc:
                 raise serializers.ValidationError({"items": str(exc)}) from exc
+        problem = sale.authorization_error
+        if problem:
+            # Raised after pricing (the threshold is against the insurer's
+            # share) and inside the view's atomic block, so the stock the lines
+            # took goes straight back.
+            raise serializers.ValidationError({"authorization": problem})
+        if sale.authorization_id:
+            # One approval, one sale — spend it here so it cannot cover a second.
+            sale.authorization.mark_used()
         claim_for_sale(sale)
         if sale.rx_id:
             # The prescriber earns on what their script actually sold, so this

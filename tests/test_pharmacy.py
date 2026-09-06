@@ -19,6 +19,8 @@ from apps.pharmacy.models import (
     Claim,
     ClaimBatch,
     HmoEnrollment,
+    HmoItemRule,
+    PreAuthorization,
     PurchaseOrder,
     PurchaseOrderLine,
     Sale,
@@ -845,3 +847,212 @@ def test_insured_copayment_in_cash_reaches_the_drawer(pharmacy):
     payment = SalePayment.all_objects.get(sale=sale)
     assert (payment.method, payment.till_session_id) == ("cash", till_id)
     assert TillSession.all_objects.get(pk=till_id).cash_in == Decimal("20.00")
+
+
+def _scheme(tenant, patient, **hmo_kwargs):
+    """An insurer and one member's card on it, for the cover tests below."""
+    hmo = HMO.all_objects.create(tenant=tenant, name="Leadway", **hmo_kwargs)
+    enrollment = HmoEnrollment.all_objects.create(
+        tenant=tenant, patient=patient, hmo=hmo, member_number="LW-1"
+    )
+    return hmo, enrollment
+
+
+def test_per_drug_rules_price_each_line_and_zero_excludes(pharmacy):
+    """A scheme that pays 80% by default, half for a branded alternative and
+    nothing for vitamins, is billed line by line - not 80% of the whole bill."""
+    tenant, item = pharmacy["tenant"], pharmacy["item"]
+    vitamin = StockItem.all_objects.create(
+        tenant=tenant, name="Vitamin C", sku="VITC", unit="tablet",
+        cost_price=Decimal("40.00"), unit_price=Decimal("100.00"),
+    )
+    branded = StockItem.all_objects.create(
+        tenant=tenant, name="Panadol Extra", sku="PANEX", unit="tablet",
+        cost_price=Decimal("30.00"), unit_price=Decimal("50.00"),
+    )
+    receive_stock(vitamin, 10, batch_number="V-1")
+    receive_stock(branded, 10, batch_number="P-1")
+    patient = Patient.all_objects.create(tenant=tenant, first_name="Bola",
+                                         last_name="Ade")
+    hmo, enrollment = _scheme(tenant, patient,
+                              coverage_percent=Decimal("80.00"))
+    HmoItemRule.all_objects.create(tenant=tenant, hmo=hmo, item=vitamin,
+                                   coverage_percent=Decimal("0.00"),
+                                   note="Supplements are not covered.")
+    HmoItemRule.all_objects.create(tenant=tenant, hmo=hmo, item=branded,
+                                   coverage_percent=Decimal("50.00"))
+
+    staff = _client(pharmacy["staff"], tenant)
+    response = staff.post("/api/pharmacy/sales/", {
+        "patient": patient.id, "payment_method": "hmo",
+        "enrollment": enrollment.id,
+        "items": [{"item": item.id, "quantity": 10},
+                  {"item": vitamin.id, "quantity": 2},
+                  {"item": branded.id, "quantity": 4}],
+    }, format="json")
+    assert response.status_code == 201, response.content
+    sale = Sale.all_objects.get(pk=response.json()["id"])
+    # 125.00 at 80% + 200.00 at nothing + 200.00 at half.
+    assert sale.total == Decimal("525.00")
+    assert sale.hmo_payable == Decimal("200.00")
+    assert sale.patient_payable == Decimal("325.00")
+    assert sale.patient_payable + sale.hmo_payable == sale.total
+    assert Claim.all_objects.get(sale=sale).amount == Decimal("200.00")
+
+
+def test_annual_limit_caps_cover_and_a_cancelled_claim_gives_it_back(pharmacy):
+    """A member with 50.00 of benefit left gets 50.00 of a fully covered bill,
+    and the rest is theirs. Cancelling the claim frees the benefit again."""
+    tenant, item = pharmacy["tenant"], pharmacy["item"]
+    patient = Patient.all_objects.create(tenant=tenant, first_name="Chidi",
+                                         last_name="Eze")
+    _hmo, enrollment = _scheme(tenant, patient,
+                               coverage_percent=Decimal("100.00"))
+    enrollment.annual_limit = Decimal("50.00")
+    enrollment.save(update_fields=["annual_limit"])
+
+    staff = _client(pharmacy["staff"], tenant)
+    response = staff.post("/api/pharmacy/sales/", {
+        "patient": patient.id, "payment_method": "hmo",
+        "enrollment": enrollment.id,
+        "items": [{"item": item.id, "quantity": 10}],
+    }, format="json")
+    assert response.status_code == 201, response.content
+    sale = Sale.all_objects.get(pk=response.json()["id"])
+    assert sale.total == Decimal("125.00")
+    assert sale.hmo_payable == Decimal("50.00")
+    assert sale.patient_payable == Decimal("75.00")
+    assert enrollment.remaining_benefit() == Decimal("0.00")
+
+    # The next sale gets no cover at all: the year's benefit is spent.
+    again = staff.post("/api/pharmacy/sales/", {
+        "patient": patient.id, "payment_method": "hmo",
+        "enrollment": enrollment.id,
+        "items": [{"item": item.id, "quantity": 4}],
+    }, format="json")
+    assert again.status_code == 201, again.content
+    second = Sale.all_objects.get(pk=again.json()["id"])
+    assert second.hmo_payable == Decimal("0.00")
+    assert second.patient_payable == second.total
+    # Nothing to bill, so no claim was raised.
+    assert not Claim.all_objects.filter(sale=second).exists()
+
+    claim = Claim.all_objects.get(sale=sale)
+    admin = _client(pharmacy["admin"], tenant)
+    # Writing off insured money is the admin's call, not the counter's.
+    assert staff.post(f"/api/pharmacy/claims/{claim.pk}/cancel/", {},
+                      format="json").status_code == 403
+    cancelled = admin.post(f"/api/pharmacy/claims/{claim.pk}/cancel/",
+                           {"reason": "Billed in error."}, format="json")
+    assert cancelled.status_code == 200, cancelled.content
+    claim.refresh_from_db()
+    assert claim.status == Claim.Status.CANCELLED
+    assert enrollment.remaining_benefit() == Decimal("50.00")
+    # A cancelled claim is finished: it cannot be sent to the insurer after all.
+    assert admin.post(f"/api/pharmacy/claims/{claim.pk}/submit/", {},
+                      format="json").status_code == 400
+
+
+def test_high_value_cover_needs_a_recorded_authorisation(pharmacy):
+    """Above the insurer's threshold the sale is refused until an approved
+    request covers it - and the refused basket puts its stock back."""
+    tenant, item = pharmacy["tenant"], pharmacy["item"]
+    patient = Patient.all_objects.create(tenant=tenant, first_name="Ngozi",
+                                         last_name="Udo")
+    _hmo, enrollment = _scheme(tenant, patient,
+                               coverage_percent=Decimal("100.00"),
+                               preauth_threshold=Decimal("100.00"))
+    staff = _client(pharmacy["staff"], tenant)
+    admin = _client(pharmacy["admin"], tenant)
+    basket = {"patient": patient.id, "payment_method": "hmo",
+              "enrollment": enrollment.id,
+              "items": [{"item": item.id, "quantity": 10}]}
+
+    refused = staff.post("/api/pharmacy/sales/", basket, format="json")
+    assert refused.status_code == 400
+    assert "authorization" in refused.content.decode()
+    item.refresh_from_db()
+    assert item.quantity_on_hand == 80
+    assert not Sale.all_objects.filter(patient=patient).exists()
+
+    # The counter asks the insurer; the answer is the admin's to record.
+    asked = staff.post("/api/pharmacy/pre-authorizations/", {
+        "enrollment": enrollment.id, "amount": "125.00",
+        "notes": "Ten tablets, chronic patient.",
+    }, format="json")
+    assert asked.status_code == 201, asked.content
+    auth = PreAuthorization.all_objects.get(pk=asked.json()["id"])
+    assert (auth.status, auth.hmo_id) == (PreAuthorization.Status.REQUESTED,
+                                          enrollment.hmo_id)
+    assert staff.post(f"/api/pharmacy/pre-authorizations/{auth.pk}/approve/",
+                      {"code": "AUTH-77"}, format="json").status_code == 403
+
+    # An unapproved request is no clearance at all.
+    assert staff.post("/api/pharmacy/sales/", dict(basket, authorization=auth.pk),
+                      format="json").status_code == 400
+
+    # The insurer stands behind less than was asked, so the sale is still short.
+    admin.post(f"/api/pharmacy/pre-authorizations/{auth.pk}/approve/",
+               {"code": "AUTH-77", "amount": "100.00"}, format="json")
+    short = staff.post("/api/pharmacy/sales/", dict(basket, authorization=auth.pk),
+                       format="json")
+    assert short.status_code == 400
+    assert "authorised 100.00" in short.content.decode()
+
+    # Cleared for the full amount, the sale goes through and spends the approval.
+    full = PreAuthorization.all_objects.create(
+        tenant=tenant, enrollment=enrollment, hmo=enrollment.hmo,
+        amount=Decimal("125.00"),
+    )
+    full.approve(code="AUTH-88", amount=Decimal("125.00"))
+    allowed = staff.post("/api/pharmacy/sales/",
+                         dict(basket, authorization=full.pk), format="json")
+    assert allowed.status_code == 201, allowed.content
+    sale = Sale.all_objects.get(pk=allowed.json()["id"])
+    assert sale.hmo_payable == Decimal("125.00")
+    full.refresh_from_db()
+    assert full.status == PreAuthorization.Status.USED
+    # The code travels onto the claim - the insurer quotes it back.
+    claim = Claim.all_objects.get(sale=sale)
+    assert staff.get(f"/api/pharmacy/claims/{claim.pk}/").json()[
+        "authorization_code"] == "AUTH-88"
+
+    # One approval, one sale: it cannot clear a second basket.
+    assert staff.post("/api/pharmacy/sales/", dict(basket, authorization=full.pk),
+                      format="json").status_code == 400
+
+    # A bill under the threshold needs no clearance.
+    small = staff.post("/api/pharmacy/sales/", {
+        "patient": patient.id, "payment_method": "hmo",
+        "enrollment": enrollment.id,
+        "items": [{"item": item.id, "quantity": 4}],
+    }, format="json")
+    assert small.status_code == 201, small.content
+
+
+def test_a_lapsed_authorisation_does_not_clear_a_sale(pharmacy):
+    """An approval given for last month is not a clearance today."""
+    tenant, item = pharmacy["tenant"], pharmacy["item"]
+    patient = Patient.all_objects.create(tenant=tenant, first_name="Sade",
+                                         last_name="Lawal")
+    _hmo, enrollment = _scheme(tenant, patient,
+                               coverage_percent=Decimal("100.00"),
+                               preauth_threshold=Decimal("100.00"))
+    auth = PreAuthorization.all_objects.create(
+        tenant=tenant, enrollment=enrollment, hmo=enrollment.hmo,
+        amount=Decimal("125.00"),
+    )
+    auth.approve(code="OLD-1", amount=Decimal("125.00"),
+                 expires_on=timezone.localdate() - timedelta(days=1))
+    assert auth.is_usable is False
+
+    staff = _client(pharmacy["staff"], tenant)
+    stale = staff.post("/api/pharmacy/sales/", {
+        "patient": patient.id, "payment_method": "hmo",
+        "enrollment": enrollment.id, "authorization": auth.pk,
+        "items": [{"item": item.id, "quantity": 10}],
+    }, format="json")
+    assert stale.status_code == 400
+    assert "expired" in stale.content.decode()
+    item.refresh_from_db()
+    assert item.quantity_on_hand == 80

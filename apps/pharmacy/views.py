@@ -22,7 +22,14 @@ from apps.inventory.views import PharmacyViewSet, body
 from config.ranges import apply_range as _apply_range, date_range as _range
 from config.responses import success
 
-from .models import HMO, Claim, ClaimBatch, HmoEnrollment
+from .models import (
+    HMO,
+    Claim,
+    ClaimBatch,
+    HmoEnrollment,
+    HmoItemRule,
+    PreAuthorization,
+)
 from .serializers import (
     AddClaimsSerializer,
     ClaimBatchSerializer,
@@ -31,6 +38,9 @@ from .serializers import (
     ClaimSerializer,
     HMOSerializer,
     HmoEnrollmentSerializer,
+    HmoItemRuleSerializer,
+    PreAuthDecisionSerializer,
+    PreAuthorizationSerializer,
 )
 
 ZERO = Decimal("0.00")
@@ -45,6 +55,84 @@ class HMOViewSet(PharmacyViewSet):
     filterset_fields = ("is_active",)
     search_fields = ("name", "code")
     ordering_fields = ("name", "created_at")
+
+
+class HmoItemRuleViewSet(PharmacyViewSet):
+    """Per-drug cover: what one scheme pays for one item, 0 being an exclusion.
+
+    Money policy, so admin writes and the counter only reads.
+    """
+
+    model = HmoItemRule
+    serializer_class = HmoItemRuleSerializer
+    permission_classes = [IsTenantMember, IsPharmacyStaff, IsPharmacyAdminOrReadOnly]
+    filterset_fields = ("hmo", "item")
+    search_fields = ("item__name", "note")
+    ordering_fields = ("coverage_percent", "created_at")
+
+    def get_queryset(self):
+        return HmoItemRule.objects.select_related("hmo", "item")
+
+
+class PreAuthorizationViewSet(PharmacyViewSet):
+    """Clearances asked of an insurer before a high-value covered sale.
+
+    Staff raise the request; only the admin records what the insurer answered,
+    because that answer is what the pharmacy is later allowed to bill against.
+    """
+
+    model = PreAuthorization
+    serializer_class = PreAuthorizationSerializer
+    permission_classes = [IsTenantMember, IsPharmacyStaff]
+    filterset_fields = ("status", "hmo", "enrollment")
+    search_fields = ("reference", "code", "notes")
+    ordering_fields = ("created_at", "amount")
+
+    def get_queryset(self):
+        return PreAuthorization.objects.select_related(
+            "hmo", "enrollment", "enrollment__patient", "sale"
+        )
+
+    def _transition(self, call, message):
+        auth = self.get_object()
+        try:
+            call(auth)
+        except ValueError as exc:
+            raise ValidationError({"status": str(exc)}) from exc
+        return success(message, PreAuthorizationSerializer(auth).data)
+
+    def _require_admin(self, request):
+        if not is_pharmacy_admin(request.user):
+            raise PermissionDenied(
+                "Only the pharmacy admin can record an insurer's decision."
+            )
+
+    @action(detail=True, methods=["post"], url_path="approve")
+    def approve(self, request, pk=None):
+        """Record the clearance: their code, the amount, and when it lapses."""
+        self._require_admin(request)
+        data = body(PreAuthDecisionSerializer, request)
+        return self._transition(
+            lambda a: a.approve(code=data.get("code", ""),
+                                amount=data.get("amount"),
+                                expires_on=data.get("expires_on")),
+            "Authorisation recorded.",
+        )
+
+    @action(detail=True, methods=["post"], url_path="decline")
+    def decline(self, request, pk=None):
+        """Record a refusal and why."""
+        self._require_admin(request)
+        data = body(PreAuthDecisionSerializer, request)
+        return self._transition(lambda a: a.decline(data.get("reason", "")),
+                                "Authorisation declined.")
+
+    @action(detail=True, methods=["post"], url_path="cancel")
+    def cancel(self, request, pk=None):
+        """Withdraw the request - the sale was not made after all."""
+        data = body(PreAuthDecisionSerializer, request)
+        return self._transition(lambda a: a.cancel(data.get("reason", "")),
+                                "Request withdrawn.")
 
 
 class HmoEnrollmentViewSet(PharmacyViewSet):
@@ -118,6 +206,15 @@ class ClaimViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         data = body(ClaimPaymentSerializer, request)
         return self._transition(
             request, lambda c: c.record_payment(data["amount"]), "Payment recorded."
+        )
+
+    @action(detail=True, methods=["post"], url_path="cancel")
+    def cancel(self, request, pk=None):
+        """Stop billing for a claim. Admin only — it writes off insured money."""
+        self._require_admin(request)
+        data = body(ClaimDecisionSerializer, request)
+        return self._transition(
+            request, lambda c: c.cancel(data.get("reason", "")), "Claim cancelled."
         )
 
     @action(detail=False, methods=["get"], url_path="summary")

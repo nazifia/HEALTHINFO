@@ -13,12 +13,23 @@ from rest_framework.routers import SimpleRouter
 from apps.inventory.urls import register as register_inventory
 from apps.pos.urls import register as register_pos
 
-from .views import ClaimBatchViewSet, ClaimViewSet, HMOViewSet, HmoEnrollmentViewSet
+from .views import (
+    ClaimBatchViewSet,
+    ClaimViewSet,
+    HMOViewSet,
+    HmoEnrollmentViewSet,
+    HmoItemRuleViewSet,
+    PreAuthorizationViewSet,
+)
 
 router = SimpleRouter()
 router.register("pharmacy/hmos", HMOViewSet, basename="pharmacy-hmo")
 router.register("pharmacy/enrollments", HmoEnrollmentViewSet,
                 basename="pharmacy-enrollment")
+router.register("pharmacy/item-rules", HmoItemRuleViewSet,
+                basename="pharmacy-item-rule")
+router.register("pharmacy/pre-authorizations", PreAuthorizationViewSet,
+                basename="pharmacy-preauth")
 router.register("pharmacy/claims", ClaimViewSet, basename="pharmacy-claim")
 router.register("pharmacy/claim-batches", ClaimBatchViewSet,
                 basename="pharmacy-claim-batch")

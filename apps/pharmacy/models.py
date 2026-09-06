@@ -41,6 +41,14 @@ class HMO(TenantOwnedModel):
     # Some insurers want each claim as the sale happens; others only read the
     # monthly schedule. Off by default, so a claim waits for its ``ClaimBatch``.
     auto_submit_claims = models.BooleanField(default=False)
+    # Per-drug cover lives in ``HmoItemRule``; anything with no rule of its own
+    # is covered at ``coverage_percent``.
+    #
+    # Insured amount above which this HMO wants to clear the sale before it
+    # happens. 0 (the default) asks for no authorisation, ever.
+    preauth_threshold = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal("0.00")
+    )
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -50,6 +58,33 @@ class HMO(TenantOwnedModel):
 
     def __str__(self):
         return self.name
+
+
+class HmoItemRule(TenantOwnedModel):
+    """What one scheme pays for one particular drug, overriding its default.
+
+    A contract rarely covers everything at one rate: antimalarials at 100,
+    branded alternatives at 50, supplements at nothing. ``coverage_percent``
+    of 0 is the exclusion — the drug falls entirely to the patient even on a
+    covered sale. A drug with no rule is covered at the scheme's default.
+    """
+
+    hmo = models.ForeignKey(HMO, on_delete=models.CASCADE,
+                            related_name="item_rules")
+    item = models.ForeignKey("inventory.StockItem", on_delete=models.CASCADE,
+                             related_name="hmo_rules")
+    coverage_percent = models.DecimalField(
+        max_digits=5, decimal_places=2, default=Decimal("0.00")
+    )
+    note = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        ordering = ("item__name", "id")
+        unique_together = ("tenant", "hmo", "item")
+        indexes = [models.Index(fields=["tenant", "hmo"])]
+
+    def __str__(self):
+        return f"{self.item_id} @ {self.coverage_percent}%"
 
 
 class HmoEnrollment(TenantOwnedModel):
@@ -70,6 +105,11 @@ class HmoEnrollment(TenantOwnedModel):
     )
     valid_from = models.DateField(null=True, blank=True)
     valid_to = models.DateField(null=True, blank=True)
+    # Most a member's plan pays out in a calendar year. Blank is uncapped; once
+    # the cap is reached cover stops mid-sale and the patient pays the rest.
+    annual_limit = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True
+    )
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -96,6 +136,149 @@ class HmoEnrollment(TenantOwnedModel):
         if self.valid_from and self.valid_from > today:
             return False
         return not (self.valid_to and self.valid_to < today)
+
+    def used_this_year(self, exclude_sale=None):
+        """Insured money already claimed for this member this calendar year.
+
+        A cancelled claim never cost the insurer anything, so it frees the
+        benefit back up. ``exclude_sale`` keeps a sale's own claim out of the
+        sum while that sale is still being priced.
+        """
+        claims = Claim.all_objects.filter(
+            enrollment=self, created_at__year=timezone.localdate().year
+        ).exclude(status=Claim.Status.CANCELLED)
+        if exclude_sale is not None and exclude_sale.pk:
+            claims = claims.exclude(sale=exclude_sale)
+        return _money(claims.aggregate(models.Sum("amount"))["amount__sum"] or 0)
+
+    def remaining_benefit(self, exclude_sale=None):
+        """What is left of the annual limit, or None when the plan is uncapped."""
+        if self.annual_limit is None:
+            return None
+        used = self.used_this_year(exclude_sale=exclude_sale)
+        return max(_money(self.annual_limit - used), Decimal("0.00"))
+
+
+class PreAuthorization(TenantOwnedModel):
+    """The insurer's clearance for one covered sale, asked for before dispensing.
+
+    Above ``HMO.preauth_threshold`` the scheme wants to see the bill before the
+    drug leaves the shelf. The pharmacy raises a request, the insurer answers
+    with a code and the amount they will stand behind, and the counter spends
+    that answer on exactly one sale. Keeping it as a record rather than a typed
+    code is what lets a refusal, an expiry, or an approval for less than was
+    asked be told apart afterwards.
+    """
+
+    class Status(models.TextChoices):
+        REQUESTED = "requested"
+        APPROVED = "approved"
+        DECLINED = "declined"
+        USED = "used"
+        CANCELLED = "cancelled"
+
+    reference = models.CharField(max_length=30)
+    hmo = models.ForeignKey(HMO, on_delete=models.PROTECT, related_name="preauths")
+    enrollment = models.ForeignKey(
+        HmoEnrollment, on_delete=models.CASCADE, related_name="preauths"
+    )
+    # What the pharmacy expects to bill the insurer for this basket.
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # What they agreed to stand behind, which can be less than was asked.
+    amount_approved = models.DecimalField(max_digits=12, decimal_places=2,
+                                          default=0)
+    # The insurer's own reference, quoted back on the claim.
+    code = models.CharField(max_length=60, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices,
+                              default=Status.REQUESTED)
+    # Clearances go stale: an approval given in March does not cover a sale in
+    # June. Blank means it does not expire.
+    expires_on = models.DateField(null=True, blank=True)
+    decided_at = models.DateTimeField(null=True, blank=True)
+    reason = models.CharField(max_length=255, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = "pre-authorization"
+        ordering = ("-created_at", "-id")
+        unique_together = ("tenant", "reference")
+        indexes = [models.Index(fields=["tenant", "status", "created_at"])]
+
+    def __str__(self):
+        return f"{self.reference} ({self.status}: {self.amount_approved})"
+
+    def save(self, *args, **kwargs):
+        if not self.reference:
+            self.reference = f"PA{uuid4().hex[:10].upper()}"
+        if not self.hmo_id and self.enrollment_id:
+            self.hmo_id = self.enrollment.hmo_id
+        super().save(*args, **kwargs)
+
+    @property
+    def is_expired(self):
+        return bool(self.expires_on and self.expires_on < timezone.localdate())
+
+    @property
+    def is_usable(self):
+        """Approved, still in date, and not already spent on a sale."""
+        return self.status == self.Status.APPROVED and not self.is_expired
+
+    _ALLOWED = {
+        "approve": {Status.REQUESTED},
+        "decline": {Status.REQUESTED},
+        "cancel": {Status.REQUESTED, Status.APPROVED},
+    }
+
+    def _guard(self, action):
+        if self.status not in self._ALLOWED[action]:
+            raise ValueError(
+                f"Cannot {action} a request that is {self.get_status_display()}."
+            )
+
+    def approve(self, *, code="", amount=None, expires_on=None):
+        """Record the insurer's clearance, for all or part of what was asked."""
+        self._guard("approve")
+        approved = _money(amount if amount is not None else self.amount)
+        if approved <= 0:
+            raise ValueError("An approved amount must be positive.")
+        self.status = self.Status.APPROVED
+        self.amount_approved = approved
+        self.code = code[:60]
+        self.expires_on = expires_on or self.expires_on
+        self.decided_at = timezone.now()
+        self.reason = ""
+        self.save(update_fields=["status", "amount_approved", "code",
+                                 "expires_on", "decided_at", "reason",
+                                 "updated_at"])
+        return self
+
+    def decline(self, reason=""):
+        self._guard("decline")
+        self.status = self.Status.DECLINED
+        self.amount_approved = Decimal("0.00")
+        self.reason = reason[:255]
+        self.decided_at = timezone.now()
+        self.save(update_fields=["status", "amount_approved", "reason",
+                                 "decided_at", "updated_at"])
+        return self
+
+    def cancel(self, reason=""):
+        """Withdraw the request - the sale was not made after all."""
+        self._guard("cancel")
+        self.status = self.Status.CANCELLED
+        if reason:
+            self.reason = reason[:255]
+        self.save(update_fields=["status", "reason", "updated_at"])
+        return self
+
+    def mark_used(self):
+        """Spend the clearance. One approval covers one sale, not a standing
+        licence to bill the insurer."""
+        if self.status != self.Status.APPROVED:
+            raise ValueError("Only an approved request can be used.")
+        self.status = self.Status.USED
+        self.save(update_fields=["status", "updated_at"])
+        return self
 
 
 class Claim(TenantOwnedModel):
@@ -174,6 +357,10 @@ class Claim(TenantOwnedModel):
         "approve": {Status.SUBMITTED},
         "reject": {Status.SUBMITTED},
         "pay": {Status.APPROVED},
+        # Anything the pharmacy can still stop billing for. Money already
+        # banked is not withdrawn by editing a status.
+        "cancel": {Status.DRAFT, Status.SUBMITTED, Status.REJECTED,
+                   Status.APPROVED},
     }
 
     def _guard(self, action):
@@ -211,6 +398,21 @@ class Claim(TenantOwnedModel):
         self.amount_approved = Decimal("0.00")
         self.rejection_reason = reason[:255]
         self.save(update_fields=["status", "amount_approved", "rejection_reason",
+                                 "updated_at"])
+        return self
+
+    def cancel(self, reason=""):
+        """Stop billing for this claim and drop it off any schedule.
+
+        A cancelled claim costs the insurer nothing, so it also gives the
+        member's annual benefit back (see ``HmoEnrollment.used_this_year``).
+        """
+        self._guard("cancel")
+        self.status = self.Status.CANCELLED
+        self.batch = None
+        if reason:
+            self.rejection_reason = reason[:255]
+        self.save(update_fields=["status", "batch", "rejection_reason",
                                  "updated_at"])
         return self
 

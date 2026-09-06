@@ -142,6 +142,14 @@ const RESOURCES = {
   'pharmacy-prescribers':   { title: 'Prescribers',    group: 'Pharmacy', path: 'prescriptions/prescribers', roles: 'admin', search: true },
   'pharmacy-hmos':          { title: 'HMOs',            group: 'Pharmacy', path: 'pharmacy/hmos',            roles: 'admin', search: true },
   'pharmacy-enrollments':   { title: 'Scheme Members',  group: 'Pharmacy', path: 'pharmacy/enrollments',     roles: 'staff', search: true },
+  // What a scheme pays for one drug. 0 is the exclusion; no rule means the
+  // scheme's own default covers it.
+  'pharmacy-item-rules':    { title: 'Drug Cover',       group: 'Pharmacy', path: 'pharmacy/item-rules',      roles: 'admin', search: true },
+  // The insurer's answer is four fields at once — a code, what they stand
+  // behind, when it lapses, or why they refused — so it gets a form of its own
+  // (extra: 'preauth') rather than a chain of prompts.
+  'pharmacy-preauths':      { title: 'Authorisations',   group: 'Pharmacy', path: 'pharmacy/pre-authorizations', roles: 'staff', search: true, extra: 'preauth',
+                              actions: [{ name: 'cancel', label: 'Withdraw request', ask: 'reason', danger: true, when: ['requested', 'approved'] }] },
   'pharmacy-sales':         { title: 'Sales',           group: 'Pharmacy', path: 'pharmacy/sales',           roles: 'staff', search: true, readOnly: true, receipt: true,
                               actions: [{ name: 'pay', label: 'Take payment', ask: 'amount', choose: 'method:cash,card,transfer', when: ['pending'] },
                                         { name: 'cancel', label: 'Cancel sale', danger: true, when: ['pending', 'paid'] }] },
@@ -151,7 +159,9 @@ const RESOURCES = {
                               actions: [{ name: 'submit', label: 'Submit', when: ['draft', 'rejected'] },
                                         { name: 'approve', label: 'Approve', ask: 'amount', adminOnly: true, when: ['submitted'] },
                                         { name: 'reject', label: 'Reject', ask: 'reason', adminOnly: true, when: ['submitted'] },
-                                        { name: 'pay', label: 'Record payment', ask: 'amount', adminOnly: true, when: ['approved'] }] },
+                                        { name: 'pay', label: 'Record payment', ask: 'amount', adminOnly: true, when: ['approved'] },
+                                        { name: 'cancel', label: 'Stop billing', ask: 'reason', danger: true, adminOnly: true,
+                                          when: ['draft', 'submitted', 'rejected', 'approved'] }] },
   'pharmacy-claim-batches': { title: 'Claim Batches',   group: 'Pharmacy', path: 'pharmacy/claim-batches',   roles: 'staff', search: true,
                               actions: [{ name: 'add-claims', label: 'Collect claims', when: ['draft'] },
                                         { name: 'submit', label: 'Submit batch', when: ['draft'] },
@@ -186,20 +196,6 @@ const RESOURCES = {
 // (the pharmacy module nests everything under /api/pharmacy/).
 const rpath = (slug, suffix = '') => `/api/${RESOURCES[slug]?.path || slug}/${suffix}`;
 
-// Colour a tile by the module it opens, so the palette carries meaning rather
-// than decoration: pharmacy is always blue, clinical always rose. styles.css
-// maps each class to an accent; an unmapped route falls back to the brand.
-function domClass(href) {
-  const path = String(href).replace(/^#/, '');
-  const res = path.match(/^\/r\/([^/]+)/);
-  const group = res ? RESOURCES[res[1]]?.group
-    : path.startsWith('/pharmacy') ? 'Pharmacy'
-    : path.startsWith('/clinical') ? 'Clinical'
-    : /^\/(analytics|platform|stat)/.test(path) ? 'Analytics'
-    : 'Tools';
-  return group ? ` dom-${group.toLowerCase()}` : '';
-}
-
 // The tenant lists are split by kind (/api/tenants/hospitals/), but a single
 // tenant still lives at /api/tenants/<id>/ — strip the kind segment for detail.
 const rdetail = (slug, suffix) => slug.startsWith('tenants-')
@@ -209,6 +205,14 @@ const rdetail = (slug, suffix) => slug.startsWith('tenants-')
 // many-related from single-related, so name them.
 // ponytail: hardcoded set; derive from /api/schema/ if the model graph grows.
 const M2M_FIELDS = new Set(['symptoms', 'medications', 'procedures', 'lab_tests', 'specialties', 'articles']);
+
+// Fields whose blank or zero means something the generated label cannot say.
+// DRF sends help_text when the model carries one; this fills in where it
+// doesn't, and a real help_text still wins.
+const FIELD_HINTS = {
+  annual_limit: "Most this member's plan pays out in a calendar year. Blank is uncapped.",
+  preauth_threshold: 'Insured amount above which this HMO clears a sale before it happens. 0 asks for no authorisation.',
+};
 
 // The drug fields of a clinical drug order. Everything else on that form —
 // the patient, the region, the notes — is about the prescription as a whole,
@@ -871,7 +875,7 @@ async function viewHome() {
     ${dashHtml}
     <h3>Quick Actions</h3>
     <div class="tiles home-tiles">${tiles.map(([href, icon, t, d]) =>
-      `<a class="tile linktile${domClass(href)}" href="${href}"><span class="tile-label">${ico(icon)}${esc(t)}</span><span class="muted">${esc(d)}</span></a>`).join('')}
+      `<a class="tile linktile" href="${href}"><span class="tile-label">${ico(icon)}${esc(t)}</span><span class="muted">${esc(d)}</span></a>`).join('')}
     </div>`);
 }
 
@@ -1149,9 +1153,11 @@ async function viewDetail(slug, id) {
       ${slug === 'prescriptions' && obj.group ? `<div class="card"><h3>Prescribed together</h3>
         <div id="rx-group"><p class="loading">Loading…</p></div></div>` : ''}
       ${res.history ? '<div class="card"><h3>Clinical history</h3><div id="rec-history"><p class="loading">Loading…</p></div></div>' : ''}
-      ${res.extra === 'purchase' ? purchaseReceiveHtml(obj) : ''}`);
+      ${res.extra === 'purchase' ? purchaseReceiveHtml(obj) : ''}
+      ${res.extra === 'preauth' ? preauthDecisionHtml(obj) : ''}`);
     if (res.receipt) $('#receipt').onclick = () => printReceipt(id);
     if (res.extra === 'purchase') wirePurchaseReceive(id, () => viewDetail(slug, id));
+    if (res.extra === 'preauth') wirePreauthDecision(slug, id, () => viewDetail(slug, id));
     for (const b of document.querySelectorAll('[data-pa]')) {
       b.onclick = async () => {
         const body = {};
@@ -1289,6 +1295,7 @@ async function viewForm(slug, id, query) {
         <button type="button" id="add-drug" class="btn ghost">Add another drug</button>
       </div>` : ''}`);
     wirePatientField($('#f'));
+    wireItemField($('#f'), current.item);
     const drugRows = multiDrug ? wireExtraDrugs(fields) : null;
     $('#f').onsubmit = async (e) => {
       e.preventDefault();
@@ -1420,7 +1427,8 @@ function drugLabel(drug) {
 function fieldHtml(name, f, value) {
   const req = f.required ? ' required' : '';
   const lbl = esc(f.label || label(name)) + (f.required ? ' *' : '');
-  const help = f.help_text ? `<small class="muted">${esc(f.help_text)}</small>` : '';
+  const hint = f.help_text || FIELD_HINTS[name] || '';
+  const help = hint ? `<small class="muted">${esc(hint)}</small>` : '';
   const v = value ?? '';
   // A tenant's registry outgrows a <select> of every patient in it, so the
   // link is a type-ahead over /api/patients/ instead. The picked id lives in
@@ -1431,6 +1439,13 @@ function fieldHtml(name, f, value) {
              placeholder="Name, hospital number or phone…">
       <input type="hidden" name="patient" value="${esc(v)}">
       <div id="patient-hit" class="muted"></div>${help}<em class="field-err"></em></label>`;
+  }
+  // Same reason as `patient`: nobody knows a stock item by its id. The list is
+  // long but finite, so it is a <select> wireItemField fills after render.
+  if (name === 'item') {
+    return `<label data-field="item">${lbl}
+      <select name="item"${req} data-items><option value="${esc(v)}">Loading…</option></select>
+      ${help}<em class="field-err"></em></label>`;
   }
   let control;
   if (f.choices) {
@@ -1552,6 +1567,30 @@ function wirePatientField(form) {
       picker.bind(p);
     }, () => { out.textContent = `Patient #${hidden.value}`; });
   }
+}
+
+/* The dispensable catalogue, fetched once per session - the dispense screen
+ * and every `item` field pick from the same rows.
+ * ponytail: capped at 10 pages; past ~250 items this wants a search box. */
+let itemCache;
+const allItems = () => (itemCache ||= (async () => {
+  const rows = [];
+  for (let page = 1; page <= 10; page++) {
+    const r = await Api.list('/api/pharmacy/items/', { is_active: true, page });
+    rows.push(...r.rows);
+    if (!r.next) break;
+  }
+  return rows;
+})().catch((e) => { itemCache = null; throw e; }));  // a failed fetch must not stick
+
+/* The generated form's `item` field, if it has one. */
+async function wireItemField(form, value) {
+  const sel = form.querySelector('[data-items]');
+  if (!sel) return;
+  let rows = [];
+  try { rows = await allItems(); } catch { sel.innerHTML = '<option value="">Catalogue unavailable</option>'; return; }
+  sel.innerHTML = '<option value=""></option>' + rows.map((i) =>
+    `<option value="${i.id}"${String(i.id) === String(value ?? '') ? ' selected' : ''}>${esc(i.name)}</option>`).join('');
 }
 
 /* Fields the patient's own record already answers, so linking a patient fills
@@ -1755,7 +1794,7 @@ async function viewGraph(type, id) {
 
 function statIndex(title, registry, prefix) {
   return `<h2>${esc(title)}</h2><div class="tiles home-tiles">` +
-    registry.map((m) => `<a class="tile linktile${domClass(prefix)}" href="#${prefix}/${m.key}"><span class="tile-label">${ico('chart')}${esc(m.label)}</span></a>`).join('') +
+    registry.map((m) => `<a class="tile linktile" href="#${prefix}/${m.key}"><span class="tile-label">${ico('chart')}${esc(m.label)}</span></a>`).join('') +
     '</div>';
 }
 
@@ -1825,7 +1864,7 @@ async function viewClinical() {
   const slugs = CLINICAL_WORK[ME.role] || CLINICAL_WORK.nurse;
   const lists = await Promise.all(slugs.map((slug) =>
     Api.list(rpath(slug), { ordering: '-created_at' }).catch(() => null)));
-  const tile = (slug, list) => `<a class="tile linktile kpi-tile${domClass('#/r/' + slug)}" href="#/r/${slug}">
+  const tile = (slug, list) => `<a class="tile linktile kpi-tile" href="#/r/${slug}">
     <span class="tile-label">${esc(RESOURCES[slug].title)}</span>
     <span class="tile-val">${esc(list ? fmtVal(list.count ?? list.rows.length) : '—')}</span></a>`;
   const [primary] = slugs;
@@ -1840,7 +1879,7 @@ async function viewClinical() {
     </div>
     <h3>File a report</h3>
     <div class="tiles">${slugs.map((slug) =>
-      `<a class="tile linktile${domClass('#/r/' + slug)}" href="#/r/${slug}/new"><span class="tile-label">New</span>
+      `<a class="tile linktile" href="#/r/${slug}/new"><span class="tile-label">New</span>
         <span class="tile-val">${esc(RESOURCES[slug].title)}</span></a>`).join('')}</div>`);
 }
 
@@ -1931,15 +1970,7 @@ async function viewSell() {
   spinner();
   const basket = [];
   let items = [];
-  try {
-    // Walk the pages: the picker is useless if it stops at the first 25 items.
-    // ponytail: capped at 10 pages; past ~250 lines this wants a search box.
-    for (let page = 1; page <= 10; page++) {
-      const { rows, next } = await Api.list('/api/pharmacy/items/', { is_active: true, page });
-      items.push(...rows);
-      if (!next) break;
-    }
-  } catch (e) { return errorBox(e); }
+  try { items = await allItems(); } catch (e) { return errorBox(e); }
 
   const optionsHtml = items.map((i) =>
     `<option value="${i.id}" data-price="${i.unit_price}" data-stock="${i.quantity_on_hand}">
@@ -1962,6 +1993,9 @@ async function viewSell() {
   let patientQuery = '';   // what is in the search box
   let schemes = [];        // active enrollments for `patient`
   let schemeId = '';
+  // Clearances the insurer has already given this member. A high-value covered
+  // sale is refused without one, so the counter picks it here.
+  let auths = [];
   // What the patient's number turned up, and which of it this sale fills. A
   // prescription written at another facility is dispensable here on that
   // number alone, so the sale carries it back as the proof the API asks for.
@@ -1992,8 +2026,30 @@ async function viewSell() {
       </tr>`).join('')}</tbody></table>`;
   };
 
+  const authOptions = () => '<option value="">—</option>' + auths.map((r) =>
+    `<option value="${r.id}">${esc(r.reference)} · ${money(r.amount_approved)}${
+      r.expires_on ? ` · to ${esc(r.expires_on)}` : ''}</option>`).join('');
+
+  const loadAuths = async () => {
+    auths = [];
+    if (schemeId) {
+      const rows = await Api.list('/api/pharmacy/pre-authorizations/',
+                                  { enrollment: schemeId, status: 'approved' })
+        .catch(() => ({ rows: [] }));
+      auths = rows.rows.filter((r) => r.is_usable);
+    }
+    const form = $('#checkout');
+    if (form) form.authorization.innerHTML = authOptions();
+  };
+
+  // An uncapped plan reports no remaining benefit; a capped one is worth
+  // showing before the basket is priced, because cover stops at the cap and
+  // the rest falls to the patient.
+  const schemeLabel = (r) => `${r.hmo_name} · ${r.member_number} (${r.effective_coverage}%${
+    r.remaining_benefit == null ? '' : `, ${money(r.remaining_benefit)} left this year`})`;
+
   const schemeOptions = () => '<option value="">—</option>' + schemes.map((r) =>
-    `<option value="${r.id}"${String(r.id) === schemeId ? ' selected' : ''}>${esc(r.hmo_name)} · ${esc(r.member_number)} (${r.effective_coverage}%)</option>`).join('');
+    `<option value="${r.id}"${String(r.id) === schemeId ? ' selected' : ''}>${esc(schemeLabel(r))}</option>`).join('');
 
   const draw = () => {
     render(`
@@ -2027,7 +2083,11 @@ async function viewSell() {
           <option value="transfer">Transfer</option><option value="hmo">HMO / scheme</option>
         </select></label>
         <label>Scheme membership<select name="enrollment">${schemeOptions()}</select></label>
-        <div class="actions"><button class="btn">Complete sale</button></div>
+        <label>Authorisation (only for a covered sale above the insurer's threshold)
+          <select name="authorization">${authOptions()}</select></label>
+        <div class="actions">
+          <button type="button" class="btn ghost" id="ask-auth">Ask the insurer</button>
+          <button class="btn">Complete sale</button></div>
       </form>`);
 
     $('#rx-find').onsubmit = async (e) => {
@@ -2083,10 +2143,29 @@ async function viewSell() {
       schemes = en.rows;
       schemeId = schemes.length === 1 ? String(schemes[0].id) : '';
       $('#checkout').enrollment.innerHTML = schemeOptions();
+      loadAuths();
     });
     // Adding a basket line re-renders the form, so what was typed is kept.
     search.addEventListener('input', () => { patientQuery = search.value; });
-    $('#checkout').enrollment.onchange = (e) => { schemeId = e.target.value; };
+    $('#checkout').enrollment.onchange = (e) => {
+      schemeId = e.target.value;
+      loadAuths();
+    };
+
+    // Raise the request without leaving the till. The insurer's share is only
+    // known server-side (item rules, the annual cap), so the ask is the basket
+    // itself — an approval for more than is billed still covers the sale.
+    $('#ask-auth').onclick = async () => {
+      if (!schemeId) return toast('Pick the scheme membership first.', true);
+      const amount = basket.reduce(
+        (a, b) => a + Math.max(b.price * b.quantity - b.discount, 0), 0);
+      if (!amount) return toast('Add the items first — the insurer is asked for a figure.', true);
+      try {
+        const auth = await Api.post('/api/pharmacy/pre-authorizations/',
+                                    { enrollment: Number(schemeId), amount });
+        toast(`Requested ${auth.reference} — it appears above once the insurer answers.`);
+      } catch (err) { toast(err.message, true); }
+    };
 
     $('#checkout').onsubmit = async (e) => {
       e.preventDefault();
@@ -2107,6 +2186,7 @@ async function viewSell() {
         body.patient_number = rxNumber;
       }
       if (fd.get('enrollment')) body.enrollment = Number(fd.get('enrollment'));
+      if (fd.get('authorization')) body.authorization = Number(fd.get('authorization'));
       try {
         const sale = await Api.post('/api/pharmacy/sales/', body);
         toast(`Sale ${sale.reference} — patient pays ${money(sale.patient_payable)}.`);
@@ -2115,6 +2195,57 @@ async function viewSell() {
     };
   };
   draw();
+}
+
+/* Recording what the insurer said about one pre-authorization request.
+   Rendered under its detail page, admin only — the answer is what the pharmacy
+   is later allowed to bill against, so the API refuses anyone else. A request
+   already decided has nothing left to record. */
+function preauthDecisionHtml(auth) {
+  if (auth.status !== 'requested' || !isPharmacyAdmin()) return '';
+  return `<div class="card"><h3>Record the insurer's answer</h3>
+    <form id="preauth-decide" class="form-card">
+      <label>Their code<input name="code" maxlength="60" autocomplete="off"></label>
+      <label>Amount authorised
+        <input type="number" name="amount" step="0.01" min="0" value="${esc(auth.amount)}">
+        <small class="muted">They may stand behind less than the ${money(auth.amount)} asked for.</small></label>
+      <label>Expires on<input type="date" name="expires_on">
+        <small class="muted">Leave blank if the clearance does not lapse.</small></label>
+      <label>Reason (a refusal)<input name="reason" maxlength="255" autocomplete="off"></label>
+      <div class="actions">
+        <button class="btn" data-decide="approve">Approve</button>
+        <button class="btn danger" data-decide="decline">Decline</button>
+      </div>
+    </form></div>`;
+}
+
+function wirePreauthDecision(slug, id, reload) {
+  const form = $('#preauth-decide');
+  if (!form) return;
+  const trimmed = (fd, key) => (fd.get(key) || '').trim();
+  for (const b of form.querySelectorAll('[data-decide]')) {
+    b.onclick = async (e) => {
+      // Both buttons sit in one form: whichever was pressed decides which
+      // fields travel, and neither submits the form itself.
+      e.preventDefault();
+      const fd = new FormData(form);
+      const approving = b.dataset.decide === 'approve';
+      const body = {};
+      if (approving) {
+        if (trimmed(fd, 'code')) body.code = trimmed(fd, 'code');
+        // Blank means they stood behind the whole ask, which is the API default.
+        if (fd.get('amount')) body.amount = fd.get('amount');
+        if (fd.get('expires_on')) body.expires_on = fd.get('expires_on');
+      } else if (trimmed(fd, 'reason')) {
+        body.reason = trimmed(fd, 'reason');
+      }
+      try {
+        const r = await Api.post(rpath(slug, `${id}/${b.dataset.decide}/`), body);
+        toast(r?.message || 'Done.');
+        reload();
+      } catch (err) { toast(err.message, true); }
+    };
+  }
 }
 
 /* Receiving a delivery against a purchase order line. Rendered under the

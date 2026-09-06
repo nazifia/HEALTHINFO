@@ -20,15 +20,9 @@
   --viz-s1: #2a78d6; --viz-s2: #1baf7a; --viz-s3: #eda100; --viz-s4: #008300;
   --viz-grid: #e1e0d9; --viz-axis: #c3c2b7; --viz-muted: #898781;
   --viz-ink: var(--text); --viz-surface: var(--card);
-  /* one colour per module — tiles and nav groups share it, so teal always
-     means Tools, blue always Pharmacy. Never the sole signal: labels stay. */
-  --d-tools: #0f766e;     --d-tools-soft: #e6f2f1;
-  --d-pharmacy: #2563eb;  --d-pharmacy-soft: #e6eefc;
-  --d-catalog: #7c3aed;   --d-catalog-soft: #f0e9fd;
-  --d-reports: #c2410c;   --d-reports-soft: #fdece3;
-  --d-analytics: #0891b2; --d-analytics-soft: #e2f4f8;
-  --d-clinical: #be185d;  --d-clinical-soft: #fce8f0;
-  --d-admin: #475569;     --d-admin-soft: #eaeef3;
+  /* accent rotation for tiles/nav — decorative only, never the sole signal */
+  --a1: #0f766e; --a2: #2563eb; --a3: #7c3aed; --a4: #c2410c; --a5: #0891b2; --a6: #be185d;
+  --a1-soft: #e6f2f1; --a2-soft: #e6eefc; --a3-soft: #f0e9fd; --a4-soft: #fdece3; --a5-soft: #e2f4f8; --a6-soft: #fce8f0;
 }
 [data-theme="dark"] {
   color-scheme: dark;
@@ -44,13 +38,8 @@
   --ok: #4ade80;
   --viz-s1: #3987e5; --viz-s2: #199e70; --viz-s3: #c98500; --viz-s4: #008300;
   --viz-grid: #2c2c2a; --viz-axis: #383835;
-  --d-tools: #14b8a6;     --d-tools-soft: #113b37;
-  --d-pharmacy: #60a5fa;  --d-pharmacy-soft: #14243d;
-  --d-catalog: #a78bfa;   --d-catalog-soft: #251f3d;
-  --d-reports: #fb923c;   --d-reports-soft: #3a2415;
-  --d-analytics: #22d3ee; --d-analytics-soft: #123037;
-  --d-clinical: #f472b6;  --d-clinical-soft: #3a1a2a;
-  --d-admin: #94a3b8;     --d-admin-soft: #23272e;
+  --a1: #14b8a6; --a2: #60a5fa; --a3: #a78bfa; --a4: #fb923c; --a5: #22d3ee; --a6: #f472b6;
+  --a1-soft: #113b37; --a2-soft: #14243d; --a3-soft: #251f3d; --a4-soft: #3a2415; --a5-soft: #123037; --a6-soft: #3a1a2a;
 }
 html, body { margin: 0; height: 100%; }
 body {
@@ -118,6 +107,12 @@ a.badge:hover { background: rgba(255,255,255,.3); text-decoration: none; }
 }
 #sidebar .nav-home { margin-bottom: 8px; }
 .nav-group { padding-top: 6px; }
+.nav-group:nth-of-type(6n+1) { --accent: var(--a1); --accent-soft: var(--a1-soft); }
+.nav-group:nth-of-type(6n+2) { --accent: var(--a2); --accent-soft: var(--a2-soft); }
+.nav-group:nth-of-type(6n+3) { --accent: var(--a3); --accent-soft: var(--a3-soft); }
+.nav-group:nth-of-type(6n+4) { --accent: var(--a4); --accent-soft: var(--a4-soft); }
+.nav-group:nth-of-type(6n+5) { --accent: var(--a5); --accent-soft: var(--a5-soft); }
+.nav-group:nth-of-type(6n+6) { --accent: var(--a6); --accent-soft: var(--a6-soft); }
 .nav-group + .nav-group { margin-top: 4px; border-top: 1px solid var(--border); }
 .nav-group > summary {
   list-style: none; cursor: pointer; user-select: none;
@@ -235,21 +230,12 @@ tr.rowlink:hover { background: var(--brand-soft); }
 }
 .tile-label { font-size: 13px; color: var(--muted); }
 .tile-val { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.4px; }
-/* KPI tiles name a number, not a module, so they rotate; anything with a
-   dom-* class overrides this below. */
-:where(.tiles) > *:nth-child(6n+1) { --accent: var(--d-tools); --accent-soft: var(--d-tools-soft); }
-:where(.tiles) > *:nth-child(6n+2) { --accent: var(--d-pharmacy); --accent-soft: var(--d-pharmacy-soft); }
-:where(.tiles) > *:nth-child(6n+3) { --accent: var(--d-catalog); --accent-soft: var(--d-catalog-soft); }
-:where(.tiles) > *:nth-child(6n+4) { --accent: var(--d-reports); --accent-soft: var(--d-reports-soft); }
-:where(.tiles) > *:nth-child(6n+5) { --accent: var(--d-analytics); --accent-soft: var(--d-analytics-soft); }
-:where(.tiles) > *:nth-child(6n+6) { --accent: var(--d-clinical); --accent-soft: var(--d-clinical-soft); }
-.dom-tools, [data-group="Tools"] { --accent: var(--d-tools); --accent-soft: var(--d-tools-soft); }
-.dom-catalog, [data-group="Catalog"] { --accent: var(--d-catalog); --accent-soft: var(--d-catalog-soft); }
-.dom-reports, [data-group="Reports"] { --accent: var(--d-reports); --accent-soft: var(--d-reports-soft); }
-.dom-pharmacy, [data-group="Pharmacy"] { --accent: var(--d-pharmacy); --accent-soft: var(--d-pharmacy-soft); }
-.dom-clinical, [data-group="Clinical"] { --accent: var(--d-clinical); --accent-soft: var(--d-clinical-soft); }
-.dom-analytics, [data-group="Analytics"] { --accent: var(--d-analytics); --accent-soft: var(--d-analytics-soft); }
-.dom-admin, [data-group="Admin"] { --accent: var(--d-admin); --accent-soft: var(--d-admin-soft); }
+.tiles > *:nth-child(6n+1) { --accent: var(--a1); --accent-soft: var(--a1-soft); }
+.tiles > *:nth-child(6n+2) { --accent: var(--a2); --accent-soft: var(--a2-soft); }
+.tiles > *:nth-child(6n+3) { --accent: var(--a3); --accent-soft: var(--a3-soft); }
+.tiles > *:nth-child(6n+4) { --accent: var(--a4); --accent-soft: var(--a4-soft); }
+.tiles > *:nth-child(6n+5) { --accent: var(--a5); --accent-soft: var(--a5-soft); }
+.tiles > *:nth-child(6n+6) { --accent: var(--a6); --accent-soft: var(--a6-soft); }
 .tile { border-left: 3px solid var(--accent, var(--brand)); }
 .tile .tile-val { color: var(--accent, var(--text)); }
 .kpi-tile { border-top: 3px solid var(--accent, var(--brand)); }

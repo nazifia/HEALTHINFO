@@ -270,6 +270,13 @@ class Sale(TenantOwnedModel):
         "pharmacy.HmoEnrollment", null=True, blank=True, on_delete=models.SET_NULL,
         related_name="sales",
     )
+    # The clearance the insurer gave for a high-value covered sale, when their
+    # ``preauth_threshold`` asks for one. One approval, one sale - hence the
+    # one-to-one.
+    authorization = models.OneToOneField(
+        "pharmacy.PreAuthorization", null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="sale",
+    )
     payment_method = models.CharField(
         max_length=20, choices=PaymentMethod.choices, default=PaymentMethod.CASH
     )
@@ -350,6 +357,37 @@ class Sale(TenantOwnedModel):
         return Decimal(self.enrollment.effective_coverage)
 
     @property
+    def authorization_error(self):
+        """Why the insurer will not stand behind this sale, or "" when they will.
+
+        Read after the basket is priced: the threshold is against the insurer's
+        share, which is only known once the lines are on. Below the threshold
+        nothing is asked for; above it the sale must carry an approval that is
+        this member's, still good, and large enough to cover what is billed.
+        """
+        if not self.enrollment_id:
+            return ""
+        hmo = self.enrollment.hmo
+        threshold = hmo.preauth_threshold
+        if not threshold or self.hmo_payable <= threshold:
+            return ""
+        auth = self.authorization
+        if auth is None:
+            return (f"{hmo.name} authorises any covered sale above {threshold}. "
+                    f"This one bills them {self.hmo_payable} — raise a "
+                    f"pre-authorization and quote it here.")
+        if auth.enrollment_id != self.enrollment_id:
+            return "That authorisation was given for a different member."
+        if auth.status != auth.Status.APPROVED:
+            return f"That authorisation is {auth.get_status_display()}."
+        if auth.is_expired:
+            return f"That authorisation expired on {auth.expires_on}."
+        if self.hmo_payable > auth.amount_approved:
+            return (f"The insurer authorised {auth.amount_approved}; this sale "
+                    f"bills them {self.hmo_payable}.")
+        return ""
+
+    @property
     def cost_of_goods(self):
         """What the dispensed units cost to buy, returns netted off."""
         total = ZERO
@@ -413,6 +451,36 @@ class Sale(TenantOwnedModel):
             self.recalculate()
         return lines
 
+    def _insurer_share(self, total):
+        """What the HMO pays of ``total`` on this sale.
+
+        Three things cut it down, in the order the contract applies them: the
+        drugs the scheme excludes come off the covered base, the coverage
+        percentage is taken of what is left, and the member's remaining annual
+        benefit caps the result. Whatever the insurer does not pay stays with
+        the patient, so the two sides still add back to the total.
+        """
+        percent = self.coverage_percent
+        if percent <= 0:
+            return ZERO
+        # Drugs the contract prices for itself; everything else takes the
+        # scheme default. A rule of 0 is the outright exclusion.
+        rules = dict(self.enrollment.hmo.item_rules.values_list(
+            "item_id", "coverage_percent"))
+        share = ZERO
+        for line in SaleItem.all_objects.filter(sale=self):
+            rate = rules.get(line.item_id, percent)
+            share += max(line.gross - line.discount, ZERO) * rate / Decimal("100")
+        # The consultation fee is not a drug, so no item rule reaches it.
+        share += Decimal(self.consultation_fee) * percent / Decimal("100")
+        # Never bill the insurer more than the bill: rounding per line, and a
+        # discount larger than one line's own gross, must not add up past it.
+        share = min(_money(share), total)
+        remaining = self.enrollment.remaining_benefit(exclude_sale=self)
+        if remaining is not None:
+            share = min(share, remaining)
+        return share
+
     def recalculate(self):
         """Re-derive every money field from the lines. Cheap, so call it freely.
 
@@ -429,7 +497,7 @@ class Sale(TenantOwnedModel):
         total = _money(
             max(subtotal - discount, ZERO) + Decimal(self.consultation_fee)
         )
-        hmo_share = _money(total * self.coverage_percent / Decimal("100"))
+        hmo_share = self._insurer_share(total)
         self.subtotal = _money(subtotal)
         self.discount = _money(discount)
         self.total = total
@@ -543,8 +611,7 @@ class Sale(TenantOwnedModel):
             claim = Claim.all_objects.filter(sale=self).first()
             if claim and claim.status not in (Claim.Status.PAID,
                                               Claim.Status.CANCELLED):
-                claim.status = Claim.Status.CANCELLED
-                claim.save(update_fields=["status", "updated_at"])
+                claim.cancel(reason or f"Sale {self.reference} cancelled")
             DispensingLog.all_objects.filter(sale=self).update(
                 status=DispensingLog.Status.RETURNED
             )
