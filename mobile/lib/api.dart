@@ -201,7 +201,7 @@ class Api {
         'phone': phone,
         'email': email,
         'password': password,
-        if (jurisdictionId != null) 'jurisdiction': jurisdictionId,
+        'jurisdiction': ?jurisdictionId,
       }),
     );
     if (r.statusCode != 201) {
