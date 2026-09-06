@@ -169,6 +169,11 @@ const RESOURCES = {
                                     { name: 'close', label: 'Close visit', ask: 'follow_up_on,notes',
                                       choose: 'disposition:home,follow_up,admitted,referred,deceased', when: ['open'] }] },
   'users':             { title: 'Users',              group: 'Admin', adminOnly: true },
+  // The roster. Everyone in the tenant reads it — a nurse needs to know who
+  // else is on — but only the tenant admin sets it, same as the API.
+  'shifts':            { title: 'Staff Roster',       group: 'Admin', roles: 'tenant_admin',
+                          filters: [{ param: 'branch', label: 'Branch', path: '/api/branches/', text: (r) => r.name },
+                                    { param: 'user', label: 'Staff', path: '/api/users/', text: (r) => r.username }] },
   // The audit trail of who read which patient record. Tenant admins only, and
   // read-only for them too — the API writes it, nobody edits it.
   'patient-access-log':{ title: 'Patient Access Log', group: 'Admin', path: 'patients/access-log',
@@ -205,13 +210,14 @@ const TRANSITIONS = {
   archived: ['draft'],
 };
 
-// Analytics endpoints. dates => from/to inputs; weeks => weeks input.
+// Analytics endpoints. dates => from/to inputs; days => days input.
 const ANALYTICS = [
   { key: 'dashboard',     label: 'Tenant Dashboard',  path: '/api/analytics/tenant/' },
   { key: 'cases',         label: 'Case Stats',        path: '/api/analytics/cases/', dates: true, exportPath: '/api/analytics/cases/export/' },
   { key: 'surveillance',  label: 'Outbreak Alerts',   path: '/api/analytics/surveillance/' },
-  { key: 'idsr',          label: 'IDSR Report',       path: '/api/analytics/idsr/', weeks: true, csv: true },
+  { key: 'idsr',          label: 'IDSR Report',       path: '/api/analytics/idsr/', days: true, csv: true },
   { key: 'sources',       label: 'Report Sources',    path: '/api/analytics/sources/' },
+  { key: 'on-duty',       label: 'On Duty Now',       path: '/api/shifts/on_duty/' },
   { key: 'adr',           label: 'ADR Stats',         path: '/api/analytics/adr/', dates: true },
   { key: 'labs',          label: 'Lab Stats',         path: '/api/analytics/labs/', dates: true },
   { key: 'immunizations', label: 'Immunization Stats', path: '/api/analytics/immunizations/', dates: true },
@@ -232,7 +238,7 @@ const PLATFORM = [
   { key: 'dashboard',     label: 'Platform Dashboard', path: '/api/analytics/platform/' },
   { key: 'cases',         label: 'Case Stats',         path: '/api/analytics/platform/cases/', dates: true },
   { key: 'surveillance',  label: 'Outbreak Alerts',    path: '/api/analytics/platform/surveillance/' },
-  { key: 'idsr',          label: 'IDSR Report',        path: '/api/analytics/platform/idsr/', weeks: true, csv: true },
+  { key: 'idsr',          label: 'IDSR Report',        path: '/api/analytics/platform/idsr/', days: true, csv: true },
   { key: 'sources',       label: 'Report Sources',     path: '/api/analytics/platform/sources/' },
   { key: 'adr',           label: 'ADR Stats',          path: '/api/analytics/platform/adr/', dates: true },
   { key: 'labs',          label: 'Lab Stats',          path: '/api/analytics/platform/labs/', dates: true },
@@ -826,7 +832,6 @@ async function viewHome() {
   let dashHtml = '';
   if (dash) {
     const kpis = [
-      ['Searches (Total)', dash.total_searches],
       ['Active Users (30d)', dash.active_users],
       ['AI Answers Rated Up', dash.ai_feedback?.up],
       ['AI Answers Rated Down', dash.ai_feedback?.down],
@@ -837,9 +842,7 @@ async function viewHome() {
       const c = Array.isArray(rows) && rows.length ? chartable(rows) : null;
       return c ? `<section><h3>${esc(title)}</h3>${chartHtml(rows, c)}</section>` : '';
     };
-    const panels = panel('Search Trend (30d)', dash.search_trend) +
-      panel('Top Searches', dash.top_searches) +
-      panel('Most Viewed Diseases', dash.popular_diseases) +
+    const panels = panel('Most Viewed Diseases', dash.popular_diseases) +
       panel('Most Viewed Medications', dash.popular_medications);
     if (panels) dashHtml += `<div class="grid-2">${panels}</div>`;
   }
@@ -940,13 +943,22 @@ function canWriteRes(slug, res) {
   if (res.readOnly || res.createOnly) return false;
   if (res.roles === 'admin') return isPharmacyAdmin();
   if (res.roles === 'staff') return isPharmacyStaff();
+  if (res.roles === 'tenant_admin') return ['super_admin', 'tenant_admin'].includes(ME.role);
   // Patients: the same cadres that may read them may register and edit them.
   if (res.roles === 'clinical') return Api.roleCanReport(ME.role);
   if (slug === 'users') return ['super_admin', 'tenant_admin'].includes(ME.role);
   return res.report ? Api.roleCanReport(ME.role) : Api.roleCanWrite(ME.role);
 }
 
-const listState = {}; // per-resource {page, search, seq} kept across visits
+// Rows behind a list filter, fetched once per endpoint per session. A filter
+// picks from a list that is short and slow to change (branches, staff), so a
+// re-fetch on every keystroke would buy nothing.
+// ponytail: first 100 rows; paginate the picker if a tenant outgrows that.
+const filterCache = {};
+const filterOptions = (f) => (filterCache[f.path] ||=
+  Api.list(f.path, { page_size: 100 }).then((r) => r.rows).catch(() => []));
+
+const listState = {}; // per-resource {page, search, filters, seq} kept across visits
 // True while the list search box is being typed in: the list re-renders on
 // every keystroke, so the caret has to be put back afterwards.
 let listTyping = false;
@@ -955,7 +967,7 @@ async function viewList(slug) {
   const res = RESOURCES[slug];
   if (!res) return errorBox(new Error('Unknown resource: ' + slug));
   if (!await ensureChrome()) return;
-  const st = (listState[slug] ||= { page: 1, search: '', seq: 0 });
+  const st = (listState[slug] ||= { page: 1, search: '', filters: {}, seq: 0 });
   clearTimeout(st.timer);  // this render supersedes a keystroke still pending
   const wasTyping = listTyping;
   listTyping = false;
@@ -964,8 +976,12 @@ async function viewList(slug) {
   try {
     const query = { page: st.page };
     if (st.search) query.search = st.search;
+    for (const [k, v] of Object.entries(st.filters)) if (v) query[k] = v;
     const seq = ++st.seq;
-    const { rows, count } = await Api.list(rpath(slug), query);
+    const filters = res.filters || [];
+    const [{ rows, count }, ...options] = await Promise.all([
+      Api.list(rpath(slug), query), ...filters.map(filterOptions),
+    ]);
     if (seq !== st.seq) return;  // a later keystroke already asked
     const pages = count != null ? Math.max(1, Math.ceil(count / 25)) : 1;
     render(`
@@ -975,6 +991,11 @@ async function viewList(slug) {
       <form id="search-form" class="toolbar">
         <input name="q" autocomplete="off"
                placeholder="${res.search ? 'Search…' : 'Filter by search…'}" value="${esc(st.search)}">
+        ${filters.map((f, i) => `<label>${esc(f.label)}
+          <select name="${f.param}">
+            <option value="">All</option>
+            ${options[i].map((r) => `<option value="${r.id}"${String(st.filters[f.param] || '') === String(r.id) ? ' selected' : ''}>${esc(f.text(r) ?? r.id)}</option>`).join('')}
+          </select></label>`).join('')}
         <button>Search</button>
       </form>
       ${res.report ? reportSummaryHtml(slug, rows) : ''}
@@ -1005,6 +1026,13 @@ async function viewList(slug) {
       st.timer = setTimeout(run, 300);
     };
     $('#search-form').onsubmit = (e) => { e.preventDefault(); run(); };
+    for (const f of filters) {
+      $('#search-form')[f.param].onchange = (e) => {
+        st.filters[f.param] = e.target.value;
+        st.page = 1;
+        viewList(slug);
+      };
+    }
     // Stopping a prescription from the list, the way the app stops one from
     // the card. The row itself is a link to the record, so the button must not
     // navigate on its way through.
@@ -1726,7 +1754,7 @@ async function viewAnalytics(registry, prefix, key) {
   if (!m) return errorBox(new Error('Unknown metric: ' + key));
   const controls = [];
   if (m.dates) controls.push('<label>From <input type="date" name="from"></label>', '<label>To <input type="date" name="to"></label>');
-  if (m.weeks) controls.push('<label>Weeks <input type="number" name="weeks" min="1" value="4"></label>');
+  if (m.days) controls.push('<label>Days <input type="number" name="days" min="1" value="30"></label>');
   render(`<div class="page-head"><h2>${esc(m.label)}</h2>
       <a class="btn ghost" href="#${prefix}">&larr; All metrics</a></div>
     <form id="f" class="toolbar">${controls.join('')}
@@ -1737,7 +1765,7 @@ async function viewAnalytics(registry, prefix, key) {
   const params = () => {
     const fd = new FormData($('#f'));
     const q = {};
-    for (const k of ['from', 'to', 'weeks']) if (fd.get(k)) q[k] = fd.get(k);
+    for (const k of ['from', 'to', 'days']) if (fd.get(k)) q[k] = fd.get(k);
     return q;
   };
   const load = async () => {

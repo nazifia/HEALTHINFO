@@ -442,6 +442,19 @@ class FacilityMetric(TenantOwnedModel):
         """Occupied / total beds (0..1), or None when no beds recorded."""
         return self.beds_occupied / self.beds_total if self.beds_total else None
 
+    def save(self, *args, **kwargs):
+        """Fall back to the roster when the reporter left staffing blank.
+
+        A typed number still wins — the roster says who was meant to be on, the
+        reporter knows who actually was. This only fills the gap, and only on
+        the first save: editing a row back down to 0 is an answer, not a blank.
+        """
+        if self._state.adding and not self.staff_on_duty:
+            from apps.branches.models import Shift  # avoids an app-import cycle
+
+            self.staff_on_duty = Shift.count_on_duty()
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"Metrics #{self.pk} ({self.patients_treated} treated)"
 

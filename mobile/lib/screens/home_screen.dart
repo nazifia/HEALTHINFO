@@ -44,6 +44,7 @@ import 'notifications_screen.dart';
 import 'dispensing_log_screen.dart';
 import 'chw_reports_screen.dart';
 import 'facility_metrics_screen.dart';
+import 'shifts_screen.dart';
 import 'insurance_claims_screen.dart';
 import 'appointments_screen.dart';
 import 'consultations_screen.dart';
@@ -126,6 +127,7 @@ const _toolsGroup = _Group('Tools', [
 const _reportsGroup = _Group('Reports', [
   _Section('Pharmacy stock', Icons.inventory_2_outlined, StockReportsScreen()),
   _Section('CHW reports', Icons.groups_outlined, ChwReportsScreen()),
+  _Section('Staff roster', Icons.schedule_outlined, ShiftsScreen()),
   _Section('Facility KPIs', Icons.local_hospital_outlined, FacilityMetricsScreen()),
   _Section('Insurance claims', Icons.receipt_long_outlined, InsuranceClaimsScreen()),
   _Section('IDSR report', Icons.assignment_outlined, IdsrScreen()),

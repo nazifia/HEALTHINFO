@@ -108,6 +108,22 @@ class IsTenantAdmin(BasePermission):
         return user.is_super_admin or user.role == Role.TENANT_ADMIN
 
 
+class IsTenantAdminOrReadOnly(BasePermission):
+    """Anyone in the tenant reads; only the tenant admin writes.
+
+    For rosters and the like: staff need to see who is on, but who is on is
+    the admin's to set. Pair with IsTenantMember for the tenant check.
+    """
+
+    def has_permission(self, request, view):
+        if request.method in SAFE_METHODS:
+            return True
+        user = request.user
+        if not user.is_authenticated:
+            return False
+        return user.is_super_admin or user.role == Role.TENANT_ADMIN
+
+
 class ReadOnlyOrReportRole(BasePermission):
     """Anyone in the tenant reads; only REPORT_ROLES (clinical staff) file reports.
 

@@ -74,14 +74,14 @@ Set `CELERY_TASK_ALWAYS_EAGER=1` to run tasks inline without a broker.
 
 ## Analytics dashboards
 All dashboards accept `?from=YYYY-MM-DD&to=YYYY-MM-DD` to window the rollup.
-- `GET /api/analytics/tenant/` — searches, top queries, active users (30d),
-  popular diseases/medications, AI feedback, search trend. Tenant-scoped.
+- `GET /api/analytics/tenant/` — active users (30d), popular
+  diseases/medications, AI feedback, search trend, content gaps. Tenant-scoped.
 - `GET /api/analytics/platform/` — super-admin: tenant/user/search totals,
   searches per tenant, search trend, ADR rollup.
 - `GET /api/analytics/funnel/` — search→view→case counts + conversion ratios.
 - `GET /api/analytics/ai-quality/` — RAG answered vs retrieval-only, downvote
   rate, top downvoted questions.
-- `GET /api/analytics/retention/` — distinct active users per week (8w).
+- `GET /api/analytics/retention/` — distinct active users per day (30d).
 - `GET /api/analytics/benchmark/` — your case load vs anonymized platform median.
 
 ## Patients
@@ -134,7 +134,7 @@ anonymous walk-ins.
 
 ## Health surveillance, reporting & collation
 - `GET  /api/analytics/surveillance/` · `/api/analytics/platform/surveillance/`
-  — outbreak alerts: diseases whose latest week spikes vs trailing baseline.
+  — outbreak alerts: diseases whose latest day spikes vs trailing baseline.
 - `GET/POST /api/case-reports/` — file/list cases (clinical staff). Filter by
   severity, outcome, disease, age group, region.
 - `GET  /api/analytics/cases/` · `/api/analytics/platform/cases/` — case rollups
@@ -145,16 +145,16 @@ anonymous walk-ins.
 - `GET  /api/analytics/adr/` · `/api/analytics/platform/adr/` — ADR rollups.
 - `GET  /api/reports/notifiable/` — cases of notifiable diseases (regulator
   report); add `?format=csv` for a file.
-- `GET  /api/analytics/idsr/` · `/api/analytics/platform/idsr/` — IDSR weekly
-  epidemiological summary (epi-week × disease: cases, deaths, case-fatality
-  rate, notifiable flag). `?weeks=N` windows it; `?format=csv` downloads the
+- `GET  /api/analytics/idsr/` · `/api/analytics/platform/idsr/` — IDSR daily
+  epidemiological summary (day × disease: cases, deaths, case-fatality
+  rate, notifiable flag). `?days=N` windows it (default 30); `?format=csv` downloads the
   line-list. Platform view pools every tenant and rolls totals up the gov
   hierarchy to national (the NCDC central collation). Case rollups now carry
   `deaths` + `case_fatality_rate`, and platform rollups reach `by_national`.
 - `POST /api/interactions/check/` `{medication_ids:[...]}` — drug-interaction checker.
 - `POST /api/differential/` `{symptom_ids:[...]}` — symptoms → ranked diseases.
 
-A weekly Celery beat task (`weekly_tenant_report`, Mondays 04:00) emails each
+A daily Celery beat task (`daily_tenant_report`, 04:00 daily) emails each
 tenant admin their rollup + any outbreak alerts.
 
 ### Capture: the counter and the consulting room feed the data centre
@@ -200,6 +200,29 @@ ticked off at the counter stays one case and one drug instead of doubling the
 national count, and a raced double-capture is refused by the database rather
 than by the capture code. Hand-filed rows carry no source at all (NULL, so the
 plain unique index works on every backend, MySQL included).
+
+## Staff roster
+Who is rostered where, so "on duty" is a fact rather than a number somebody
+typed into a report.
+
+- `GET/POST /api/shifts/` — one staff member at one branch, `starts_at` to
+  `ends_at` (a blank `branch` is the whole facility). Every tenant member reads
+  it — a nurse needs to know who else is on — but only the tenant admin writes
+  it. Filter with `?branch=`, `?user=` and the window a calendar asks for,
+  `?starts_at__gte=&starts_at__lt=`; a shift is listed by when someone comes
+  on, so one starting before the window and running into it is outside it.
+  A shift must end after it starts (checked in the serializer and by a database
+  constraint).
+- `GET /api/shifts/on_duty/` — who is on right now: `{count, results}`, where
+  `count` is distinct people, so a double booking counts once. `?branch=<id>`
+  narrows it to one site. The window is half-open: a shift ending at 14:00 and
+  the next starting at 14:00 hand over without both counting at 14:00.
+
+A `FacilityMetric` snapshot filed with `staff_on_duty` left blank takes its
+count from the roster instead. A typed number still wins — the roster says who
+was meant to be on, the reporter knows who actually was — and the fallback only
+applies when the row is first created, so editing one back down to 0 stays an
+answer rather than a blank.
 
 ## Pharmacy (stock, sales, HMO claims)
 Operational pharmacy for one facility, tenant-scoped like everything else.
