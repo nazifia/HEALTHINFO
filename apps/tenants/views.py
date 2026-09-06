@@ -1,15 +1,17 @@
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Count
-from rest_framework import viewsets
+from rest_framework import serializers, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import NotFound
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from apps.accounts.permissions import IsSuperAdmin
+from apps.accounts.permissions import IsSuperAdmin, IsTenantAdmin
 from apps.governance.models import AuditLog
 from apps.governance.serializers import AuditLogSerializer
 from config.responses import success
 
-from .models import Tenant
+from .models import MAX_IDLE_LOGOUT_MINUTES, Tenant
 from .serializers import TenantSerializer
 
 
@@ -55,6 +57,37 @@ class TenantViewSet(viewsets.ModelViewSet):
             f"Subscription {value}.",
             TenantSerializer(tenant).data,
         )
+
+    @action(
+        detail=False, methods=["get", "patch"],
+        permission_classes=[IsAuthenticated, IsTenantAdmin],
+        url_path="settings",
+    )
+    # Not named `settings`: an action of that name would shadow APIView.settings
+    # (the DRF config object) and break exception handling on this viewset.
+    def org_settings(self, request):
+        """The current organization's own settings, for its admin.
+
+        Separate from the tenant CRUD above because the rest of a tenant record
+        — its plan, its subscription status, whether it is suspended — is the
+        platform's to decide, not the tenant's. Only the idle logout is theirs.
+        """
+        current = getattr(request, "tenant", None)
+        if current is None:
+            raise NotFound("No organization on this request.")
+        # Through get_queryset so the row carries user_count like every other
+        # tenant the serializer renders.
+        tenant = self.get_queryset().get(pk=current.pk)
+        if request.method == "PATCH":
+            field = serializers.IntegerField(
+                min_value=0, max_value=MAX_IDLE_LOGOUT_MINUTES
+            )
+            tenant.idle_logout_minutes = field.run_validation(
+                request.data.get("idle_logout_minutes")
+            )
+            tenant.save(update_fields=["idle_logout_minutes", "updated_at"])
+            return success("Settings saved.", TenantSerializer(tenant).data)
+        return Response(TenantSerializer(tenant).data)
 
     @action(detail=True, methods=["post"], url_path="open")
     def open_as(self, request, pk=None):

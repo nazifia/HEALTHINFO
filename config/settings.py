@@ -15,6 +15,11 @@ load_dotenv(BASE_DIR / ".env")
 DEBUG = os.getenv("DEBUG", "0") == "1"
 BASE_DOMAIN = os.getenv("BASE_DOMAIN", "health.local")
 
+# Idle minutes before the client signs a user out when no tenant governs the
+# session (a super-admin working outside an organization). Inside one, that
+# tenant's own idle_logout_minutes wins. 0 disables.
+IDLE_LOGOUT_MINUTES = int(os.getenv("IDLE_LOGOUT_MINUTES", "30"))
+
 _DEV_SECRET = "dev-insecure-change-me-0123456789-abcdef"
 SECRET_KEY = os.getenv("SECRET_KEY", _DEV_SECRET)
 # Fail fast: the dev fallback is public (in the repo). Signing JWTs/sessions

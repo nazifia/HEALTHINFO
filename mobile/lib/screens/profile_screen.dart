@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../api.dart';
+import '../config.dart';
 import '../main.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
@@ -12,6 +13,14 @@ import '../shared/widgets/snack.dart';
 String? _str(Object? v) {
   final s = v?.toString().trim() ?? '';
   return s.isEmpty ? null : s;
+}
+
+/// How the idle window reads on the profile. 0 is off, not "0 minutes".
+String _idleLabel(Object? minutes) {
+  final m = (minutes as num?)?.toInt();
+  if (m == null) return '—';
+  if (m == 0) return 'Never';
+  return 'After $m minute${m == 1 ? '' : 's'} of inactivity';
 }
 
 /// Current account — GET /api/users/me/.
@@ -90,6 +99,66 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  /// The organization's idle sign-out, for whoever administers it. Reads the
+  /// current value rather than the user's own copy: a super-admin working
+  /// inside an organization is editing that organization's, not theirs.
+  Future<void> _editIdleLogout() async {
+    int current;
+    try {
+      final r = await api.get('/api/tenants/settings/');
+      current = ((r as Map)['idle_logout_minutes'] as num?)?.toInt() ?? 30;
+    } on ApiException catch (e) {
+      if (mounted) showError(context, e.friendly);
+      return;
+    }
+    if (!mounted) return;
+    final minutes = TextEditingController(text: '$current');
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Auto sign-out'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Everyone in this organization is signed out after '
+                'this many minutes of inactivity. 0 never signs out.'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: minutes,
+              keyboardType: TextInputType.number,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Minutes'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Save')),
+        ],
+      ),
+    );
+    if (saved != true || !mounted) return;
+    final mins = int.tryParse(minutes.text.trim());
+    if (mins == null || mins < 0 || mins > 1440) {
+      showError(context, 'Enter 0 to 1440 minutes.');
+      return;
+    }
+    try {
+      await api.patch('/api/tenants/settings/', {'idle_logout_minutes': mins});
+      idleMinutes.value = mins; // applies to this device without a restart
+      api.forgetMe();
+      if (!mounted) return;
+      showSuccess(context, 'Auto sign-out saved');
+      setState(() { _future = _load(); });
+    } on ApiException catch (e) {
+      if (mounted) showError(context, e.friendly);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<Map<String, dynamic>>(
@@ -160,6 +229,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             const SizedBox(height: 16),
+            if (const {'tenant_admin', 'super_admin'}
+                .contains(_str(u['role'])) &&
+                tenantSlug.isNotEmpty) ...[
+              GlassCard(
+                padding: const EdgeInsets.all(8),
+                child: ListTile(
+                  leading: const Icon(Icons.timer_outlined,
+                      color: EnhancedTheme.primaryTeal),
+                  title: Text('Auto sign-out',
+                      style: TextStyle(color: context.hintColor, fontSize: 12)),
+                  subtitle: Text(
+                      _idleLabel(u['idle_logout_minutes']),
+                      style: TextStyle(
+                          color: context.labelColor,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600)),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _editIdleLogout,
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
             FilledButton.icon(
               onPressed: () => _editProfile(u),
               icon: const Icon(Icons.edit_outlined),

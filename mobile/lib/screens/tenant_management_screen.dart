@@ -359,6 +359,10 @@ class _TenantFormState extends State<_TenantForm> {
       TextEditingController(text: '${widget.tenant?['address'] ?? ''}');
   late final TextEditingController _contact =
       TextEditingController(text: '${widget.tenant?['contact'] ?? ''}');
+  // Blank on a new tenant: the server's own default (30) is the right answer
+  // when nobody has an opinion, so an untouched field must not send one.
+  late final TextEditingController _idle = TextEditingController(
+      text: '${widget.tenant?['idle_logout_minutes'] ?? ''}');
   late String _kind = '${widget.tenant?['kind'] ?? widget.defaultKind}';
   bool _busy = false;
 
@@ -374,6 +378,8 @@ class _TenantFormState extends State<_TenantForm> {
       'address': _address.text.trim(),
       'contact': _contact.text.trim(),
     };
+    final idle = _idle.text.trim();
+    if (idle.isNotEmpty) body['idle_logout_minutes'] = idle;
     try {
       if (_isEdit) {
         await api.patch('/api/tenants/${widget.tenant!['id']}/', body);
@@ -397,6 +403,7 @@ class _TenantFormState extends State<_TenantForm> {
     _slug.dispose();
     _address.dispose();
     _contact.dispose();
+    _idle.dispose();
     super.dispose();
   }
 
@@ -439,6 +446,22 @@ class _TenantFormState extends State<_TenantForm> {
               TextFormField(
                 controller: _contact,
                 decoration: const InputDecoration(labelText: 'Contact'),
+              ),
+              TextFormField(
+                controller: _idle,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Auto sign-out (minutes)',
+                  helperText: '0 never signs out; blank keeps the default',
+                ),
+                validator: (v) {
+                  final t = (v ?? '').trim();
+                  if (t.isEmpty) return null;
+                  final n = int.tryParse(t);
+                  return (n == null || n < 0 || n > 1440)
+                      ? 'Enter 0 to 1440'
+                      : null;
+                },
               ),
             ],
           ),

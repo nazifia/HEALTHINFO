@@ -1,5 +1,6 @@
 import re
 
+from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
 from django.db import transaction
 from django.db.models import Q
@@ -128,6 +129,10 @@ class UserSerializer(serializers.ModelSerializer):
         write_only=True, required=False, validators=[validate_password]
     )
     tenant_name = serializers.CharField(source="tenant.name", read_only=True)
+    # The client arms its inactivity timer from this. The user's own tenant
+    # sets it; a user without one (super-admin) falls back to the platform
+    # default. 0 means never sign out on idle.
+    idle_logout_minutes = serializers.SerializerMethodField()
     license_number = serializers.CharField(
         required=False, allow_blank=True, allow_null=True
     )
@@ -136,8 +141,13 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = (
             "id", "username", "phone", "email", "role", "tenant", "tenant_name",
-            "is_active", "password", "license_number",
+            "is_active", "password", "license_number", "idle_logout_minutes",
         )
+
+    def get_idle_logout_minutes(self, obj):
+        if obj.tenant_id is None:
+            return settings.IDLE_LOGOUT_MINUTES
+        return obj.tenant.idle_logout_minutes
 
     def validate_license_number(self, value):
         return normalize_license(value)

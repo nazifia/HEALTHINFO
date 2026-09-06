@@ -33,9 +33,18 @@ class Api {
     try {
       final r = await get('/api/users/me/');
       _me = (r as Map).cast<String, dynamic>();
+      // The tenant sets how long an unattended screen may sit signed in. It
+      // rides on the user, so arm the watcher from here rather than making
+      // every caller remember to.
+      final mins = _me?['idle_logout_minutes'];
+      if (mins is int) idleMinutes.value = mins;
     } catch (_) {}
     return _me;
   }
+
+  /// Forget the cached user so the next [me] re-reads it — after a profile
+  /// edit, or after the organization's idle timeout changes.
+  void forgetMe() => _me = null;
 
   /// Current user's role — what the screens gate on.
   Future<String?> myRole() async => (await me())?['role']?.toString();
@@ -79,6 +88,7 @@ class Api {
     _access = null;
     _refresh = null;
     _me = null;
+    idleMinutes.value = idleMinutesDefault;
     final p = await SharedPreferences.getInstance();
     await p.remove(_kAccess);
     await p.remove(_kRefresh);

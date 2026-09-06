@@ -2,8 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 
-import 'config.dart';
-
 /// Wraps the app and fires [onTimeout] after [timeout] of no pointer activity.
 /// Also resets when the app returns to the foreground so a backgrounded app
 /// can't sit logged-in past the window.
@@ -12,7 +10,7 @@ class InactivityWatcher extends StatefulWidget {
     super.key,
     required this.child,
     required this.onTimeout,
-    this.timeout = idleTimeout,
+    required this.timeout,
   });
 
   final Widget child;
@@ -44,6 +42,12 @@ class _InactivityWatcherState extends State<InactivityWatcher>
   void _reset() {
     _timer?.cancel();
     _timer = Timer(widget.timeout, widget.onTimeout);
+  }
+
+  @override
+  void didUpdateWidget(InactivityWatcher old) {
+    super.didUpdateWidget(old);
+    if (old.timeout != widget.timeout) _reset();
   }
 
   @override

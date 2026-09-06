@@ -23,6 +23,10 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await loadTenant();
   await api.loadTokens();
+  // Arms the idle watcher from the tenant's setting. Not awaited: the app
+  // opens on the last known window and tightens to the real one when the
+  // answer lands.
+  if (api.isLoggedIn) api.me();
   final prefs = await SharedPreferences.getInstance();
   final saved = prefs.getString('theme_mode');
   final mode = saved == 'dark' ? ThemeMode.dark : ThemeMode.light;
@@ -60,9 +64,18 @@ class HealthInfoApp extends ConsumerWidget {
       darkTheme: EnhancedTheme.enhancedDarkTheme,
       themeMode: themeMode,
       builder: (context, child) => NativeAppBanner(
-        child: InactivityWatcher(
-          onTimeout: _logoutOnIdle,
+        // The organization sets the window; 0 means it never signs out, so no
+        // watcher at all rather than a timer that never fires.
+        child: ValueListenableBuilder<int>(
+          valueListenable: idleMinutes,
           child: child ?? const SizedBox.shrink(),
+          builder: (context, mins, page) => mins <= 0
+              ? page!
+              : InactivityWatcher(
+                  onTimeout: _logoutOnIdle,
+                  timeout: Duration(minutes: mins),
+                  child: page!,
+                ),
         ),
       ),
       home: api.isLoggedIn ? const HomeScreen() : const LoginScreen(),

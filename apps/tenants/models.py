@@ -1,7 +1,11 @@
+from django.core.validators import MaxValueValidator
 from django.db import models
 from django.db.models import Q
 
 from .current import get_current_tenant
+
+# A day. Anything longer is "off", which is what 0 is for.
+MAX_IDLE_LOGOUT_MINUTES = 1440
 
 
 class Jurisdiction(models.Model):
@@ -85,6 +89,13 @@ class Tenant(models.Model):
     )
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.ACTIVE
+    )
+    # Minutes of inactivity before the client signs a user out. Set per tenant:
+    # a shared pharmacy counter wants a few minutes, a locked office more.
+    # 0 disables it. Super-admins edit any tenant's; a tenant admin edits
+    # their own (see TenantViewSet.org_settings).
+    idle_logout_minutes = models.PositiveSmallIntegerField(
+        default=30, validators=[MaxValueValidator(MAX_IDLE_LOGOUT_MINUTES)]
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

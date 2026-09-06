@@ -60,6 +60,13 @@ Future<void> setTenant(String slug, {String name = ''}) async {
 }
 
 // Auto-logout after this much user inactivity (no taps/scrolls). Health data —
-// keep it short. Override: --dart-define=IDLE_TIMEOUT_MINUTES=10
-const int _idleMinutes = int.fromEnvironment('IDLE_TIMEOUT_MINUTES', defaultValue: 5);
-const Duration idleTimeout = Duration(minutes: _idleMinutes);
+// keep it short. The dart-define is only the value used before the server has
+// been asked: the signed-in user's tenant sets the real one (users/me/'s
+// idle_logout_minutes), and [idleMinutes] carries it. 0 means never.
+// Override the pre-login default: --dart-define=IDLE_TIMEOUT_MINUTES=10
+const int idleMinutesDefault =
+    int.fromEnvironment('IDLE_TIMEOUT_MINUTES', defaultValue: 5);
+
+/// Minutes of inactivity before sign-out, as the tenant set it. The watcher
+/// listens, so a change applies without a restart.
+final ValueNotifier<int> idleMinutes = ValueNotifier<int>(idleMinutesDefault);
