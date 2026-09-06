@@ -1,0 +1,7 @@
+{
+  "name": "health-info-mobile-deploy",
+  "private": true,
+  "scripts": {
+    "deploy": "firebase deploy --only hosting -P healthinfoapp2"
+  }
+}

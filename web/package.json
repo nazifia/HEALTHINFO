@@ -1,0 +1,7 @@
+{
+  "name": "health-info-web-deploy",
+  "private": true,
+  "scripts": {
+    "deploy": "firebase deploy --only hosting -P healthinfoweb"
+  }
+}
