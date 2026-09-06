@@ -1,6 +1,9 @@
 {
   "hosting": {
     "public": ".",
+    "predeploy": [
+      "node ../scripts/deploy_guard.js healthinfoweb"
+    ],
     "ignore": [
       "firebase.json",
       ".firebaserc",

@@ -40,6 +40,19 @@ Keep each project id out of the other directory's `.firebaserc`. Listing
 run from `mobile/` and push the Flutter build over this site, so both URLs served
 the same frontend.
 
+A `predeploy` hook in each `firebase.json` now enforces that pairing, so an alias
+or a `-P` flag cannot cross the two frontends over again:
+
+```
+web/firebase.json     node ../scripts/deploy_guard.js healthinfoweb
+mobile/firebase.json  node ../scripts/deploy_guard.js healthinfoapp2 healthinfoapp --require build/web/main.dart.js
+```
+
+`firebase deploy -P healthinfoapp2` run from `web/` (or the reverse) fails before
+anything uploads. The mobile hook also refuses to deploy when `build/web/main.dart.js`
+is absent, so a stale or missing `flutter build web` cannot ship an empty site.
+`node scripts/deploy_guard.test.js` self-checks the guard.
+
 ## Backend CORS (required for prod)
 
 The API only allows configured origins in prod mode. Add your Firebase domain

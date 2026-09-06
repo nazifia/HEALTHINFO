@@ -1,6 +1,9 @@
 {
   "hosting": {
     "public": "build/web",
+    "predeploy": [
+      "node ../scripts/deploy_guard.js healthinfoapp2 healthinfoapp --require build/web/main.dart.js"
+    ],
     "ignore": [
       "firebase.json",
       "**/.*",
