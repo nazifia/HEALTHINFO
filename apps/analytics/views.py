@@ -202,6 +202,17 @@ class CaseReportViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(reporter=self.request.user)
 
+    @action(detail=True, methods=["post"])
+    def notify(self, request, pk=None):
+        """Record that this case was notified up the IDSR tier — no body.
+
+        Takes the case off the 24-hour immediate worklist and stamps who sent it
+        and when. Calling it twice keeps the first timestamp, so a late
+        notification stays late in the timeliness figures.
+        """
+        case = self.get_object()
+        return Response(self.get_serializer(case.mark_notified(request.user)).data)
+
 
 class AdverseDrugReactionViewSet(viewsets.ModelViewSet):
     """Staff file/list adverse drug reactions (pharmacovigilance), tenant-scoped."""

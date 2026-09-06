@@ -16,7 +16,8 @@ import 'report_scaffold.dart';
 /// "summary": [{epi_week, disease, icd10_code, notifiable, notify_immediately,
 /// cases, deaths, case_fatality_rate}, ...]} newest week first, plus
 /// "immediate": the single cases of an epidemic-prone disease whose 24-hour
-/// notification clock is running, oldest first.
+/// notification clock is running, oldest first. Sending one
+/// (POST /api/case-reports/{id}/notify/) takes it off that list.
 ///
 /// Rows are grouped by epi-week here only for reading — the server already
 /// ordered them, so grouping never reorders, it just inserts the headings.
@@ -59,6 +60,19 @@ class _IdsrScreenState extends State<IdsrScreen> {
   }
 
   void _reload() => setState(() { _future = _load(); });
+
+  /// Mark one case notified, then reload so it leaves the worklist.
+  Future<void> _notify(int id) async {
+    try {
+      await api.post('/api/case-reports/$id/notify/');
+      _reload();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not record the notification: $e')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -155,7 +169,15 @@ class _IdsrScreenState extends State<IdsrScreen> {
                 for (final c in _immediate)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
-                    child: _ImmediateRow(row: c),
+                    child: _ImmediateRow(
+                      row: c,
+                      // Case reports are tenant-scoped, so only a facility
+                      // reading its own return can send one. The centre is
+                      // watching the same list, not working it.
+                      onNotify: _path == '/api/analytics/idsr/'
+                          ? () => _notify(c['id'] as int)
+                          : null,
+                    ),
                   ),
                 const SizedBox(height: 14),
               ],
@@ -232,7 +254,9 @@ class _IdsrRow extends StatelessWidget {
 /// because that is what says how late the notification already is.
 class _ImmediateRow extends StatelessWidget {
   final Map<String, dynamic> row;
-  const _ImmediateRow({required this.row});
+  /// Null in the central view, where the reader watches rather than sends.
+  final VoidCallback? onNotify;
+  const _ImmediateRow({required this.row, this.onNotify});
 
   @override
   Widget build(BuildContext context) {
@@ -269,6 +293,17 @@ class _ImmediateRow extends StatelessWidget {
               '${row['outcome'] ?? ''}',
             ].where((v) => v.trim().isNotEmpty).join(' · '),
             style: TextStyle(color: context.hintColor, fontSize: 13)),
+        if (onNotify != null)
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: onNotify,
+              icon: const Icon(Icons.send_outlined, size: 18),
+              label: const Text('Mark notified'),
+              style: TextButton.styleFrom(
+                  foregroundColor: EnhancedTheme.primaryTeal),
+            ),
+          ),
       ]),
     );
   }

@@ -93,11 +93,11 @@ def weekly_summary(reports, weeks=8):
 ALERT_COLUMNS = (
     "id", "reported_at", "disease", "icd10_code", "facility", "jurisdiction",
     "region", "severity", "outcome", "patient_age_group", "patient_sex",
-    "hours_elapsed", "overdue",
+    "notified_at", "notified_by", "hours_elapsed", "overdue",
 )
 
 
-def immediate_alerts(reports, hours=IMMEDIATE_DEADLINE_HOURS):
+def immediate_alerts(reports, hours=IMMEDIATE_DEADLINE_HOURS, notified=False):
     """Single cases of immediately-notifiable disease whose 24-hour clock runs.
 
     One row per case, not per week: the epidemic-prone diseases are notified up
@@ -108,21 +108,24 @@ def immediate_alerts(reports, hours=IMMEDIATE_DEADLINE_HOURS):
     `hours` widens the window rather than the deadline: the deadline stays 24
     hours, so asking for 72 shows yesterday's misses next to today's work.
 
-    ponytail: elapsed time is measured from when the case was filed, and nothing
-    records that a notification went out — every listed case reads as unsent.
-    Add a `notified_at` on CaseReport when a facility needs the sent ones to
-    drop off this list.
+    By default this is the worklist: only cases still owed a notification. Pass
+    ``notified=True`` for the audit view, which keeps the sent ones in and stops
+    their clock at ``notified_at`` — that is what says whether the facility made
+    the 24 hours, and it must not keep counting up afterwards.
     """
     since = timezone.now() - timedelta(hours=hours)
-    rows = (
-        reports.filter(disease__notify_immediately=True, created_at__gte=since)
-        .select_related("disease", "tenant", "tenant__jurisdiction")
-        .order_by("created_at", "id")
-    )
+    rows = reports.filter(
+        disease__notify_immediately=True, created_at__gte=since
+    ).select_related(
+        "disease", "tenant", "tenant__jurisdiction", "notified_by"
+    ).order_by("created_at", "id")
+    if not notified:
+        rows = rows.filter(notified_at=None)
     now = timezone.now()
     out = []
     for c in rows:
-        elapsed = (now - c.created_at).total_seconds() / 3600
+        # A sent case is judged on how long it took, not on how long ago it was.
+        elapsed = ((c.notified_at or now) - c.created_at).total_seconds() / 3600
         out.append(
             {
                 "id": c.id,
@@ -140,11 +143,31 @@ def immediate_alerts(reports, hours=IMMEDIATE_DEADLINE_HOURS):
                 "outcome": c.outcome,
                 "patient_age_group": c.patient_age_group,
                 "patient_sex": c.patient_sex,
+                "notified_at": c.notified_at,
+                "notified_by": c.notified_by.username if c.notified_by_id else "",
                 "hours_elapsed": round(elapsed, 1),
                 "overdue": elapsed > IMMEDIATE_DEADLINE_HOURS,
             }
         )
     return out
+
+
+def timeliness(reports, hours=7 * 24):
+    """How the immediate notifications in the window went: sent, late, still owed.
+
+    The compliance line an IDSR review asks for, derived from the same rows the
+    worklist is built from rather than counted a second way.
+    """
+    rows = immediate_alerts(reports, hours=hours, notified=True)
+    sent = [r for r in rows if r["notified_at"] is not None]
+    return {
+        "window_hours": hours,
+        "cases": len(rows),
+        "notified": len(sent),
+        "on_time": len([r for r in sent if not r["overdue"]]),
+        "late": len([r for r in sent if r["overdue"]]),
+        "pending": len(rows) - len(sent),
+    }
 
 
 def tenant_idsr_report(weeks=8):
@@ -154,6 +177,7 @@ def tenant_idsr_report(weeks=8):
         "weeks": weeks,
         "summary": weekly_summary(reports, weeks),
         "immediate": immediate_alerts(reports),
+        "timeliness": timeliness(reports),
     }
 
 
@@ -167,6 +191,7 @@ def platform_idsr_report(weeks=8):
         # Centrally the window is a week, not a day: what the tiers below missed
         # is exactly what the centre is watching for.
         "immediate": immediate_alerts(reports, hours=7 * 24),
+        "timeliness": timeliness(reports),
         "by_local": _rollup_by_tier(reports, Jurisdiction.Level.LOCAL),
         "by_state": _rollup_by_tier(reports, Jurisdiction.Level.STATE),
         "by_national": _rollup_by_tier(reports, Jurisdiction.Level.NATIONAL),

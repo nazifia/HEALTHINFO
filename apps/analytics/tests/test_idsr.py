@@ -8,6 +8,7 @@ from django.utils import timezone
 from apps.analytics.idsr import (
     immediate_alerts,
     platform_idsr_report,
+    timeliness,
     weekly_summary,
 )
 from apps.analytics.models import CaseReport
@@ -81,3 +82,39 @@ def test_immediate_alerts_lists_only_the_24_hour_diseases(db_clean):
     rows = immediate_alerts(CaseReport.all_objects.all(), hours=72)
     assert [r["id"] for r in rows] == [stale.pk, fresh.pk]
     assert rows[0]["overdue"] is True and rows[0]["hours_elapsed"] >= 30
+
+
+def test_notifying_a_case_takes_it_off_the_worklist(db_clean):
+    """A sent case leaves the worklist, keeps its first timestamp, and its clock
+    stops at the moment it was sent rather than counting on."""
+    tenant = Tenant.objects.create(name="Clinic C", slug="c")
+    measles = Disease.objects.create(
+        name="Measles", slug="measles", icd10_code="B05", notifiable=True,
+        notify_immediately=True, status="published",
+    )
+    late = CaseReport.objects.create(tenant=tenant, disease=measles)
+    pending = CaseReport.objects.create(tenant=tenant, disease=measles)
+    CaseReport.all_objects.filter(pk=late.pk).update(
+        created_at=timezone.now() - timedelta(hours=30)
+    )
+    late.refresh_from_db()
+    late.mark_notified()
+
+    # Worklist keeps only what is still owed.
+    assert [r["id"] for r in immediate_alerts(CaseReport.all_objects.all(), hours=72)]         == [pending.pk]
+
+    # Audit view keeps the sent one, still marked late: it went out at 30 hours.
+    rows = immediate_alerts(CaseReport.all_objects.all(), hours=72, notified=True)
+    sent = next(r for r in rows if r["id"] == late.pk)
+    assert sent["overdue"] is True and 30 <= sent["hours_elapsed"] < 31
+
+    # Second call never re-stamps — a late notification stays late.
+    first = late.notified_at
+    late.mark_notified()
+    late.refresh_from_db()
+    assert late.notified_at == first
+
+    assert timeliness(CaseReport.all_objects.all()) == {
+        "window_hours": 168, "cases": 2, "notified": 1,
+        "on_time": 0, "late": 1, "pending": 1,
+    }

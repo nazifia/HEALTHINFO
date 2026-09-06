@@ -37,8 +37,13 @@ class CaseReportSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     class Meta:
         model = CaseReport
         exclude = ("tenant",)
-        # source_ref is provenance written by capture, never by a client.
-        read_only_fields = ("reporter", "source_ref", "created_at", "updated_at")
+        # source_ref is provenance written by capture, never by a client;
+        # notified_at/notified_by are stamped by the notify action, so a client
+        # cannot backdate a notification it never sent.
+        read_only_fields = (
+            "reporter", "source_ref", "created_at", "updated_at",
+            "notified_at", "notified_by",
+        )
 
     def validate_region(self, value):
         return _validate_region(value)

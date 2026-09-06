@@ -111,6 +111,15 @@ class CaseReport(PatientLinkedModel, TenantOwnedModel):
     source_ref = models.CharField(
         max_length=100, null=True, blank=True, default=None
     )
+    # When this case was notified up the IDSR hierarchy, for the diseases that
+    # must go within 24 hours of suspicion. NULL means still owed — that is what
+    # keeps a case on the immediate worklist (apps.analytics.idsr). Set once and
+    # never cleared: a notification that went out cannot un-go.
+    notified_at = models.DateTimeField(null=True, blank=True)
+    notified_by = models.ForeignKey(
+        "accounts.User", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="notified_cases",
+    )
 
     class Meta:
         ordering = ("-created_at", "-id")
@@ -128,6 +137,19 @@ class CaseReport(PatientLinkedModel, TenantOwnedModel):
 
     def __str__(self):
         return f"Case #{self.pk} ({self.severity})"
+
+    def mark_notified(self, user=None):
+        """Record that this case was notified up the tier. Idempotent.
+
+        A second call leaves the first timestamp standing: the deadline is
+        judged against when the notification actually went out, and re-stamping
+        it would quietly turn a late notification into an on-time one.
+        """
+        if self.notified_at is None:
+            self.notified_at = timezone.now()
+            self.notified_by = user
+            self.save(update_fields=["notified_at", "notified_by", "updated_at"])
+        return self
 
 
 class AiInteraction(TenantOwnedModel):
