@@ -48,6 +48,10 @@ dependencies:
   shimmer: ^3.0.0
   fl_chart: ^0.69.0
   share_plus: ^13.3.0
+  # Device position, for the patient portal's nearest-pharmacy list. Only
+  # ever read on demand, and a refusal is not an error: the list still
+  # answers, unsorted.
+  geolocator: ^14.0.3
 
 dev_dependencies:
   flutter_test:

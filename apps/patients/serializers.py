@@ -2,6 +2,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from apps.accounts.models import normalize_phone
+from apps.accounts.serializers import TenantUserField
 from apps.analytics.nigeria import validate_region
 from config.serializers import NamedRelationsMixin
 
@@ -25,6 +26,11 @@ class PatientSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     chronic_condition_names = serializers.StringRelatedField(
         source="chronic_conditions", many=True, read_only=True
     )
+    # The portal account that reads this record. TenantUserField, not the
+    # auto-generated FK: that one would accept any user id in the table, and
+    # linking another tenant's account to a patient hands them the record.
+    user = TenantUserField(required=False, allow_null=True)
+    user_phone = serializers.CharField(source="user.phone", read_only=True)
     # Opt-out for the same-person check below. Not a model field — popped in
     # validate() so it never reaches the row.
     allow_duplicate = serializers.BooleanField(write_only=True, required=False)

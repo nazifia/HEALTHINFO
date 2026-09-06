@@ -23,6 +23,15 @@ class Branch(TenantOwnedModel):
     address = models.TextField(blank=True)
     phone = models.CharField(max_length=30, blank=True)
     email = models.EmailField(blank=True)
+    # Where the shop actually is, in decimal degrees. Optional: a branch with
+    # no coordinates is still a branch, it just can't be sorted by nearness
+    # (see the patient portal's pharmacies list).
+    latitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True
+    )
+    longitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True
+    )
     is_active = models.BooleanField(
         default=True,
         help_text="Inactive branches are hidden from the app; their data stays.",

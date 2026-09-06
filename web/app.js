@@ -186,6 +186,20 @@ const RESOURCES = {
 // (the pharmacy module nests everything under /api/pharmacy/).
 const rpath = (slug, suffix = '') => `/api/${RESOURCES[slug]?.path || slug}/${suffix}`;
 
+// Colour a tile by the module it opens, so the palette carries meaning rather
+// than decoration: pharmacy is always blue, clinical always rose. styles.css
+// maps each class to an accent; an unmapped route falls back to the brand.
+function domClass(href) {
+  const path = String(href).replace(/^#/, '');
+  const res = path.match(/^\/r\/([^/]+)/);
+  const group = res ? RESOURCES[res[1]]?.group
+    : path.startsWith('/pharmacy') ? 'Pharmacy'
+    : path.startsWith('/clinical') ? 'Clinical'
+    : /^\/(analytics|platform|stat)/.test(path) ? 'Analytics'
+    : 'Tools';
+  return group ? ` dom-${group.toLowerCase()}` : '';
+}
+
 // The tenant lists are split by kind (/api/tenants/hospitals/), but a single
 // tenant still lives at /api/tenants/<id>/ — strip the kind segment for detail.
 const rdetail = (slug, suffix) => slug.startsWith('tenants-')
@@ -310,6 +324,10 @@ function navHtml() {
     `<a href="#/notifiable" data-route="/notifiable">${ico('flag')}Notifiable Cases</a>`,
   ];
   let html = `<a href="#/" data-route="/" class="nav-home">${ico('home')}Home</a>`;
+  // A patient reads their own record and nothing else in here.
+  if (ME?.role === 'public') {
+    html += `<a href="#/portal" data-route="/portal">${ico('activity')}My Health</a>`;
+  }
   html += navGroup('Tools', tools.join(''));
   html += navGroup('Catalog', groups.Catalog.join(''));
   html += navGroup('Reports', groups.Reports.join(''));
@@ -821,6 +839,8 @@ async function viewHome() {
     ['#/r/case-reports', 'file', 'Case Reports', 'File and browse case reports'],
     ['#/analytics', 'chart', 'Analytics', 'Tenant dashboards and stats'],
   ];
+  if (ME.role === 'public') tiles.unshift(['#/portal', 'activity', 'My Health',
+    'Your record, your medications and where to fill them']);
   if (Api.roleCanReport(ME.role)) tiles.splice(4, 0, ['#/r/patients', 'users', 'Patients', 'Register and open patient records']);
   if (isPlatformScope()) tiles.push(['#/platform', 'chart', 'Platform', 'Cross-tenant analytics']);
   // The organization lists stay inside an organization: they are the way out of it.
@@ -851,7 +871,7 @@ async function viewHome() {
     ${dashHtml}
     <h3>Quick Actions</h3>
     <div class="tiles home-tiles">${tiles.map(([href, icon, t, d]) =>
-      `<a class="tile linktile" href="${href}"><span class="tile-label">${ico(icon)}${esc(t)}</span><span class="muted">${esc(d)}</span></a>`).join('')}
+      `<a class="tile linktile${domClass(href)}" href="${href}"><span class="tile-label">${ico(icon)}${esc(t)}</span><span class="muted">${esc(d)}</span></a>`).join('')}
     </div>`);
 }
 
@@ -1735,7 +1755,7 @@ async function viewGraph(type, id) {
 
 function statIndex(title, registry, prefix) {
   return `<h2>${esc(title)}</h2><div class="tiles home-tiles">` +
-    registry.map((m) => `<a class="tile linktile" href="#${prefix}/${m.key}"><span class="tile-label">${ico('chart')}${esc(m.label)}</span></a>`).join('') +
+    registry.map((m) => `<a class="tile linktile${domClass(prefix)}" href="#${prefix}/${m.key}"><span class="tile-label">${ico('chart')}${esc(m.label)}</span></a>`).join('') +
     '</div>';
 }
 
@@ -1805,7 +1825,7 @@ async function viewClinical() {
   const slugs = CLINICAL_WORK[ME.role] || CLINICAL_WORK.nurse;
   const lists = await Promise.all(slugs.map((slug) =>
     Api.list(rpath(slug), { ordering: '-created_at' }).catch(() => null)));
-  const tile = (slug, list) => `<a class="tile linktile kpi-tile" href="#/r/${slug}">
+  const tile = (slug, list) => `<a class="tile linktile kpi-tile${domClass('#/r/' + slug)}" href="#/r/${slug}">
     <span class="tile-label">${esc(RESOURCES[slug].title)}</span>
     <span class="tile-val">${esc(list ? fmtVal(list.count ?? list.rows.length) : '—')}</span></a>`;
   const [primary] = slugs;
@@ -1820,7 +1840,7 @@ async function viewClinical() {
     </div>
     <h3>File a report</h3>
     <div class="tiles">${slugs.map((slug) =>
-      `<a class="tile linktile" href="#/r/${slug}/new"><span class="tile-label">New</span>
+      `<a class="tile linktile${domClass('#/r/' + slug)}" href="#/r/${slug}/new"><span class="tile-label">New</span>
         <span class="tile-val">${esc(RESOURCES[slug].title)}</span></a>`).join('')}</div>`);
 }
 
@@ -2134,6 +2154,128 @@ function wirePurchaseReceive(orderId, reload) {
   };
 }
 
+/* --------------------------------------------------------------- portal */
+
+/* A patient's own record on one page: their details, what has been
+   prescribed, their history, and where to go and fill it.
+
+   No patient id is ever sent — the API reads it off the signed-in account
+   (apps.patients.portal) — so this client cannot ask for anyone else's
+   record even by mistake. */
+
+// Fields a patient is shown about themselves, in the order they read them.
+// Not the whole row: the staff notes and the registry bookkeeping are the
+// facility's working record, not the card the patient came for.
+const PORTAL_FIELDS = [
+  'hospital_number', 'full_name', 'sex', 'age', 'date_of_birth', 'phone',
+  'address', 'region', 'blood_group', 'genotype', 'allergies',
+  'chronic_condition_names', 'patient_type_display', 'nhis_number',
+  'next_of_kin_name', 'next_of_kin_phone', 'next_of_kin_relationship',
+];
+
+/* The browser's own geolocation, asked once. Resolves to null when the
+   patient declines it, the device has no fix, or it takes too long — the
+   pharmacy list still answers, it just can't be sorted by distance.
+   ponytail: getCurrentPosition, not watchPosition; a shop list doesn't move. */
+const myPosition = () => new Promise((resolve) => {
+  if (!navigator.geolocation) return resolve(null);
+  navigator.geolocation.getCurrentPosition(
+    (p) => resolve({ lat: p.coords.latitude.toFixed(6), lng: p.coords.longitude.toFixed(6) }),
+    () => resolve(null),
+    { timeout: 8000, maximumAge: 300000 },
+  );
+});
+
+function portalMedsHtml(rows) {
+  if (!rows.length) return '<p class="muted">Nothing has been prescribed yet.</p>';
+  return `<div class="table-wrap"><table><thead><tr>
+      <th>Medication</th><th>Dose</th><th>How often</th><th>Days</th>
+      <th>Status</th><th></th></tr></thead><tbody>${rows.map((r) => `<tr>
+      <td>${esc(r.medication_name || '—')}</td>
+      <td>${esc(r.dose || '—')}</td>
+      <td>${esc(r.frequency || '—')}</td>
+      <td>${esc(r.duration_days ?? '—')}</td>
+      <td>${cellHtml('status', r.status)}</td>
+      <td><button class="btn find-drug" data-medication="${esc(r.medication)}"
+        >Where to get it</button></td></tr>`).join('')}</tbody></table></div>`;
+}
+
+function pharmaciesHtml(rows) {
+  if (!rows.length) {
+    return '<p class="muted">No pharmacy listed for that. Try the full list.</p>';
+  }
+  // The map link hands the coordinates to whatever maps app the phone has,
+  // which is the one that can actually navigate there.
+  const map = (r) => r.latitude && r.longitude
+    ? `<a href="https://www.google.com/maps/search/?api=1&query=${r.latitude},${r.longitude}"
+         target="_blank" rel="noopener">Directions</a>`
+    : '<span class="muted">—</span>';
+  return `<div class="table-wrap"><table><thead><tr>
+      <th>Pharmacy</th><th>Branch</th><th>Address</th><th>Phone</th>
+      <th>Distance</th><th></th></tr></thead><tbody>${rows.map((r) => `<tr>
+      <td>${esc(r.pharmacy || '—')}</td>
+      <td>${esc(r.name || '—')}</td>
+      <td>${esc(r.address || '—')}</td>
+      <td>${r.phone ? `<a href="tel:${esc(r.phone)}">${esc(r.phone)}</a>` : '—'}</td>
+      <td>${r.distance_km == null ? '<span class="muted">—</span>' : esc(r.distance_km) + ' km'}</td>
+      <td>${map(r)}</td></tr>`).join('')}</tbody></table></div>`;
+}
+
+async function loadPharmacies(medication) {
+  const box = $('#pharmacies');
+  if (!box) return;
+  box.innerHTML = '<div class="loading">Loading…</div>';
+  const pos = await myPosition();
+  if (!pos) toast('Location off — pharmacies are listed unsorted.');
+  try {
+    box.innerHTML = pharmaciesHtml(
+      await Api.get('/api/portal/pharmacies/', { ...(pos || {}), medication })
+    );
+  } catch (e) {
+    box.innerHTML = `<p class="muted">${esc(e.message)}</p>`;
+  }
+}
+
+async function viewPortal() {
+  if (!await ensureChrome()) return;
+  spinner();
+  let me, meds, history;
+  try {
+    [me, meds, history] = await Promise.all([
+      Api.get('/api/portal/me/'),
+      Api.get('/api/portal/medications/'),
+      Api.get('/api/portal/history/'),
+    ]);
+  } catch (e) { return errorBox(e); }
+
+  const details = Object.fromEntries(
+    PORTAL_FIELDS.filter((k) => me[k] !== undefined).map((k) => [k, me[k]])
+  );
+  // Only the record types this patient actually has anything under: a
+  // timeline of eleven empty headings is a timeline nobody reads.
+  const filed = Object.entries(history)
+    .filter(([k, v]) => k !== 'counts' && Array.isArray(v) && v.length);
+
+  render(`<div class="page-head"><h2>My Health</h2></div>
+    <div class="card">${dlHtml(details)}</div>
+    <div class="card"><h3>My medications</h3>${portalMedsHtml(meds)}</div>
+    <div class="card"><h3>Where to get them</h3>
+      <div class="actions"><button id="find-pharmacies" class="btn">Find pharmacies near me</button></div>
+      <div id="pharmacies"></div></div>
+    <h3>My history</h3>
+    ${filed.length ? filed.map(([k, rows]) =>
+      `<div class="card"><h3>${esc(label(k))} (${rows.length})</h3>${tableHtml(rows)}</div>`).join('')
+      : '<div class="card"><p class="muted">No records filed yet.</p></div>'}`);
+
+  $('#find-pharmacies').onclick = () => loadPharmacies();
+  for (const b of document.querySelectorAll('.find-drug')) {
+    b.onclick = () => {
+      loadPharmacies(b.dataset.medication);
+      $('#pharmacies').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
+  }
+}
+
 /* ----------------------------------------------------------------- router */
 
 const routes = [
@@ -2153,6 +2295,7 @@ const routes = [
   [/^\/notifiable$/, viewNotifiable],
   [/^\/graph\/([a-z]+)\/(\d+)$/, (m) => viewGraph(m[1], m[2])],
   [/^\/clinical$/, viewClinical],
+  [/^\/portal$/, viewPortal],
   [/^\/pharmacy$/, viewPharmacy],
   [/^\/pharmacy\/sell$/, viewSell],
   [/^\/analytics(?:\/([a-z-]+))?$/, (m) => viewAnalytics(ANALYTICS, '/analytics', m[1])],
@@ -2162,6 +2305,7 @@ const routes = [
 /* Where a role starts work: the platform owner on cross-tenant analytics, the
    counter on the counter, everyone else on the tenant dashboard. */
 const homeHash = (role) => role === 'super_admin' && !Api.tenant ? '#/platform'
+  : role === 'public' ? '#/portal'
   : role === 'pharmacist' ? '#/pharmacy'
   : CLINICAL_ROLES.has(role) ? '#/clinical' : '#/';
 

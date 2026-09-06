@@ -65,6 +65,7 @@ import 'dashboard_screen.dart';
 import 'super_admin_dashboard_screen.dart';
 import 'tenant_management_screen.dart';
 import 'user_management_screen.dart';
+import 'my_health_screen.dart';
 import 'profile_screen.dart';
 import 'login_screen.dart';
 
@@ -215,6 +216,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _Section('Staff commissions', Icons.percent_outlined, CommissionsScreen()),
   ]);
 
+  // A patient's own record. A public account gets this and the reference
+  // material: every clinical registry 403s for them, so listing those
+  // sections would be a menu of locked doors.
+  static const _myHealthGroup = _Group('My health', [
+    _Section('My health', Icons.favorite_outline, MyHealthScreen()),
+  ]);
+
   // The organization switcher. A super-admin keeps it inside an organization
   // too — it is the way back out to the platform views.
   static const _tenantsSection =
@@ -312,6 +320,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ...pharmacy,
               ..._baseGroups,
             ]);
+      return;
+    }
+    if (role == 'public') {
+      _setGroups([_myHealthGroup, _catalogGroup, _toolsGroup, _accountGroup]);
+      // Their landing screen is their record, not the tenant dashboard the
+      // API refuses them.
+      if (mounted) setState(() => _index = 1);
       return;
     }
     if (role == 'tenant_admin') {

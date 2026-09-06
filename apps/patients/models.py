@@ -187,6 +187,14 @@ class Patient(TenantOwnedModel):
         "accounts.User", null=True, blank=True, on_delete=models.SET_NULL,
         related_name="registered_patients",
     )
+    # The portal account that reads this record, when the patient has one.
+    # Set by staff, never by the patient: it is the link that turns a login
+    # into "my record", so whoever can create it decides whose record a person
+    # sees. SET_NULL so deleting an account leaves the clinical row intact.
+    user = models.OneToOneField(
+        "accounts.User", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="patient_record",
+    )
     notes = models.TextField(blank=True)
 
     class Meta:

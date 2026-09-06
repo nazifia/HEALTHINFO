@@ -164,6 +164,29 @@ String? patientFormError({
   return null;
 }
 
+/// Accounts this record may be linked to, for the portal-account picker.
+///
+/// Patient logins are the public role — a doctor's account is not somebody's
+/// patient portal — but whichever account the record already points at stays
+/// in the list whatever its role, so opening the form can never silently drop
+/// a link that is already there.
+List<Map<String, dynamic>> linkableAccounts(
+    List<Map<String, dynamic>> users, Object? linked) {
+  return [
+    for (final u in users)
+      if (u['role'] == 'public' || (linked != null && u['id'] == linked)) u,
+  ];
+}
+
+/// What a linkable account is called on screen: the person, then the number
+/// they sign in with. A public account often has no display name at all.
+String accountLabel(Map<String, dynamic> user) {
+  final name = '${user['username'] ?? ''}'.trim();
+  final phone = '${user['phone'] ?? ''}'.trim();
+  if (name.isEmpty) return phone.isEmpty ? 'Account #${user['id']}' : phone;
+  return phone.isEmpty ? name : '$name · $phone';
+}
+
 class _Card extends StatelessWidget {
   final Map<String, dynamic> row;
   final VoidCallback edit;
@@ -218,6 +241,25 @@ class _Card extends StatelessWidget {
             ].join(' · '),
             style: TextStyle(color: context.hintColor, fontSize: 12),
           ),
+          // Who can read this record from the patient portal. Only shown
+          // when there is a link: "not linked" is the ordinary case and would
+          // be a line on every card saying nothing.
+          if (row['user'] != null) ...[
+            const SizedBox(height: 6),
+            Row(children: [
+              const Icon(Icons.phone_iphone_outlined,
+                  size: 14, color: EnhancedTheme.infoBlue),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                    'Portal account: ${'${row['user_phone'] ?? ''}'.trim().isEmpty ? 'linked' : row['user_phone']}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        color: EnhancedTheme.infoBlue, fontSize: 12)),
+              ),
+            ]),
+          ],
           if ('${row['allergies'] ?? ''}'.trim().isNotEmpty) ...[
             const SizedBox(height: 6),
             Row(children: [
@@ -271,6 +313,12 @@ class _FormState extends State<_Form> {
   bool _consent = false;
   bool _saving = false;
   String? _error;
+  // The portal account this record is read by, and the accounts it could be.
+  // The picker only appears once the list is in: a staff member who may not
+  // read it must not be shown an empty picker that looks like "not linked".
+  int? _user;
+  List<Map<String, dynamic>> _accounts = const [];
+  bool _accountsLoaded = false;
 
   bool get _isEdit => widget.existing != null;
 
@@ -278,6 +326,8 @@ class _FormState extends State<_Form> {
   void initState() {
     super.initState();
     final e = widget.existing;
+    _user = e?['user'] as int?;
+    _loadAccounts();
     if (e == null) return;
     if (_sexes.contains(e['sex'])) _sex = e['sex'];
     // Takes the status as-is, even one the dropdown doesn't offer ('merged'),
@@ -313,6 +363,27 @@ class _FormState extends State<_Form> {
       c.dispose();
     }
     super.dispose();
+  }
+
+  /// The tenant's accounts, for the portal-account picker.
+  ///
+  /// Failure is not an error here: a role that may not list users simply gets
+  /// no picker, and a link it cannot see is one it cannot clear either (see
+  /// _submit, which leaves `user` out of the body then).
+  ///
+  /// ponytail: first page of /api/users/ only. Add a search-as-you-type
+  /// lookup if a tenant ever has more accounts than one page holds.
+  Future<void> _loadAccounts() async {
+    try {
+      final rows = await api.getList('/api/users/');
+      if (!mounted) return;
+      setState(() {
+        _accounts = linkableAccounts(rows.cast<Map<String, dynamic>>(), _user);
+        _accountsLoaded = true;
+      });
+    } catch (_) {
+      /* no picker */
+    }
   }
 
   Future<void> _pickDob() async {
@@ -409,6 +480,9 @@ class _FormState extends State<_Form> {
             _status == 'deceased' && _dod != null ? _dateText(_dod) : null,
         'consent_given': _consent,
         'notes': _notes.text.trim(),
+        // Only when the picker was actually shown: a save from a form that
+        // never loaded the accounts must not unlink the patient's login.
+        if (_accountsLoaded) 'user': _user,
       };
       try {
         await _send(body);
@@ -615,6 +689,25 @@ class _FormState extends State<_Form> {
               style: TextStyle(color: context.labelColor, fontSize: 14)),
           controlAffinity: ListTileControlAffinity.leading,
         ),
+        if (_accountsLoaded) ...[
+          const SizedBox(height: 8),
+          SearchableDropdown<int?>(
+            initialValue: _user,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Portal account',
+              helperText: 'Lets this patient sign in and read their own record',
+            ),
+            items: [
+              const DropdownMenuItem(value: null, child: Text('Not linked')),
+              for (final a in _accounts)
+                DropdownMenuItem(
+                    value: a['id'] as int, child: Text(accountLabel(a))),
+            ],
+            onChanged: (v) => setState(() => _user = v),
+          ),
+          const SizedBox(height: 12),
+        ],
         TextField(
           controller: _notes,
           maxLines: 3,

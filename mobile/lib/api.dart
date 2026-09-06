@@ -302,6 +302,41 @@ class Api {
     }
     return data as List<dynamic>;
   }
+
+  // --- patient portal ---------------------------------------------------
+  // A patient reading their own record. No patient id is ever sent: the API
+  // reads it off the signed-in account (apps.patients.portal), so these calls
+  // cannot reach anybody else's record.
+
+  /// GET /api/portal/me/ — the signed-in patient's details.
+  Future<Map<String, dynamic>> portalMe() async =>
+      (await get('/api/portal/me/') as Map).cast<String, dynamic>();
+
+  /// GET /api/portal/medications/ — everything prescribed to them, newest
+  /// first. [status] narrows it; 'prescribed' is what is still to collect.
+  Future<List<dynamic>> portalMedications([String? status]) =>
+      getList('/api/portal/medications/',
+          {'status': ?status});
+
+  /// GET /api/portal/history/ — the whole timeline, grouped by record type.
+  Future<Map<String, dynamic>> portalHistory() async =>
+      (await get('/api/portal/history/') as Map).cast<String, dynamic>();
+
+  /// GET /api/portal/pharmacies/ — where a script can be filled, nearest
+  /// first when the device shares a position. [medication] is a catalog
+  /// medication id: pass it to see only the sites holding that drug.
+  Future<List<dynamic>> portalPharmacies({
+    double? lat,
+    double? lng,
+    Object? medication,
+  }) {
+    final located = lat != null && lng != null;
+    return getList('/api/portal/pharmacies/', {
+      if (located) 'lat': lat.toStringAsFixed(6),
+      if (located) 'lng': lng.toStringAsFixed(6),
+      if (medication != null) 'medication': '$medication',
+    });
+  }
 }
 
 class ApiException implements Exception {
