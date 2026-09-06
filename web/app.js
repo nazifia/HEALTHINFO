@@ -348,6 +348,9 @@ function navHtml() {
   if (isPlatformScope()) analytics += `<a href="#/platform" data-route="/platform">${ico('chart')}Platform Analytics</a>`;
   html += navGroup('Analytics', analytics);
   if (groups.Admin?.length) html += navGroup('Admin', groups.Admin.join(''));
+  // The only route the sidebar did not reach: the topbar badge opens it, which
+  // is not obvious on a phone where the badge is a username and nothing else.
+  html += navGroup('Account', `<a href="#/profile" data-route="/profile">${ico('users')}Profile</a>`);
   return html;
 }
 
