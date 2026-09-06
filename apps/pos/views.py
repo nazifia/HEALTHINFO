@@ -9,7 +9,6 @@ from decimal import Decimal
 from django.db import transaction
 from django.db.models import Count, DecimalField, ExpressionWrapper, F, Sum
 from django.shortcuts import render
-from django.utils.dateparse import parse_date
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -24,6 +23,7 @@ from apps.accounts.permissions import (
 from apps.inventory.models import OutOfStock
 from apps.inventory.serializers import StockBatchSerializer
 from apps.inventory.views import PharmacyViewSet, body
+from config.ranges import apply_range as _apply_range, date_range as _range
 from config.responses import success
 
 from .models import (
@@ -62,22 +62,6 @@ from .serializers import (
 
 MONEY_FIELD = DecimalField(max_digits=14, decimal_places=2)
 ZERO = Decimal("0.00")
-
-
-def _range(request):
-    """Parse ?from=YYYY-MM-DD&to=YYYY-MM-DD into date objects (None if absent)."""
-    return (
-        parse_date(request.query_params.get("from", "") or ""),
-        parse_date(request.query_params.get("to", "") or ""),
-    )
-
-
-def _apply_range(qs, start, end):
-    if start:
-        qs = qs.filter(created_at__date__gte=start)
-    if end:
-        qs = qs.filter(created_at__date__lte=end)
-    return qs
 
 
 class CashierViewSet(PharmacyViewSet):

@@ -3,9 +3,9 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../main.dart';
 import '../core/theme/enhanced_theme.dart';
+import '../shared/widgets/breakdown_card.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/empty_state.dart';
-import '../shared/widgets/bar_chart.dart';
 import '../shared/stats_rows.dart';
 
 /// Public-health analytics: the analysis side of the four collection feeds —
@@ -91,7 +91,7 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
                 label: 'Overall resistance rate',
                 sub: '${lab['resistant'] ?? 0} of ${lab['isolates_tested'] ?? 0} isolates resistant',
               ),
-              _Breakdown(
+              BreakdownCard(
                 heading: 'Resistance by organism',
                 icon: Icons.coronavirus_outlined,
                 rows: (lab['amr_by_organism'] as List?) ?? [],
@@ -99,7 +99,7 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
                 valueKey: 'resistance_rate',
                 asPercent: true,
               ),
-              _Breakdown(
+              BreakdownCard(
                 heading: 'Resistance by antibiotic',
                 icon: Icons.medication_outlined,
                 rows: (lab['amr_by_antibiotic'] as List?) ?? [],
@@ -111,13 +111,13 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
               // ── Immunization coverage ──
               _SectionTitle('Immunization coverage', Icons.vaccines_outlined),
               _Metric(value: '${imm['total_doses'] ?? 0}', label: 'Doses administered'),
-              _Breakdown(
+              BreakdownCard(
                 heading: 'By vaccine',
                 icon: Icons.medical_services_outlined,
                 rows: (imm['by_vaccine'] as List?) ?? [],
                 labelKey: 'vaccine',
               ),
-              _Breakdown(
+              BreakdownCard(
                 heading: 'By state',
                 icon: Icons.map_outlined,
                 rows: (imm['by_region_state'] as List?) ?? [],
@@ -132,7 +132,7 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
                 sub: 'MMR ${_num(vital['maternal_mortality_ratio'])} per 100k · '
                     'IMR ${_num(vital['infant_mortality_rate'])} per 1k',
               ),
-              _Breakdown(
+              BreakdownCard(
                 heading: 'Deaths by cause',
                 icon: Icons.dangerous_outlined,
                 rows: (vital['deaths_by_cause'] as List?) ?? [],
@@ -147,7 +147,7 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
                 sub: '${stock['total_reports'] ?? 0} stock reports',
                 danger: ((stock['shortage_count'] ?? 0) as num) > 0,
               ),
-              _Breakdown(
+              BreakdownCard(
                 heading: 'Most consumed',
                 icon: Icons.local_pharmacy_outlined,
                 rows: (stock['top_consumed'] as List?) ?? [],
@@ -163,7 +163,7 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
                 sub: '${chw['danger_signs'] ?? 0} danger signs · '
                     'referral rate ${_pct(chw['referral_rate'])}',
               ),
-              _Breakdown(
+              BreakdownCard(
                 heading: 'By report type',
                 icon: Icons.assignment_ind_outlined,
                 rows: (chw['by_type'] as List?) ?? [],
@@ -187,13 +187,13 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
                 sub: '₦${_num(insurance['total_amount'])} total · '
                     'approval rate ${_pct(insurance['approval_rate'])}',
               ),
-              _Breakdown(
+              BreakdownCard(
                 heading: 'By status',
                 icon: Icons.fact_check_outlined,
                 rows: (insurance['by_status'] as List?) ?? [],
                 labelKey: 'status',
               ),
-              _Breakdown(
+              BreakdownCard(
                 heading: 'Top diagnoses',
                 icon: Icons.coronavirus_outlined,
                 rows: (insurance['top_diagnoses'] as List?) ?? [],
@@ -208,13 +208,13 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
                 sub: '${appt['telemedicine'] ?? 0} telemedicine · '
                     'no-show rate ${_pct(appt['no_show_rate'])}',
               ),
-              _Breakdown(
+              BreakdownCard(
                 heading: 'By mode',
                 icon: Icons.devices_outlined,
                 rows: (appt['by_mode'] as List?) ?? [],
                 labelKey: 'mode',
               ),
-              _Breakdown(
+              BreakdownCard(
                 heading: 'By status',
                 icon: Icons.event_available_outlined,
                 rows: (appt['by_status'] as List?) ?? [],
@@ -238,25 +238,25 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
                 sub: '${rx['linked'] ?? 0} of ${rx['total'] ?? 0} orders link '
                     'back to a case — the rest sit under "—" below',
               ),
-              _Breakdown(
+              BreakdownCard(
                 heading: 'Most prescribed',
                 icon: Icons.medication_outlined,
                 rows: (rx['top_medications'] as List?) ?? [],
                 labelKey: 'medication__generic_name',
               ),
-              _Breakdown(
+              BreakdownCard(
                 heading: 'By diagnosis',
                 icon: Icons.coronavirus_outlined,
                 rows: (rx['by_diagnosis'] as List?) ?? [],
                 labelKey: 'diagnosis',
               ),
-              _Breakdown(
+              BreakdownCard(
                 heading: 'Prescribed for each diagnosis',
                 icon: Icons.medical_information_outlined,
                 rows: diagnosisPairRows(rx['by_diagnosis_medication']),
                 labelKey: 'pair',
               ),
-              _Breakdown(
+              BreakdownCard(
                 heading: 'By status',
                 icon: Icons.fact_check_outlined,
                 rows: (rx['by_status'] as List?) ?? [],
@@ -324,65 +324,6 @@ class _Metric extends StatelessWidget {
               const SizedBox(height: 4),
               Text(sub!, style: TextStyle(color: context.hintColor, fontSize: 12)),
             ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _Breakdown extends StatelessWidget {
-  final String heading;
-  final IconData icon;
-  final List<dynamic> rows;
-  final String labelKey;
-  final String valueKey;
-  final bool asPercent;
-  const _Breakdown({
-    required this.heading,
-    required this.icon,
-    required this.rows,
-    required this.labelKey,
-    this.valueKey = 'count',
-    this.asPercent = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (rows.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: GlassCard(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              Icon(icon, color: EnhancedTheme.primaryTeal, size: 18),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(heading,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.outfit(
-                      color: context.labelColor,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                    )),
-              ),
-            ]),
-            const SizedBox(height: 10),
-            MiniBarChart(
-              rows: [
-                for (final row in rows.cast<Map<String, dynamic>>())
-                  (
-                    label: '${row[labelKey] ?? ''}',
-                    // Show resistance rates as 0-100 so a 0..1 fraction reads sensibly.
-                    value: asPercent
-                        ? ((row[valueKey] as num?) ?? 0) * 100
-                        : (row[valueKey] as num?) ?? 0,
-                  ),
-              ],
-            ),
           ],
         ),
       ),

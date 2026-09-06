@@ -2,7 +2,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from apps.accounts.models import normalize_phone
-from apps.analytics.nigeria import valid_regions
+from apps.analytics.nigeria import validate_region
 from config.serializers import NamedRelationsMixin
 
 from .models import Patient, PatientAccessLog
@@ -58,11 +58,7 @@ class PatientSerializer(NamedRelationsMixin, serializers.ModelSerializer):
         return super().to_internal_value(data)
 
     def validate_region(self, value):
-        if value and value not in valid_regions():
-            raise serializers.ValidationError(
-                "Not a valid Nigerian LGA, State. Pick from the list."
-            )
-        return value
+        return validate_region(value)
 
     def validate_hospital_number(self, value):
         # unique_together (tenant, hospital_number) can't be checked by DRF's

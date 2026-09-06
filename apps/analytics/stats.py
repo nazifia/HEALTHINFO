@@ -22,6 +22,7 @@ from apps.accounts.models import User
 from apps.catalog.models import Disease, Medication
 from apps.tenants.current import get_current_tenant
 from apps.tenants.models import Jurisdiction, Tenant
+from config.ranges import apply_range
 from .nigeria import region_state
 
 from .models import (
@@ -46,15 +47,6 @@ _OBJECT_MODELS = {"disease": Disease, "medication": Medication}
 # An order that reached the patient. A partial fill counts: some of the drug
 # was handed over, so the prescription is not an unfilled one.
 _RX_FILLED = (Prescription.Status.DISPENSED, Prescription.Status.PARTIAL)
-
-
-def apply_range(qs, start=None, end=None):
-    """Filter a queryset to a [start, end] created_at window (date objects)."""
-    if start:
-        qs = qs.filter(created_at__date__gte=start)
-    if end:
-        qs = qs.filter(created_at__date__lte=end)
-    return qs
 
 
 def _series(qs, days=30, bucket="day"):
@@ -314,10 +306,6 @@ def _prescribing_rollup(start=None, end=None, platform=False):
 
 def _case_breakdown(reports):
     """Counts grouped by the dimensions an analyst slices on."""
-    def by(field):
-        return list(
-            reports.values(field).annotate(count=Count("id")).order_by("-count")
-        )
     total = reports.count()
     deaths = reports.filter(outcome=CaseReport.Outcome.DECEASED).count()
     return {
@@ -325,11 +313,11 @@ def _case_breakdown(reports):
         # IDSR analysis metrics: deaths and case-fatality rate (deaths / cases).
         "deaths": deaths,
         "case_fatality_rate": round(deaths / total, 4) if total else None,
-        "by_severity": by("severity"),
-        "by_outcome": by("outcome"),
-        "by_age_group": by("patient_age_group"),
-        "by_region": by("region"),
-        "by_region_state": _fold_region_to_state(by("region")),
+        "by_severity": _grouped(reports, "severity"),
+        "by_outcome": _grouped(reports, "outcome"),
+        "by_age_group": _grouped(reports, "patient_age_group"),
+        "by_region": _grouped(reports, "region"),
+        "by_region_state": _fold_region_to_state(_grouped(reports, "region")),
         "top_diseases": list(
             reports.exclude(disease=None)
             .values("disease__name")
@@ -451,28 +439,25 @@ def report_sources(start=None, end=None, platform=False):
     cases = apply_range(cases.all(), start, end)
     adrs = apply_range(adrs.all(), start, end)
 
-    def grouped(qs, field):
-        return qs.values(field).annotate(count=Count("id"))
-
     out = {
         "total_cases": cases.count(),
         "total_adrs": adrs.count(),
         "by_region": _merge_counts(
-            grouped(cases, "region"), grouped(adrs, "region"), "region"
+            _grouped(cases, "region"), _grouped(adrs, "region"), "region"
         ),
         "by_region_state": _fold_region_to_state(
-            _merge_counts(grouped(cases, "region"), grouped(adrs, "region"), "region")
+            _merge_counts(_grouped(cases, "region"), _grouped(adrs, "region"), "region")
         ),
         "by_reporter": _merge_counts(
-            grouped(cases, "reporter__username"),
-            grouped(adrs, "reporter__username"),
+            _grouped(cases, "reporter__username"),
+            _grouped(adrs, "reporter__username"),
             "reporter__username",
         ),
     }
     if platform:
         out["by_tenant"] = _merge_counts(
-            grouped(cases, "tenant__name"),
-            grouped(adrs, "tenant__name"),
+            _grouped(cases, "tenant__name"),
+            _grouped(adrs, "tenant__name"),
             "tenant__name",
         )
         # Roll the pooled stream up the gov hierarchy: tenant → local → state → national.
@@ -531,13 +516,10 @@ def adr_stats(start=None, end=None, platform=False):
     manager = AdverseDrugReaction.all_objects if platform else AdverseDrugReaction.objects
     reports = apply_range(manager.all(), start, end)
 
-    def by(field):
-        return list(reports.values(field).annotate(count=Count("id")).order_by("-count"))
-
     out = {
         "total": reports.count(),
-        "by_severity": by("severity"),
-        "by_outcome": by("outcome"),
+        "by_severity": _grouped(reports, "severity"),
+        "by_outcome": _grouped(reports, "outcome"),
         "top_medications": list(
             reports.values("medication__generic_name")
             .annotate(count=Count("id"))
@@ -549,7 +531,7 @@ def adr_stats(start=None, end=None, platform=False):
         "trend": _series(reports, days=90, bucket="week"),
     }
     if platform:
-        out["by_tenant"] = by("tenant__name")
+        out["by_tenant"] = _grouped(reports, "tenant__name")
         out["by_local"] = _rollup_by_tier(reports, Jurisdiction.Level.LOCAL)
         out["by_state"] = _rollup_by_tier(reports, Jurisdiction.Level.STATE)
         out["by_national"] = _rollup_by_tier(reports, Jurisdiction.Level.NATIONAL)

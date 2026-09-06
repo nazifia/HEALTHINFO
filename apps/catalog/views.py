@@ -154,13 +154,18 @@ class SearchView(APIView):
     permission_classes = [IsTenantMember]
     throttle_scope = "search"
 
-    # model qs -> ordering field + fields searched with icontains.
+    # result key -> model, serializer, ordering field, fields searched with icontains.
     _TARGETS = {
-        "diseases": ("name", ("name", "description", "causes", "treatment")),
-        "medications": ("generic_name", ("generic_name", "brand_name", "description", "indications")),
-        "procedures": ("name", ("name", "description", "indications")),
-        "lab_tests": ("name", ("name", "description", "purpose")),
-        "articles": ("title", ("title", "summary", "body")),
+        "diseases": (Disease, DiseaseSerializer, "name",
+                     ("name", "description", "causes", "treatment")),
+        "medications": (Medication, MedicationSerializer, "generic_name",
+                        ("generic_name", "brand_name", "description", "indications")),
+        "procedures": (Procedure, ProcedureSerializer, "name",
+                       ("name", "description", "indications")),
+        "lab_tests": (LabTest, LabTestSerializer, "name",
+                      ("name", "description", "purpose")),
+        "articles": (Article, ArticleSerializer, "title",
+                     ("title", "summary", "body")),
     }
 
     def get(self, request):
@@ -173,27 +178,12 @@ class SearchView(APIView):
         except (TypeError, ValueError):
             limit = 20
 
-        querysets = {
-            "diseases": Disease.objects.filter(status="published"),
-            "medications": Medication.objects.filter(status="published"),
-            "procedures": Procedure.objects.filter(status="published"),
-            "lab_tests": LabTest.objects.filter(status="published"),
-            "articles": Article.objects.filter(status="published"),
-        }
-        serializers = {
-            "diseases": DiseaseSerializer,
-            "medications": MedicationSerializer,
-            "procedures": ProcedureSerializer,
-            "lab_tests": LabTestSerializer,
-            "articles": ArticleSerializer,
-        }
-
         results, total = {}, 0
-        for key, qs in querysets.items():
-            order_field, fields = self._TARGETS[key]
+        for key, (model, serializer, order_field, fields) in self._TARGETS.items():
+            qs = model.objects.filter(status="published")
             hits = self._search(qs, q, fields, order_field, limit)
             total += len(hits)
-            results[key] = serializers[key](hits, many=True).data
+            results[key] = serializer(hits, many=True).data
 
         track(request, "search", query=q[:500], result_count=total)
         return Response({"disclaimer": DISCLAIMER, "total": total, **results})

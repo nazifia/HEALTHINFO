@@ -11,18 +11,12 @@ purchases draw it down, and a purchase that overdraws it records the shortfall
 as debt rather than refusing the sale — the goods have left the shelf either
 way, so the ledger must say so.
 """
-from decimal import Decimal
-
 from django.db import models, transaction
 from django.utils import timezone
 
 from apps.tenants.models import TenantOwnedModel
+from config.money import money as _money
 
-MONEY = Decimal("0.01")
-
-
-def _money(value):
-    return Decimal(value).quantize(MONEY)
 
 
 class Customer(TenantOwnedModel):

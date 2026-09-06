@@ -3,9 +3,9 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../main.dart';
 import '../core/theme/enhanced_theme.dart';
+import '../shared/widgets/breakdown_card.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/empty_state.dart';
-import '../shared/widgets/bar_chart.dart';
 
 /// Where reports come from. Pools both report streams (case reports + adverse
 /// drug reactions) and shows their origin: reporter, region, tenant.
@@ -105,21 +105,21 @@ class _ReportSourcesScreenState extends State<ReportSourcesScreen> {
                 ),
               ),
               if (byReporter.isNotEmpty)
-                _Breakdown(
+                BreakdownCard(
                   heading: 'By reporter',
                   icon: Icons.person_outline,
                   rows: byReporter,
                   labelKey: 'reporter__username',
                 ),
               if (byRegion.isNotEmpty)
-                _Breakdown(
+                BreakdownCard(
                   heading: 'By region',
                   icon: Icons.public_outlined,
                   rows: byRegion,
                   labelKey: 'region',
                 ),
               if (byTenant.isNotEmpty)
-                _Breakdown(
+                BreakdownCard(
                   heading: 'By tenant',
                   icon: Icons.apartment_outlined,
                   rows: byTenant,
@@ -138,57 +138,6 @@ class _ReportSourcesScreenState extends State<ReportSourcesScreen> {
             ],
           );
         },
-      ),
-    );
-  }
-}
-
-class _Breakdown extends StatelessWidget {
-  final String heading;
-  final IconData icon;
-  final List<dynamic> rows;
-  final String labelKey;
-  const _Breakdown({
-    required this.heading,
-    required this.icon,
-    required this.rows,
-    required this.labelKey,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: GlassCard(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              Icon(icon, color: EnhancedTheme.primaryTeal, size: 18),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(heading,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.outfit(
-                      color: context.labelColor,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                    )),
-              ),
-            ]),
-            const SizedBox(height: 10),
-            MiniBarChart(
-              rows: [
-                for (final row in rows.cast<Map<String, dynamic>>())
-                  (
-                    label: '${row[labelKey] ?? ''}',
-                    value: (row['count'] as num?) ?? 0,
-                  ),
-              ],
-            ),
-          ],
-        ),
       ),
     );
   }

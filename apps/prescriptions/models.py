@@ -22,13 +22,9 @@ from django.utils import timezone
 
 from apps.accounts.models import normalize_phone
 from apps.tenants.models import TenantOwnedModel
+from config.money import money as _money
 
-MONEY = Decimal("0.01")
 ZERO = Decimal("0.00")
-
-
-def _money(value):
-    return Decimal(value).quantize(MONEY)
 
 
 class Hospital(TenantOwnedModel):

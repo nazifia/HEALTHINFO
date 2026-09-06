@@ -18,13 +18,8 @@ from django.db import models, transaction
 from django.utils import timezone
 
 from apps.tenants.models import TenantOwnedModel
+from config.money import money as _money
 
-MONEY = Decimal("0.01")
-
-
-def _money(value):
-    """Round to kobo. Every stored amount goes through this."""
-    return Decimal(value).quantize(MONEY)
 
 
 class HMO(TenantOwnedModel):

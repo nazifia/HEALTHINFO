@@ -32,14 +32,9 @@ from apps.inventory.models import (
     receive_stock,
 )
 from apps.tenants.models import TenantOwnedModel
+from config.money import money as _money
 
-MONEY = Decimal("0.01")
 ZERO = Decimal("0.00")
-
-
-def _money(value):
-    """Round to kobo. Every stored amount goes through this."""
-    return Decimal(value).quantize(MONEY)
 
 
 class Cashier(TenantOwnedModel):

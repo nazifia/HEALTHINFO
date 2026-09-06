@@ -16,19 +16,19 @@ from .models import (
     StockReport,
     VitalEvent,
 )
-from .nigeria import valid_regions
+from .nigeria import validate_region
 
 
-def _validate_region(value):
-    # Optional. If supplied, must be a known "LGA, State" from the Nigeria list.
-    if value and value not in valid_regions():
-        raise serializers.ValidationError(
-            "Not a valid Nigerian LGA, State. Pick from the list."
-        )
-    return value
+class RegionValidatedMixin:
+    """`region`, when supplied, must be a known "LGA, State"."""
+
+    def validate_region(self, value):
+        return validate_region(value)
 
 
-class CaseReportSerializer(NamedRelationsMixin, serializers.ModelSerializer):
+class CaseReportSerializer(
+    RegionValidatedMixin, NamedRelationsMixin, serializers.ModelSerializer
+):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     # reporter + tenant set server-side, never client-supplied. M2M managers are
     # tenant-scoped, so DRF rejects any symptom/medication/disease from another tenant.
@@ -45,11 +45,8 @@ class CaseReportSerializer(NamedRelationsMixin, serializers.ModelSerializer):
             "notified_at", "notified_by",
         )
 
-    def validate_region(self, value):
-        return _validate_region(value)
 
-
-class AdverseDrugReactionSerializer(serializers.ModelSerializer):
+class AdverseDrugReactionSerializer(RegionValidatedMixin, serializers.ModelSerializer):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
     medication_name = serializers.CharField(
@@ -61,11 +58,8 @@ class AdverseDrugReactionSerializer(serializers.ModelSerializer):
         exclude = ("tenant",)
         read_only_fields = ("reporter", "created_at", "updated_at")
 
-    def validate_region(self, value):
-        return _validate_region(value)
 
-
-class LabResultSerializer(serializers.ModelSerializer):
+class LabResultSerializer(RegionValidatedMixin, serializers.ModelSerializer):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
     lab_test_name = serializers.CharField(source="lab_test.name", read_only=True)
@@ -76,11 +70,8 @@ class LabResultSerializer(serializers.ModelSerializer):
         exclude = ("tenant",)
         read_only_fields = ("reporter", "created_at", "updated_at")
 
-    def validate_region(self, value):
-        return _validate_region(value)
 
-
-class ImmunizationSerializer(serializers.ModelSerializer):
+class ImmunizationSerializer(RegionValidatedMixin, serializers.ModelSerializer):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
 
@@ -89,11 +80,8 @@ class ImmunizationSerializer(serializers.ModelSerializer):
         exclude = ("tenant",)
         read_only_fields = ("reporter", "created_at", "updated_at")
 
-    def validate_region(self, value):
-        return _validate_region(value)
 
-
-class VitalEventSerializer(serializers.ModelSerializer):
+class VitalEventSerializer(RegionValidatedMixin, serializers.ModelSerializer):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
     cause_name = serializers.CharField(source="cause.name", read_only=True)
@@ -103,11 +91,8 @@ class VitalEventSerializer(serializers.ModelSerializer):
         exclude = ("tenant",)
         read_only_fields = ("reporter", "created_at", "updated_at")
 
-    def validate_region(self, value):
-        return _validate_region(value)
 
-
-class StockReportSerializer(serializers.ModelSerializer):
+class StockReportSerializer(RegionValidatedMixin, serializers.ModelSerializer):
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
     medication_name = serializers.CharField(
         source="medication.generic_name", read_only=True
@@ -118,11 +103,8 @@ class StockReportSerializer(serializers.ModelSerializer):
         exclude = ("tenant",)
         read_only_fields = ("reporter", "created_at", "updated_at")
 
-    def validate_region(self, value):
-        return _validate_region(value)
 
-
-class CommunityHealthReportSerializer(serializers.ModelSerializer):
+class CommunityHealthReportSerializer(RegionValidatedMixin, serializers.ModelSerializer):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
 
@@ -131,11 +113,8 @@ class CommunityHealthReportSerializer(serializers.ModelSerializer):
         exclude = ("tenant",)
         read_only_fields = ("reporter", "created_at", "updated_at")
 
-    def validate_region(self, value):
-        return _validate_region(value)
 
-
-class FacilityMetricSerializer(serializers.ModelSerializer):
+class FacilityMetricSerializer(RegionValidatedMixin, serializers.ModelSerializer):
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
     occupancy_rate = serializers.FloatField(read_only=True)
 
@@ -144,11 +123,8 @@ class FacilityMetricSerializer(serializers.ModelSerializer):
         exclude = ("tenant",)
         read_only_fields = ("reporter", "created_at", "updated_at")
 
-    def validate_region(self, value):
-        return _validate_region(value)
 
-
-class InsuranceClaimSerializer(serializers.ModelSerializer):
+class InsuranceClaimSerializer(RegionValidatedMixin, serializers.ModelSerializer):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
     diagnosis_name = serializers.CharField(source="diagnosis.name", read_only=True)
@@ -158,11 +134,8 @@ class InsuranceClaimSerializer(serializers.ModelSerializer):
         exclude = ("tenant",)
         read_only_fields = ("reporter", "created_at", "updated_at")
 
-    def validate_region(self, value):
-        return _validate_region(value)
 
-
-class AppointmentSerializer(serializers.ModelSerializer):
+class AppointmentSerializer(RegionValidatedMixin, serializers.ModelSerializer):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
 
@@ -171,11 +144,10 @@ class AppointmentSerializer(serializers.ModelSerializer):
         exclude = ("tenant",)
         read_only_fields = ("reporter", "created_at", "updated_at")
 
-    def validate_region(self, value):
-        return _validate_region(value)
 
-
-class PrescriptionSerializer(NamedRelationsMixin, serializers.ModelSerializer):
+class PrescriptionSerializer(
+    RegionValidatedMixin, NamedRelationsMixin, serializers.ModelSerializer
+):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
     medication_name = serializers.CharField(
@@ -188,11 +160,10 @@ class PrescriptionSerializer(NamedRelationsMixin, serializers.ModelSerializer):
         # source_ref is provenance written by capture, never by a client.
         read_only_fields = ("reporter", "source_ref", "created_at", "updated_at")
 
-    def validate_region(self, value):
-        return _validate_region(value)
 
-
-class ConsultationSerializer(NamedRelationsMixin, serializers.ModelSerializer):
+class ConsultationSerializer(
+    RegionValidatedMixin, NamedRelationsMixin, serializers.ModelSerializer
+):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
     # The diagnosis this visit reached. It lives on the case report — this is a
@@ -220,6 +191,3 @@ class ConsultationSerializer(NamedRelationsMixin, serializers.ModelSerializer):
         # straight would close the note and leave both of those behind.
         read_only_fields = ("reporter", "status", "disposition", "closed_at",
                             "created_at", "updated_at")
-
-    def validate_region(self, value):
-        return _validate_region(value)

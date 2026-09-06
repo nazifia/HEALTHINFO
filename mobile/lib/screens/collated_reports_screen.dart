@@ -3,9 +3,10 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../main.dart';
 import '../core/theme/enhanced_theme.dart';
+import '../shared/widgets/bar_chart.dart';
+import '../shared/widgets/breakdown_card.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/empty_state.dart';
-import '../shared/widgets/bar_chart.dart';
 import '../shared/stats_rows.dart';
 
 /// Collated case reports rollup.
@@ -107,80 +108,80 @@ class _CollatedReportsScreenState extends State<CollatedReportsScreen> {
                 ),
               ),
               _TrendCard(rows: trend),
-              _Breakdown(
+              BreakdownCard(
                 heading: 'By severity',
                 icon: Icons.priority_high,
                 rows: (d['by_severity'] as List?) ?? [],
                 labelKey: 'severity',
               ),
-              _Breakdown(
+              BreakdownCard(
                 heading: 'By outcome',
                 icon: Icons.flag_outlined,
                 rows: (d['by_outcome'] as List?) ?? [],
                 labelKey: 'outcome',
               ),
-              _Breakdown(
+              BreakdownCard(
                 heading: 'By age group',
                 icon: Icons.cake_outlined,
                 rows: (d['by_age_group'] as List?) ?? [],
                 labelKey: 'patient_age_group',
               ),
-              _Breakdown(
+              BreakdownCard(
                 heading: 'Top diseases',
                 icon: Icons.coronavirus_outlined,
                 rows: (d['top_diseases'] as List?) ?? [],
                 labelKey: 'disease__name',
               ),
-              _Breakdown(
+              BreakdownCard(
                 heading: 'Prescribed for these cases',
                 icon: Icons.medication_outlined,
                 rows: prescribedRows(d['top_prescribed']),
                 labelKey: 'medication',
               ),
               if (byRegionState.isNotEmpty)
-                _Breakdown(
+                BreakdownCard(
                   heading: 'By state',
                   icon: Icons.map_outlined,
                   rows: byRegionState,
                   labelKey: 'state',
                 ),
               if (byRegion.isNotEmpty)
-                _Breakdown(
+                BreakdownCard(
                   heading: 'By region (LGA)',
                   icon: Icons.public_outlined,
                   rows: byRegion,
                   labelKey: 'region',
                 ),
               if (byIcd10.isNotEmpty)
-                _Breakdown(
+                BreakdownCard(
                   heading: 'By ICD-10 code',
                   icon: Icons.qr_code_2_outlined,
                   rows: byIcd10,
                   labelKey: 'icd10_code',
                 ),
               if (byLocal.isNotEmpty)
-                _Breakdown(
+                BreakdownCard(
                   heading: 'By local area',
                   icon: Icons.location_city_outlined,
                   rows: byLocal,
                   labelKey: 'local',
                 ),
               if (byState.isNotEmpty)
-                _Breakdown(
+                BreakdownCard(
                   heading: 'By state',
                   icon: Icons.map_outlined,
                   rows: byState,
                   labelKey: 'state',
                 ),
               if (byNational.isNotEmpty)
-                _Breakdown(
+                BreakdownCard(
                   heading: 'By national',
                   icon: Icons.account_balance_outlined,
                   rows: byNational,
                   labelKey: 'national',
                 ),
               if (byTenant.isNotEmpty)
-                _Breakdown(
+                BreakdownCard(
                   heading: 'By tenant',
                   icon: Icons.apartment_outlined,
                   rows: byTenant,
@@ -239,57 +240,6 @@ class _TrendCard extends StatelessWidget {
                   (
                     period: '${r['period'] ?? ''}',
                     value: (r['count'] as num?) ?? 0,
-                  ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _Breakdown extends StatelessWidget {
-  final String heading;
-  final IconData icon;
-  final List<dynamic> rows;
-  final String labelKey;
-  const _Breakdown({
-    required this.heading,
-    required this.icon,
-    required this.rows,
-    required this.labelKey,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: GlassCard(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              Icon(icon, color: EnhancedTheme.primaryTeal, size: 18),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(heading,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.outfit(
-                      color: context.labelColor,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                    )),
-              ),
-            ]),
-            const SizedBox(height: 10),
-            MiniBarChart(
-              rows: [
-                for (final row in rows.cast<Map<String, dynamic>>())
-                  (
-                    label: '${row[labelKey] ?? ''}',
-                    value: (row['count'] as num?) ?? 0,
                   ),
               ],
             ),

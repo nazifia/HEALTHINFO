@@ -2,13 +2,13 @@ from uuid import uuid4
 
 from django.db import transaction
 from django.db.models import Q
-from django.utils.dateparse import parse_date
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from config.ranges import date_range as _range
 from config.responses import success
 
 from apps.accounts.permissions import (
@@ -79,14 +79,6 @@ from .stats import (
     vital_stats,
 )
 from .surveillance import platform_spikes, tenant_spikes
-
-
-def _range(request):
-    """Parse ?from=YYYY-MM-DD&to=YYYY-MM-DD into date objects (None if absent)."""
-    return (
-        parse_date(request.query_params.get("from", "") or ""),
-        parse_date(request.query_params.get("to", "") or ""),
-    )
 
 
 def own_reports(qs, user):

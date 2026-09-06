@@ -8,6 +8,8 @@ import json
 from functools import lru_cache
 from pathlib import Path
 
+from rest_framework import serializers
+
 _JSON = Path(__file__).with_name("nigeria_states.json")
 
 
@@ -26,3 +28,12 @@ def valid_regions():
 def region_state(region):
     """State portion of a "LGA, State" region, or "" if unparseable."""
     return region.rsplit(", ", 1)[-1] if ", " in region else ""
+
+
+def validate_region(value):
+    # Optional. If supplied, must be a known "LGA, State" from the Nigeria list.
+    if value and value not in valid_regions():
+        raise serializers.ValidationError(
+            "Not a valid Nigerian LGA, State. Pick from the list."
+        )
+    return value
