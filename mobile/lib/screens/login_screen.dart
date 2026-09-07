@@ -7,6 +7,7 @@ import '../l10n/app_localizations.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/snack.dart';
+import 'forgot_password_screen.dart';
 import 'home_screen.dart';
 import 'onboarding_screen.dart';
 
@@ -304,6 +305,17 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                         const SizedBox(height: 12),
+                        if (!_registerMode)
+                          TextButton(
+                            onPressed: _busy
+                                ? null
+                                : () => Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                          builder: (_) =>
+                                              const ForgotPasswordScreen()),
+                                    ),
+                            child: const Text('Forgot password?'),
+                          ),
                         TextButton(
                           onPressed: _busy
                               ? null

@@ -2,8 +2,12 @@ import re
 
 from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth.tokens import default_token_generator
+from django.core.mail import send_mail
 from django.db import transaction
 from django.db.models import Q
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
@@ -11,7 +15,9 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from apps.tenants.current import get_current_tenant
 from apps.tenants.models import Jurisdiction, Tenant
 
-from .models import LICENSED_ROLES, Role, User, normalize_license
+from .models import (
+    LICENSED_ROLES, Role, User, normalize_license, normalize_phone,
+)
 
 
 def visible_users(tenant):
@@ -353,3 +359,82 @@ class OnboardingSerializer(serializers.Serializer):
             },
             "user": {"id": user.id, "phone": user.phone, "role": user.role},
         }
+
+
+class PasswordResetSerializer(serializers.Serializer):
+    """Ask for a reset link, identified the way a patient signs in: by phone.
+
+    Deliberately unscoped by tenant. Someone who has forgotten their password
+    has also usually forgotten which organization slug their app is pointed at,
+    and phone is unique across the table anyway. Nothing here tells the caller
+    whether the number is known — see the view.
+    """
+
+    phone = serializers.CharField()
+
+    def validate_phone(self, value):
+        return normalize_phone(value)
+
+    def user(self):
+        """The account to mail, or None. Never raises: not-found is not an
+        error the caller is allowed to see."""
+        return User.objects.filter(
+            phone=self.validated_data["phone"], is_active=True
+        ).first()
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    """Set a new password from the uid + token pair that was mailed out.
+
+    The token is Django's own ``default_token_generator``: an HMAC over the
+    user's id, current password hash and last login, so it needs no storage,
+    expires on its own (PASSWORD_RESET_TIMEOUT) and stops working the moment
+    the password changes — which makes it single-use for free.
+    """
+
+    uid = serializers.CharField()
+    token = serializers.CharField()
+    password = serializers.CharField(write_only=True, validators=[validate_password])
+
+    _bad = "This reset link has expired or has already been used."
+
+    def validate(self, attrs):
+        try:
+            pk = urlsafe_base64_decode(attrs["uid"]).decode()
+            user = User.objects.get(pk=pk, is_active=True)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            raise serializers.ValidationError({"uid": self._bad})
+        if not default_token_generator.check_token(user, attrs["token"]):
+            raise serializers.ValidationError({"token": self._bad})
+        attrs["user"] = user
+        return attrs
+
+    def save(self):
+        user = self.validated_data["user"]
+        user.set_password(self.validated_data["password"])
+        user.save(update_fields=["password"])
+        return user
+
+
+def send_reset_email(user):
+    """Mail a reset link. Best-effort, like every other mail in this codebase.
+
+    ponytail: email only, because email is the one channel this deployment
+    already has. Patients sign in by phone, so set FRONTEND_URL and — when an
+    SMS gateway exists — send the same two values down it from right here.
+    """
+    if not user.email:
+        return False
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    token = default_token_generator.make_token(user)
+    link = f"{settings.FRONTEND_URL}/#/reset?uid={uid}&token={token}"
+    send_mail(
+        "Reset your password",
+        f"Open this link to choose a new password:\n\n{link}\n\n"
+        f"It stops working in {settings.PASSWORD_RESET_TIMEOUT // 60} minutes. "
+        "If you did not ask for this, ignore this message.",
+        None,  # DEFAULT_FROM_EMAIL
+        [user.email],
+        fail_silently=True,
+    )
+    return True

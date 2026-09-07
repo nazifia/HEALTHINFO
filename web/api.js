@@ -120,6 +120,11 @@ const Api = (() => {
     del: (path) => request('DELETE', path, {}),
     options: (path) => request('OPTIONS', path, {}),
     public: (path, query) => request('GET', path, { query, auth: false }),
+    /* Signed-out POST: no token, and no tenant header either — someone
+       locked out may have a stale slug stored from whoever used this
+       browser last. */
+    publicPost: (path, body) => request('POST', path,
+      { body: body ?? {}, auth: false, noTenant: true }),
 
     /* DRF list endpoints paginate; return {rows, count, next, previous} either way. */
     async list(path, query) {

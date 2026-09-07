@@ -34,6 +34,9 @@ _SUBSCRIPTION_GATE_ALLOW = (
     # The signup picker: it lists the organizations you may join, so a
     # stale slug from the last user must not block reading it.
     "/api/auth/register/organizations/",
+    # Forgotten passwords: the same stale slug must not lock someone out
+    # of the one flow that gets them back in.
+    "/api/auth/password-reset/",
 )
 
 

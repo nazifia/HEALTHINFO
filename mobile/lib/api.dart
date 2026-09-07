@@ -177,6 +177,46 @@ class Api {
     }
   }
 
+  /// POST /api/auth/password-reset/ — mail a link for a forgotten password.
+  ///
+  /// No tenant header: someone locked out may have another user's slug stored,
+  /// and the lookup is by phone, which is unique across the whole table.
+  /// Returns the envelope message, which reads the same whether or not the
+  /// number is known — the endpoint never confirms an account exists, so this
+  /// screen must not either.
+  Future<String> passwordReset(String phone) async {
+    final r = await http.post(
+      _uri('/api/auth/password-reset/'),
+      headers: _headers(auth: false, json: true, tenant: false),
+      body: jsonEncode({'phone': phone}),
+    );
+    if (r.statusCode != 200) {
+      throw ApiException('Could not send the reset link (${r.statusCode})', r.body);
+    }
+    return _message(r.body);
+  }
+
+  /// POST /api/auth/password-reset/confirm/ — set a new password from the uid
+  /// and token carried by the mailed link.
+  Future<String> passwordResetConfirm(
+      String uid, String token, String password) async {
+    final r = await http.post(
+      _uri('/api/auth/password-reset/confirm/'),
+      headers: _headers(auth: false, json: true, tenant: false),
+      body: jsonEncode({'uid': uid, 'token': token, 'password': password}),
+    );
+    if (r.statusCode != 200) {
+      throw ApiException('Could not change the password (${r.statusCode})', r.body);
+    }
+    return _message(r.body);
+  }
+
+  /// The envelope's human message (see config/responses.py), or ''.
+  String _message(String body) {
+    final m = jsonDecode(body);
+    return m is Map && m['message'] is String ? m['message'] as String : '';
+  }
+
   /// POST /api/auth/onboarding/ — self-serve org signup: creates a tenant and
   /// its first tenant_admin. Public (no auth). Returns the decoded response so
   /// the caller can grab the new tenant slug.

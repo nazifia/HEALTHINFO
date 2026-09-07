@@ -182,10 +182,17 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_CLASSES": (
         "rest_framework.throttling.ScopedRateThrottle",
     ),
-    "DEFAULT_THROTTLE_RATES": {"search": "60/min"},
+    "DEFAULT_THROTTLE_RATES": {"search": "60/min", "password_reset": "10/min"},
 }
 
 SIMPLE_JWT = {"ACCESS_TOKEN_LIFETIME": timedelta(minutes=60)}
+
+# How long a password-reset link stays good. Django defaults to 3 days;
+# a link into a health record has no business living that long.
+PASSWORD_RESET_TIMEOUT = 30 * 60
+# Where the client app is served, for the link in that email. The API and
+# the SPA are separate hosts, so this cannot be read off the request.
+FRONTEND_URL = os.getenv("FRONTEND_URL", "").rstrip("/")
 
 # --- AI / RAG -------------------------------------------------------------
 # Embedding dimension is fixed at migration time. 1536 = OpenAI

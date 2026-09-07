@@ -14,7 +14,9 @@ from apps.tenants.models import Jurisdiction, Tenant
 from .models import Role, User
 from .permissions import IsTenantMember
 from .serializers import (
-    LoginSerializer, OnboardingSerializer, RegisterSerializer, UserSerializer,
+    LoginSerializer, OnboardingSerializer, PasswordResetConfirmSerializer,
+    PasswordResetSerializer, RegisterSerializer, UserSerializer,
+    send_reset_email,
 )
 
 
@@ -135,3 +137,34 @@ class UserViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"])
     def me(self, request):
         return Response(UserSerializer(request.user).data)
+
+
+class PasswordResetViewSet(viewsets.ViewSet):
+    """Forgotten-password flow: ask for a link, then set a new password.
+
+    Both steps are public, so both are throttled and neither ever confirms
+    whether a phone number belongs to an account — the request step answers the
+    same way for a known number, an unknown one and one with no email on file.
+    """
+
+    permission_classes = [AllowAny]
+    throttle_scope = "password_reset"
+
+    # Same text however the request turns out.
+    _sent = ("If that account exists, a reset link is on its way to the email "
+             "address on file.")
+
+    def create(self, request):
+        s = PasswordResetSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        user = s.user()
+        if user is not None:
+            send_reset_email(user)
+        return success(self._sent)
+
+    @action(detail=False, methods=["post"])
+    def confirm(self, request):
+        s = PasswordResetConfirmSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        s.save()
+        return success("Password changed. You can now sign in.")

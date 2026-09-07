@@ -816,6 +816,7 @@ function viewLogin() {
       <label>Password<input name="password" type="password" required></label>
       <button type="submit">Sign in</button>
     </form>`, `
+    <p class="muted center"><a href="#/forgot">Forgot password?</a></p>
     <p class="muted center">No account? <a href="#/register">Register</a> ·
       New organization? <a href="#/onboarding">Sign up</a></p>`));
   $('#f').onsubmit = async (e) => {
@@ -859,6 +860,56 @@ async function viewRegister() {
     try {
       const r = await Api.post('/api/auth/register/', body);
       toast(r?.message || 'Account created. You can now sign in.');
+      location.hash = '#/login';
+    } catch (err) { toast(err.message, true); }
+  };
+}
+
+/* Forgotten password, in two screens: ask by phone, then set a new one from
+   the link that was mailed. The server answers the ask the same way whether or
+   not the number is known, so this screen cannot report "no such account"
+   either — it says what was attempted, not what was found. */
+async function viewForgot() {
+  authChrome();
+  render(authShell('Forgot password', 'We will email a reset link to the address on your account', `
+    <form id="f">
+      <label>Phone<input name="phone" placeholder="08031234567" required></label>
+      <button type="submit">Send reset link</button>
+    </form>`, `
+    <p class="muted center"><a href="#/login">Back to sign in</a></p>`));
+  $('#f').onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    try {
+      const r = await Api.publicPost('/api/auth/password-reset/', { phone: fd.get('phone') });
+      toast(r?.message || 'If that account exists, a reset link is on its way.');
+    } catch (err) { toast(err.message, true); }
+  };
+}
+
+function viewReset(m) {
+  authChrome();
+  const q = new URLSearchParams(m[1] || '');
+  const uid = q.get('uid');
+  const token = q.get('token');
+  if (!uid || !token) {
+    render(authShell('Reset password', 'That link is incomplete', '', `
+      <p class="muted center"><a href="#/forgot">Ask for a new one</a></p>`));
+    return;
+  }
+  render(authShell('Choose a new password', 'The link expires 30 minutes after it is sent', `
+    <form id="f">
+      <label>New password<input name="password" type="password" required></label>
+      <button type="submit">Save password</button>
+    </form>`, `
+    <p class="muted center"><a href="#/login">Back to sign in</a></p>`));
+  $('#f').onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    try {
+      const r = await Api.publicPost('/api/auth/password-reset/confirm/',
+        { uid, token, password: fd.get('password') });
+      toast(r?.message || 'Password changed. You can now sign in.');
       location.hash = '#/login';
     } catch (err) { toast(err.message, true); }
   };
@@ -2966,6 +3017,8 @@ const routes = [
   [/^\/login$/, viewLogin],
   [/^\/register$/, viewRegister],
   [/^\/onboarding$/, viewOnboarding],
+  [/^\/forgot$/, viewForgot],
+  [/^\/reset(?:\?(.*))?$/, viewReset],
   [/^\/profile$/, viewProfile],
   [/^\/?$/, viewHome],
   [/^\/r\/([a-z-]+)\/new(?:\?(.*))?$/, (m) => viewForm(m[1], null, m[2])],
@@ -3001,7 +3054,7 @@ const homeHash = (role) => role === 'super_admin' && !Api.tenant ? '#/platform'
 
 function route() {
   const path = location.hash.slice(1) || '/';
-  const isAuthRoute = /^\/(login|register|onboarding)$/.test(path);
+  const isAuthRoute = /^\/(login|register|onboarding|forgot|reset)(\?|$)/.test(path);
   if (!Api.isLoggedIn && !isAuthRoute) { location.hash = '#/login'; return; }
   if (Api.isLoggedIn && isAuthRoute) { location.hash = homeHash(ME?.role); return; }
   // Inside an organization there is no platform view — the API refuses the
