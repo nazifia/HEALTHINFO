@@ -68,6 +68,7 @@ import 'super_admin_dashboard_screen.dart';
 import 'tenant_management_screen.dart';
 import 'user_management_screen.dart';
 import 'my_health_screen.dart';
+import 'ward_screen.dart';
 import 'profile_screen.dart';
 import 'login_screen.dart';
 
@@ -162,9 +163,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   // access log, pharmacy staff the pharmacy block; everyone gets the base groups.
   List<_Group> _groups = _baseGroups;
 
-  // Flattened view of [_groups] plus the dashboard at index 0. The drawer, the
-  // app bar title and the IndexedStack all index into this.
-  List<_Section> _flat = _flatten(_baseGroups);
+  // Index 0 of the drawer: the seat's own dashboard. The tenant one for staff,
+  // their record for a patient, their claims for an insurer — whatever the API
+  // will actually answer for the role signed in.
+  _Section _home = _dashboard;
+
+  // Flattened view of [_groups] plus that home at index 0. The drawer, the app
+  // bar title and the IndexedStack all index into this.
+  List<_Section> _flat = _flatten(_baseGroups, _dashboard);
 
   // Group labels the user collapsed, restored from disk on start.
   final Set<String> _closed = {};
@@ -173,8 +179,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   // bump gives them fresh state that honours _closed again.
   int _navEpoch = 0;
 
-  static List<_Section> _flatten(List<_Group> gs) =>
-      [_dashboard, for (final g in gs) ...g.sections];
+  static List<_Section> _flatten(List<_Group> gs, _Section home) =>
+      [home, for (final g in gs) ...g.sections];
 
   // Governance view: who read patient data. Admin-only both here and in the API.
   static const _accessLogSection = _Section(
@@ -222,11 +228,40 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _Section('Staff commissions', Icons.percent_outlined, CommissionsScreen()),
   ]);
 
-  // A patient's own record. A public account gets this and the reference
-  // material: every clinical registry 403s for them, so listing those
-  // sections would be a menu of locked doors.
-  static const _myHealthGroup = _Group('My health', [
-    _Section('My health', Icons.favorite_outline, MyHealthScreen()),
+  // A patient's own record — their home, not a section below one. Every
+  // clinical registry 403s for them, so the reference material and their own
+  // history is the whole app.
+  static const _myHealthHome =
+      _Section('My health', Icons.favorite_outline, MyHealthScreen());
+
+  // The insurer's seat. The API scopes each of these to their own scheme
+  // (insurer_scope) and refuses them every write, so the screens come up
+  // read-only on their own — the action rows gate on isPharmacyStaff.
+  static const _insurerHome = _Section(
+      'Claims desk', Icons.request_quote_outlined, PharmacyClaimsScreen());
+
+  static const _insurerGroup = _Group('Claims desk', [
+    _Section('Authorisations', Icons.verified_user_outlined,
+        PharmacyPreauthScreen()),
+    _Section('Schemes', Icons.health_and_safety_outlined,
+        PharmacySchemesScreen()),
+  ]);
+
+  // The health authority's seat: cross-tenant rollups and nothing
+  // tenant-scoped. Everything here is an aggregate, so no screen on it names
+  // a patient.
+  static const _oversightHome =
+      _Section('Public health', Icons.public_outlined, PublicHealthScreen());
+
+  static const _oversightGroup = _Group('Public health', [
+    _Section('Surveillance', Icons.notifications_active_outlined,
+        SurveillanceScreen()),
+    _Section('IDSR report', Icons.assignment_outlined, IdsrScreen()),
+    _Section('Collated reports', Icons.bar_chart_outlined,
+        CollatedReportsScreen()),
+    _Section('ADR collation', Icons.vaccines_outlined, PlatformAdrScreen()),
+    _Section('Report sources', Icons.inventory_2_outlined,
+        ReportSourcesScreen()),
   ]);
 
   // The organization switcher. A super-admin keeps it inside an organization
@@ -295,10 +330,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _saveClosed();
   }
 
-  void _setGroups(List<_Group> gs) {
+  void _setGroups(List<_Group> gs, {_Section? home}) {
     setState(() {
       _groups = gs;
-      _flat = _flatten(gs);
+      _home = home ?? _dashboard;
+      _flat = _flatten(gs, _home);
       // The menu can shrink (a super-admin entering an organization loses the
       // cross-tenant block), so an index into the old, longer list would fall out
       // of range.
@@ -329,10 +365,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return;
     }
     if (role == 'public') {
-      _setGroups([_myHealthGroup, _catalogGroup, _toolsGroup, _accountGroup]);
-      // Their landing screen is their record, not the tenant dashboard the
-      // API refuses them.
-      if (mounted) setState(() => _index = 1);
+      _setGroups([_catalogGroup, _toolsGroup, _accountGroup],
+          home: _myHealthHome);
+      return;
+    }
+    if (role == 'hmo') {
+      _setGroups([_insurerGroup, _accountGroup], home: _insurerHome);
+      return;
+    }
+    if (role == 'government') {
+      _setGroups([_oversightGroup, _accountGroup], home: _oversightHome);
       return;
     }
     if (role == 'tenant_admin') {
@@ -343,7 +385,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ]);
       return;
     }
-    if (pharmacy.isNotEmpty) _setGroups([...pharmacy, ..._baseGroups]);
+    if (pharmacy.isNotEmpty) {
+      _setGroups([...pharmacy, ..._baseGroups]);
+      return;
+    }
+    // A clinical cadre opens on their own workload, not the tenant KPIs — the
+    // same ward landing the web client gives them. Its tiles jump the drawer,
+    // so it is built here where the drawer's index lives.
+    if (_wardRoles.contains(role)) {
+      _setGroups(_baseGroups,
+          home: _Section('Ward', Icons.local_hospital_outlined,
+              WardScreen(onOpen: _openSection)));
+    }
+  }
+
+  // The cadres the ward screen has a register list for (see _work there).
+  static const _wardRoles = {'doctor', 'nurse', 'midwife', 'chew'};
+
+  /// Selects the drawer section with this label, which is how the ward tiles
+  /// open a register: the screens live in the IndexedStack, not on a route.
+  void _openSection(String label) {
+    final i = _flat.indexWhere((s) => s.label == label);
+    if (i >= 0) setState(() => _index = i);
   }
 
   Future<void> _logout() async {
@@ -373,7 +436,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         padding: const EdgeInsets.only(bottom: 24),
         children: [
           _brandHeader(),
-          _navTile(_dashboard, 0, embedded: embedded),
+          _navTile(_home, 0, embedded: embedded),
           _toggleAllButton(),
           ...tiles,
         ],

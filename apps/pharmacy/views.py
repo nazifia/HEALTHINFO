@@ -14,8 +14,10 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
 from apps.accounts.permissions import (
+    INSURER_ROLES,
     IsPharmacyAdminOrReadOnly,
     IsPharmacyStaff,
+    IsPharmacyStaffOrInsurerReadOnly,
     IsTenantMember,
     is_pharmacy_admin,
 )
@@ -52,15 +54,32 @@ from .serializers import (
 ZERO = Decimal("0.00")
 
 
+def insurer_scope(qs, user, field="hmo"):
+    """Narrow to the scheme an insurer seat answers for; everyone else sees all.
+
+    An insurer signs in to the pharmacy's tenant, so tenant scoping alone would
+    hand them a competitor's claims. A seat with no scheme set reads nothing.
+    """
+    if user.is_authenticated and user.role in INSURER_ROLES:
+        return qs.filter(**{field: user.hmo_id})
+    return qs
+
+
 class HMOViewSet(PharmacyViewSet):
     """Insurers the pharmacy bills. Coverage is money policy — admin writes."""
 
     model = HMO
     serializer_class = HMOSerializer
-    permission_classes = [IsTenantMember, IsPharmacyStaff, IsPharmacyAdminOrReadOnly]
+    permission_classes = [
+        IsTenantMember, IsPharmacyStaffOrInsurerReadOnly, IsPharmacyAdminOrReadOnly,
+    ]
+    insurer_ok = True
     filterset_fields = ("is_active",)
     search_fields = ("name", "code")
     ordering_fields = ("name", "created_at")
+
+    def get_queryset(self):
+        return insurer_scope(HMO.objects.all(), self.request.user, field="pk")
 
 
 class HmoItemRuleViewSet(PharmacyViewSet):
@@ -89,15 +108,16 @@ class PreAuthorizationViewSet(PharmacyViewSet):
 
     model = PreAuthorization
     serializer_class = PreAuthorizationSerializer
-    permission_classes = [IsTenantMember, IsPharmacyStaff]
+    permission_classes = [IsTenantMember, IsPharmacyStaffOrInsurerReadOnly]
+    insurer_ok = True
     filterset_fields = ("status", "hmo", "enrollment")
     search_fields = ("reference", "code", "notes")
     ordering_fields = ("created_at", "amount")
 
     def get_queryset(self):
-        return PreAuthorization.objects.select_related(
+        return insurer_scope(PreAuthorization.objects.select_related(
             "hmo", "enrollment", "enrollment__patient", "sale"
-        )
+        ), self.request.user)
 
     def perform_create(self, serializer):
         """The insurer's answer goes back to whoever asked."""
@@ -183,12 +203,16 @@ class PreAuthorizationItemViewSet(mixins.ListModelMixin,
     """
 
     serializer_class = PreAuthorizationItemSerializer
-    permission_classes = [IsTenantMember, IsPharmacyStaff]
+    permission_classes = [IsTenantMember, IsPharmacyStaffOrInsurerReadOnly]
+    insurer_ok = True
     filterset_fields = ("authorization", "status", "item")
     ordering_fields = ("created_at",)
 
     def get_queryset(self):
-        return PreAuthorizationItem.objects.select_related("item", "authorization")
+        return insurer_scope(
+            PreAuthorizationItem.objects.select_related("item", "authorization"),
+            self.request.user, field="authorization__hmo",
+        )
 
     def _decide(self, request, call, message):
         if not is_pharmacy_admin(request.user):
@@ -233,11 +257,15 @@ class HmoEnrollmentViewSet(PharmacyViewSet):
 
     model = HmoEnrollment
     serializer_class = HmoEnrollmentSerializer
+    permission_classes = [IsTenantMember, IsPharmacyStaffOrInsurerReadOnly]
+    insurer_ok = True
     filterset_fields = ("hmo", "patient", "is_active")
     search_fields = ("member_number", "plan")
 
     def get_queryset(self):
-        return HmoEnrollment.objects.select_related("hmo", "patient")
+        return insurer_scope(
+            HmoEnrollment.objects.select_related("hmo", "patient"), self.request.user
+        )
 
 
 class ClaimViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
@@ -249,13 +277,17 @@ class ClaimViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
     """
 
     serializer_class = ClaimSerializer
-    permission_classes = [IsTenantMember, IsPharmacyStaff]
+    permission_classes = [IsTenantMember, IsPharmacyStaffOrInsurerReadOnly]
+    insurer_ok = True
     filterset_fields = ("status", "hmo", "enrollment")
     search_fields = ("reference", "sale__reference")
     ordering_fields = ("created_at", "amount")
 
     def get_queryset(self):
-        return Claim.objects.select_related("hmo", "sale", "sale__patient", "batch")
+        return insurer_scope(
+            Claim.objects.select_related("hmo", "sale", "sale__patient", "batch"),
+            self.request.user,
+        )
 
     def _transition(self, request, call, message):
         claim = self.get_object()
@@ -357,13 +389,15 @@ class ClaimBatchViewSet(mixins.CreateModelMixin, mixins.ListModelMixin,
     """
 
     serializer_class = ClaimBatchSerializer
-    permission_classes = [IsTenantMember, IsPharmacyStaff]
+    permission_classes = [IsTenantMember, IsPharmacyStaffOrInsurerReadOnly]
+    insurer_ok = True
     filterset_fields = ("status", "hmo")
     search_fields = ("reference", "notes")
     ordering_fields = ("created_at",)
 
     def get_queryset(self):
-        return ClaimBatch.objects.select_related("hmo")
+        return insurer_scope(ClaimBatch.objects.select_related("hmo"),
+                             self.request.user)
 
     def perform_create(self, serializer):
         batch = serializer.save()

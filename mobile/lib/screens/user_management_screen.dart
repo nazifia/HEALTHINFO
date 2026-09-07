@@ -20,6 +20,8 @@ const _roles = [
   'nurse',
   'midwife',
   'chew',
+  'hmo',
+  'government',
   'public',
 ];
 
@@ -208,9 +210,48 @@ class _UserFormState extends State<_UserForm> {
   late String _role = '${widget.user?['role'] ?? 'public'}';
   late bool _active = widget.user?['is_active'] != false;
   int? _tenantId;
+  // The scheme an insurer seat answers for. Required by the API for that role,
+  // and the list is tenant-scoped: it only answers inside an organization.
+  late int? _hmoId = widget.user?['hmo'] as int?;
+  List<Map<String, dynamic>> _hmos = const [];
+  // The patch a health authority seat reads. Required by the API for that
+  // role: the platform rollups narrow to it, so a seat without one reads
+  // nothing.
+  late int? _jurisdictionId = widget.user?['jurisdiction'] as int?;
+  List<Map<String, dynamic>> _jurisdictions = const [];
   bool _busy = false;
 
   bool get _isEdit => widget.user != null;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_role == 'hmo') _loadHmos();
+    if (_role == 'government') _loadJurisdictions();
+  }
+
+  Future<void> _loadJurisdictions() async {
+    if (_jurisdictions.isNotEmpty) return;
+    try {
+      final rows = await api.jurisdictions();
+      if (mounted) setState(() => _jurisdictions = rows);
+    } catch (_) {
+      // Same as the scheme list: the API refuses a seat with no jurisdiction,
+      // so this fails loudly on save rather than quietly here.
+    }
+  }
+
+  Future<void> _loadHmos() async {
+    if (_hmos.isNotEmpty) return;
+    try {
+      final rows = await api.getList('/api/pharmacy/hmos/');
+      if (mounted) setState(() => _hmos = rows.cast<Map<String, dynamic>>());
+    } catch (_) {
+      // Outside an organization there is no scheme list to offer. The API
+      // still refuses a seat with no scheme, so this fails loudly on save
+      // rather than quietly here.
+    }
+  }
 
   Future<void> _save() async {
     if (!(_form.currentState?.validate() ?? true)) return;
@@ -222,6 +263,8 @@ class _UserFormState extends State<_UserForm> {
           'role': _role,
           'is_active': _active,
           'license_number': _license.text.trim(),
+          if (_role == 'hmo') 'hmo': _hmoId,
+          if (_role == 'government') 'jurisdiction': _jurisdictionId,
         });
       } else {
         await api.post('/api/users/', {
@@ -232,6 +275,8 @@ class _UserFormState extends State<_UserForm> {
           'is_active': _active,
           if (_tenantId != null) 'tenant': _tenantId,
           'license_number': _license.text.trim(),
+          if (_role == 'hmo') 'hmo': _hmoId,
+          if (_role == 'government') 'jurisdiction': _jurisdictionId,
         });
       }
       if (!mounted) return;
@@ -304,8 +349,43 @@ class _UserFormState extends State<_UserForm> {
                   for (final r in _roles)
                     DropdownMenuItem(value: r, child: Text(r)),
                 ],
-                onChanged: (v) => setState(() => _role = v ?? _role),
+                onChanged: (v) {
+                  setState(() => _role = v ?? _role);
+                  if (_role == 'hmo') _loadHmos();
+                  if (_role == 'government') _loadJurisdictions();
+                },
               ),
+              if (_role == 'hmo')
+                SearchableDropdown<int>(
+                  initialValue: _hmos.any((h) => h['id'] == _hmoId) ? _hmoId : null,
+                  decoration: const InputDecoration(
+                    labelText: 'Scheme',
+                    helperText: 'Open the organization first — the list is theirs',
+                  ),
+                  items: [
+                    for (final h in _hmos)
+                      DropdownMenuItem(
+                          value: h['id'] as int, child: Text('${h['name']}')),
+                  ],
+                  onChanged: (v) => setState(() => _hmoId = v),
+                ),
+              if (_role == 'government')
+                SearchableDropdown<int>(
+                  initialValue: _jurisdictions.any((j) => j['id'] == _jurisdictionId)
+                      ? _jurisdictionId
+                      : null,
+                  decoration: const InputDecoration(
+                    labelText: 'Jurisdiction',
+                    helperText: 'This seat reads it and everything under it',
+                  ),
+                  items: [
+                    for (final j in _jurisdictions)
+                      DropdownMenuItem(
+                          value: j['id'] as int,
+                          child: Text("${j['name']} · ${j['level']}")),
+                  ],
+                  onChanged: (v) => setState(() => _jurisdictionId = v),
+                ),
               if (_licensedRoles.contains(_role))
                 TextFormField(
                   controller: _license,

@@ -47,6 +47,19 @@ class Jurisdiction(models.Model):
             node = node.parent
         return node
 
+    def subtree(self):
+        """This jurisdiction and every one under it, as a queryset.
+
+        What a health authority seat is allowed to read: its own patch, whole.
+        Returned lazily so callers use it as a subquery rather than pulling ids.
+
+        ponytail: two hops down, because Level fixes the tree at three tiers
+        (local -> state -> national). Add a tier and this becomes a loop.
+        """
+        return Jurisdiction.objects.filter(
+            Q(pk=self.pk) | Q(parent=self) | Q(parent__parent=self)
+        )
+
 
 class Tenant(models.Model):
     class Kind(models.TextChoices):

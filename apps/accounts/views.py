@@ -124,6 +124,14 @@ class UserViewSet(viewsets.ModelViewSet):
             serializer.validated_data.pop("role", None)
         serializer.save()
 
+    def get_permissions(self):
+        # Everyone reads their own row, including the seats that belong to no
+        # tenant (a government seat) or read only part of one (an insurer) —
+        # the client asks for it on every page load to know who is signed in.
+        if self.action == "me":
+            return [IsAuthenticated()]
+        return super().get_permissions()
+
     @action(detail=False, methods=["get"])
     def me(self, request):
         return Response(UserSerializer(request.user).data)

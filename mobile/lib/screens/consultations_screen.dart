@@ -611,6 +611,10 @@ class _CloseSheetState extends State<_CloseSheet> {
   }
 }
 
+/// The new-visit sheet, for callers outside this screen — the ward's FAB
+/// files into the register a cadre files most, and this is one of them.
+Widget consultationForm() => const _Form();
+
 class _Form extends StatefulWidget {
   final Map<String, dynamic>? existing;
   const _Form({this.existing});

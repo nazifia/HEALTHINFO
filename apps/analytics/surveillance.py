@@ -14,6 +14,7 @@ from django.db.models.functions import TruncDay
 from django.utils import timezone
 
 from .models import CaseReport
+from .stats import _scoped
 
 # A day must clear BOTH guards to alarm: enough absolute cases to matter, and
 # enough above baseline to be a real signal not noise.
@@ -104,5 +105,7 @@ def tenant_spikes(days=30):
     return detect_spikes(CaseReport.objects.all(), days)
 
 
-def platform_spikes(days=30):
-    return detect_spikes(CaseReport.all_objects.all(), days)
+def platform_spikes(days=30, jurisdiction=None):
+    """Cross-tenant outbreak alerts, narrowed to one authority's patch when it
+    has one. None is the national view."""
+    return detect_spikes(_scoped(CaseReport, True, jurisdiction), days)

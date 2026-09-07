@@ -11,6 +11,21 @@ WRITE_ROLES = {Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.DOCTOR, Role.PHARMACIST
 # authoring which stays in WRITE_ROLES.
 REPORT_ROLES = WRITE_ROLES | {Role.NURSE, Role.MIDWIFE, Role.CHEW}
 
+# The patient's own seat. They read their record through /api/portal/, which
+# answers for them and nobody else; the report registers are staff screens and
+# every row on one belongs to some other patient.
+PATIENT_ROLES = {Role.PUBLIC}
+
+# Seats sitting inside a tenant that are not its staff. An insurer reads the
+# claims raised against its own scheme and nothing else in there, so the tenant
+# gate below is default-deny for them: a view has to say ``insurer_ok = True``
+# before an insurer reaches it, and a new endpoint is closed until it does.
+INSURER_ROLES = {Role.HMO}
+
+# Seats with no tenant at all: a health authority reads the cross-tenant
+# rollups (aggregates, never a named patient) and nothing tenant-scoped.
+OVERSIGHT_ROLES = {Role.GOVERNMENT}
+
 
 def sees_whole_tenant(user):
     """True when this user reads their tenant's records in full.
@@ -36,6 +51,8 @@ class IsTenantMember(BasePermission):
             return False
         if user.is_super_admin:
             return True
+        if user.role in INSURER_ROLES and not getattr(view, "insurer_ok", False):
+            return False
         return request.tenant is not None and user.tenant_id == request.tenant.id
 
 
@@ -59,6 +76,29 @@ class IsPlatformAdmin(IsSuperAdmin):
     def has_permission(self, request, view):
         return (super().has_permission(request, view)
                 and getattr(request, "tenant", None) is None)
+
+
+class IsPlatformReader(BasePermission):
+    """Cross-tenant aggregate reads: the platform admin, or a government seat.
+
+    Refused inside a tenant for the same reason IsPlatformAdmin is — what you
+    read there is that one organization's data. Everything behind this
+    permission is a rollup, so a health authority reading it never sees a named
+    patient, and it is read-only by construction (all GET views).
+
+    A health authority is also refused without a jurisdiction set. Its rollups
+    narrow to the patch it answers for, so a seat with none has no patch —
+    refusing is the fail-closed half of that narrowing, and mirrors an insurer
+    with no scheme.
+    """
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user.is_authenticated or getattr(request, "tenant", None) is not None:
+            return False
+        if user.is_super_admin:
+            return True
+        return user.role in OVERSIGHT_ROLES and user.jurisdiction_id is not None
 
 
 class ReadOnlyOrWriteRole(BasePermission):
@@ -132,11 +172,14 @@ class ReadOnlyOrReportRole(BasePermission):
     """
 
     def has_permission(self, request, view):
-        if request.method in SAFE_METHODS:
-            return True
         user = request.user
         if not user.is_authenticated:
             return False
+        if request.method in SAFE_METHODS:
+            # Listing a register is reading other people's records, so the
+            # patient seat is not "anyone in the tenant" here: theirs comes
+            # back from /api/portal/history/, filtered to them.
+            return user.is_super_admin or user.role not in PATIENT_ROLES
         return user.is_super_admin or user.role in REPORT_ROLES
 
 
@@ -167,6 +210,20 @@ class IsPharmacyStaff(BasePermission):
         if not user.is_authenticated:
             return False
         return user.is_super_admin or user.role in PHARMACY_STAFF_ROLES
+
+
+class IsPharmacyStaffOrInsurerReadOnly(IsPharmacyStaff):
+    """Pharmacy staff as usual; the insurer seat reads and never writes.
+
+    The insurer answers a claim through its own transitions elsewhere — nothing
+    here lets them edit the pharmacy's record of what was dispensed.
+    """
+
+    def has_permission(self, request, view):
+        user = request.user
+        if user.is_authenticated and user.role in INSURER_ROLES:
+            return request.method in SAFE_METHODS
+        return super().has_permission(request, view)
 
 
 class IsPharmacyAdminOrReadOnly(BasePermission):

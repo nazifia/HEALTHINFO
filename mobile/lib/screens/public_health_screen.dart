@@ -51,6 +51,7 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
         _load('/api/analytics/platform/insurance/', '/api/analytics/insurance/'),
         _load('/api/analytics/platform/appointments/', '/api/analytics/appointments/'),
         _load('/api/analytics/platform/prescriptions/', '/api/analytics/prescriptions/'),
+        _load('/api/analytics/platform/consultations/', '/api/analytics/consultations/'),
       ]);
 
   @override
@@ -79,7 +80,7 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
               ),
             ]);
           }
-          final [lab, imm, vital, stock, chw, facility, insurance, appt, rx] =
+          final [lab, imm, vital, stock, chw, facility, insurance, appt, rx, visit] =
               snap.data!;
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
@@ -219,6 +220,27 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
                 icon: Icons.event_available_outlined,
                 rows: (appt['by_status'] as List?) ?? [],
                 labelKey: 'status',
+              ),
+
+              // ── Clinic load ──
+              _SectionTitle('Clinic load', Icons.medical_information_outlined),
+              _Metric(
+                value: '${visit['total'] ?? 0}',
+                label: 'Consultations',
+                sub: '${visit['open'] ?? 0} still open · '
+                    'admission rate ${_pct(visit['admission_rate'])}',
+              ),
+              BreakdownCard(
+                heading: 'Where the visit went',
+                icon: Icons.call_split_outlined,
+                rows: (visit['by_disposition'] as List?) ?? [],
+                labelKey: 'disposition',
+              ),
+              BreakdownCard(
+                heading: 'What patients came with',
+                icon: Icons.sick_outlined,
+                rows: (visit['top_complaints'] as List?) ?? [],
+                labelKey: 'chief_complaint',
               ),
 
               // ── Prescribing & dispensing ──

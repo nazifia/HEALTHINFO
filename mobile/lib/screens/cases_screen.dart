@@ -246,6 +246,9 @@ class _Badge extends StatelessWidget {
 
 /// Case form in a bottom sheet. Pops `true` after a successful POST (new) or
 /// PATCH (when [existing] is supplied).
+/// The new-case sheet, for callers outside this screen (the ward's FAB).
+Widget caseReportForm() => const _ReportForm();
+
 class _ReportForm extends StatefulWidget {
   final Map<String, dynamic>? existing;
   const _ReportForm({this.existing});

@@ -21,6 +21,7 @@ class DispenseSheet extends StatefulWidget {
 }
 
 class _DispenseSheetState extends State<DispenseSheet> {
+  final _barcode = TextEditingController();
   final _quantity = TextEditingController(text: '1');
   final _discount = TextEditingController(text: '0');
   final _number = TextEditingController();
@@ -54,6 +55,7 @@ class _DispenseSheetState extends State<DispenseSheet> {
 
   @override
   void dispose() {
+    _barcode.dispose();
     _quantity.dispose();
     _discount.dispose();
     _number.dispose();
@@ -115,6 +117,39 @@ class _DispenseSheetState extends State<DispenseSheet> {
       if (mounted) setState(() => _error = '$e');
     }
     if (mounted) setState(() => _items = rows);
+  }
+
+  /// The code on the box, from a scanner or typed in.
+  ///
+  /// The catalogue is already loaded, so a scan is answered here; the API
+  /// lookup is the fallback for an item this list did not carry. What it does
+  /// is pick the item — the quantity and any discount are still the
+  /// pharmacist's to set before the line is added.
+  Future<void> _scan(String code) async {
+    code = code.trim();
+    if (code.isEmpty) return;
+    var hit = _items.firstWhere(
+        (i) => '${i['barcode']}' == code || '${i['gtin']}' == code,
+        orElse: () => const <String, dynamic>{});
+    if (hit.isEmpty) {
+      try {
+        final r = await api.get('/api/pharmacy/items/barcode/', {'code': code});
+        hit = (r as Map).cast<String, dynamic>();
+        _items = [..._items, hit];
+      } catch (_) {
+        hit = const <String, dynamic>{};
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      if (hit.isEmpty) {
+        _error = 'No item carries that code.';
+        return;
+      }
+      _error = null;
+      _itemId = hit['id'] as int;
+      _barcode.clear();
+    });
   }
 
   /// A patient's scheme cards. One card is picked for the pharmacist; two or
@@ -322,7 +357,21 @@ class _DispenseSheetState extends State<DispenseSheet> {
                 style: TextStyle(color: context.hintColor, fontSize: 12)),
         ],
         const SizedBox(height: 12),
+        TextField(
+          controller: _barcode,
+          textInputAction: TextInputAction.search,
+          decoration: const InputDecoration(
+            labelText: 'Scan a barcode',
+            hintText: 'Scanner, or type the code',
+            prefixIcon: Icon(Icons.qr_code_scanner_outlined),
+          ),
+          onSubmitted: _scan,
+        ),
+        const SizedBox(height: 12),
         SearchableDropdown<int?>(
+          // A scan picks the item, and this field keeps its own value: the key
+          // rebuilds it so the counter sees what was scanned.
+          key: ValueKey(_itemId),
           initialValue: _itemId,
           isExpanded: true,
           decoration: const InputDecoration(labelText: 'Item'),

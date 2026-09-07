@@ -263,7 +263,7 @@ def _diagnosis_pairs(rx, limit=20):
     ]
 
 
-def _prescribing_rollup(start=None, end=None, platform=False):
+def _prescribing_rollup(start=None, end=None, platform=False, jurisdiction=None):
     """The clinical half of a dashboard: diagnoses, and the drugs written for them.
 
     The dashboards otherwise report searching and AI answers, which say nothing
@@ -271,7 +271,7 @@ def _prescribing_rollup(start=None, end=None, platform=False):
     count next to the written one, because an order written is not an order
     handed over.
     """
-    rx = apply_range(_manager(Prescription, platform).all(), start, end)
+    rx = apply_range(_scoped(Prescription, platform, jurisdiction), start, end)
     rows = (
         rx.values("case_report__disease__name")
         .annotate(
@@ -371,19 +371,50 @@ def _rollup_by_tier(reports, level):
     ]
 
 
-def platform_case_report_stats(start=None, end=None):
-    """Super-admin case-report rollup across all tenants — the central collation."""
-    reports = apply_range(CaseReport.all_objects.all(), start, end)
+# Coarsest last: a tier's index is how far up the gov hierarchy it sits.
+_TIERS = [
+    Jurisdiction.Level.LOCAL,
+    Jurisdiction.Level.STATE,
+    Jurisdiction.Level.NATIONAL,
+]
+
+
+def _tiers_for(jurisdiction, offered=_TIERS):
+    """Which tier rollups a seat may be shown, its own being the coarsest.
+
+    A Kano seat's rows folded to "national" would print under Nigeria as though
+    it were the country's total, when it is only Kano's. So tiers above the
+    seat's own are not offered at all: no number beats a number that is not the
+    answer to the question its label asks.
+
+    ``offered`` is the tiers that rollup publishes at all (not every one goes
+    down to local). None narrows nothing — the platform admin sees the lot.
+    """
+    if jurisdiction is None:
+        return offered
+    cap = _TIERS.index(jurisdiction.level)
+    return [t for t in offered if _TIERS.index(t) <= cap]
+
+
+def platform_case_report_stats(start=None, end=None, jurisdiction=None):
+    """Cross-tenant case-report rollup — the central collation.
+
+    ``jurisdiction`` narrows it to one authority's patch; None is the national
+    view.
+    """
+    reports = apply_range(
+        _scoped(CaseReport, True, jurisdiction), start, end
+    )
     stats = _case_breakdown(reports)
     stats["by_tenant"] = list(
         reports.values("tenant__name").annotate(count=Count("id")).order_by("-count")[:20]
     )
     # Cross-tenant collation keyed on ICD-10 (fixes name-collision double counting).
     stats["by_icd10"] = _normalized_diseases(reports)
-    # Geographic rollup up the full gov hierarchy: tenant → local → state → national.
-    stats["by_local"] = _rollup_by_tier(reports, Jurisdiction.Level.LOCAL)
-    stats["by_state"] = _rollup_by_tier(reports, Jurisdiction.Level.STATE)
-    stats["by_national"] = _rollup_by_tier(reports, Jurisdiction.Level.NATIONAL)
+    # Geographic rollup up the gov hierarchy: tenant → local → state → national,
+    # stopping at the seat's own tier.
+    for tier in _tiers_for(jurisdiction):
+        stats[f"by_{tier}"] = _rollup_by_tier(reports, tier)
     return stats
 
 
@@ -418,17 +449,17 @@ def _merge_counts(rows_a, rows_b, key):
     ]
 
 
-def report_sources(start=None, end=None, platform=False):
+def report_sources(start=None, end=None, platform=False, jurisdiction=None):
     """Where reports originate — the source behind every collated number.
 
     Pools both report streams (case reports + adverse-drug reactions) and groups
     by who filed them and from where: reporter, region, and (platform) tenant.
     platform=True collates across all tenants via the unscoped manager.
     """
-    cases = CaseReport.all_objects if platform else CaseReport.objects
-    adrs = AdverseDrugReaction.all_objects if platform else AdverseDrugReaction.objects
-    cases = apply_range(cases.all(), start, end)
-    adrs = apply_range(adrs.all(), start, end)
+    cases = apply_range(_scoped(CaseReport, platform, jurisdiction), start, end)
+    adrs = apply_range(
+        _scoped(AdverseDrugReaction, platform, jurisdiction), start, end
+    )
 
     out = {
         "total_cases": cases.count(),
@@ -451,10 +482,9 @@ def report_sources(start=None, end=None, platform=False):
             _grouped(adrs, "tenant__name"),
             "tenant__name",
         )
-        # Roll the pooled stream up the gov hierarchy: tenant → local → state → national.
-        out["by_local"] = _merge_tier(cases, adrs, Jurisdiction.Level.LOCAL)
-        out["by_state"] = _merge_tier(cases, adrs, Jurisdiction.Level.STATE)
-        out["by_national"] = _merge_tier(cases, adrs, Jurisdiction.Level.NATIONAL)
+        # Roll the pooled stream up the gov hierarchy, stopping at the seat's tier.
+        for tier in _tiers_for(jurisdiction):
+            out[f"by_{tier}"] = _merge_tier(cases, adrs, tier)
     return out
 
 
@@ -481,12 +511,19 @@ def benchmark_stats():
     }
 
 
-def platform_stats(start=None, end=None):
-    """Super-admin dashboard across all tenants (bypasses scoping)."""
-    events = apply_range(AnalyticsEvent.all_objects.all(), start, end)
+def platform_stats(start=None, end=None, jurisdiction=None):
+    """Cross-tenant dashboard (bypasses tenant scoping).
+
+    ``jurisdiction`` narrows it to one authority's patch; None is the national
+    view. The tenant and user counts narrow with it — a Kano seat is told how
+    many facilities Kano has, not how many the country has.
+    """
+    events = apply_range(_scoped(AnalyticsEvent, True, jurisdiction), start, end)
     return {
-        "total_tenants": Tenant.objects.count(),
-        "total_users": User.objects.count(),
+        "total_tenants": _scope(
+            Tenant.objects.all(), jurisdiction, field="jurisdiction"
+        ).count(),
+        "total_users": _scope(User.objects.all(), jurisdiction).count(),
         "total_searches": events.filter(event_type="search").count(),
         "content_gaps": _content_gaps(events),
         "searches_by_tenant": list(
@@ -495,17 +532,20 @@ def platform_stats(start=None, end=None):
             .annotate(count=Count("id"))
             .order_by("-count")[:20]
         ),
-        "ai_feedback": _ai_feedback(apply_range(AiInteraction.all_objects.all(), start, end)),
+        "ai_feedback": _ai_feedback(
+            apply_range(_scoped(AiInteraction, True, jurisdiction), start, end)
+        ),
         "search_trend": _series(events.filter(event_type="search"), days=90),
-        "adverse_reactions": adr_stats(platform=True),
-        **_prescribing_rollup(start, end, platform=True),
+        "adverse_reactions": adr_stats(platform=True, jurisdiction=jurisdiction),
+        **_prescribing_rollup(start, end, platform=True, jurisdiction=jurisdiction),
     }
 
 
-def adr_stats(start=None, end=None, platform=False):
+def adr_stats(start=None, end=None, platform=False, jurisdiction=None):
     """Adverse-drug-reaction rollup. platform=True collates across tenants."""
-    manager = AdverseDrugReaction.all_objects if platform else AdverseDrugReaction.objects
-    reports = apply_range(manager.all(), start, end)
+    reports = apply_range(
+        _scoped(AdverseDrugReaction, platform, jurisdiction), start, end
+    )
 
     out = {
         "total": reports.count(),
@@ -523,16 +563,34 @@ def adr_stats(start=None, end=None, platform=False):
     }
     if platform:
         out["by_tenant"] = _grouped(reports, "tenant__name")
-        out["by_local"] = _rollup_by_tier(reports, Jurisdiction.Level.LOCAL)
-        out["by_state"] = _rollup_by_tier(reports, Jurisdiction.Level.STATE)
-        out["by_national"] = _rollup_by_tier(reports, Jurisdiction.Level.NATIONAL)
+        for tier in _tiers_for(jurisdiction):
+            out[f"by_{tier}"] = _rollup_by_tier(reports, tier)
     return out
 
 
-def _manager(model, platform):
-    """Tenant-scoped vs cross-tenant manager — the one knob every platform rollup
-    toggles. all_objects bypasses scoping (super-admin collation)."""
-    return model.all_objects if platform else model.objects
+def _scope(qs, jurisdiction, field="tenant__jurisdiction"):
+    """Narrow a cross-tenant rollup to one jurisdiction and everything under it.
+
+    A health authority reads its own patch: a Kano seat must not be answered
+    with Lagos rows. ``None`` means no narrowing — the platform admin's national
+    view. ``field`` is the path from the row to a jurisdiction, for the two
+    rollups that count tenants and users rather than reports.
+    """
+    if jurisdiction is None:
+        return qs
+    return qs.filter(**{f"{field}__in": jurisdiction.subtree()})
+
+
+def _scoped(model, platform, jurisdiction=None):
+    """The rows one rollup may read — the one knob every platform rollup toggles.
+
+    Tenant-scoped by default; ``platform`` swaps in the unscoped manager for a
+    cross-tenant collation. all_objects bypasses tenant scoping, so on that
+    path ``jurisdiction`` is the only thing narrowing what comes back.
+    """
+    if not platform:
+        return model.objects.all()
+    return _scope(model.all_objects.all(), jurisdiction)
 
 
 def _grouped(qs, field, limit=None):
@@ -540,13 +598,13 @@ def _grouped(qs, field, limit=None):
     return list(rows[:limit] if limit else rows)
 
 
-def lab_stats(start=None, end=None, platform=False):
+def lab_stats(start=None, end=None, platform=False, jurisdiction=None):
     """Lab-result rollup incl. the antimicrobial-resistance (AMR) signal.
 
     AMR rate = resistant isolates / all isolates with a susceptibility result,
     sliced by organism and by antibiotic. platform=True collates across tenants.
     """
-    reports = apply_range(_manager(LabResult, platform).all(), start, end)
+    reports = apply_range(_scoped(LabResult, platform, jurisdiction), start, end)
     tested = reports.exclude(susceptibility="")  # rows that ran an AST
     resistant = tested.filter(susceptibility=LabResult.Susceptibility.RESISTANT)
 
@@ -584,10 +642,10 @@ def lab_stats(start=None, end=None, platform=False):
     return out
 
 
-def chw_stats(start=None, end=None, platform=False):
+def chw_stats(start=None, end=None, platform=False, jurisdiction=None):
     """Community-health-worker field reports: out-of-facility care volume,
     danger signs and referral rate."""
-    reports = apply_range(_manager(CommunityHealthReport, platform).all(), start, end)
+    reports = apply_range(_scoped(CommunityHealthReport, platform, jurisdiction), start, end)
     total = reports.count()
     referred = reports.filter(referred=True).count()
     out = {
@@ -604,10 +662,10 @@ def chw_stats(start=None, end=None, platform=False):
     return out
 
 
-def facility_stats(start=None, end=None, platform=False):
+def facility_stats(start=None, end=None, platform=False, jurisdiction=None):
     """Health-service KPIs averaged across facility snapshots: bed occupancy,
     waiting time, staffing and total throughput."""
-    reports = apply_range(_manager(FacilityMetric, platform).all(), start, end)
+    reports = apply_range(_scoped(FacilityMetric, platform, jurisdiction), start, end)
     agg = reports.aggregate(
         beds_total=Sum("beds_total"),
         beds_occupied=Sum("beds_occupied"),
@@ -634,10 +692,10 @@ def facility_stats(start=None, end=None, platform=False):
     return out
 
 
-def insurance_stats(start=None, end=None, platform=False):
+def insurance_stats(start=None, end=None, platform=False, jurisdiction=None):
     """Insurance-claim rollup: volume, cost and approval rate by status &
     diagnosis."""
-    claims = apply_range(_manager(InsuranceClaim, platform).all(), start, end)
+    claims = apply_range(_scoped(InsuranceClaim, platform, jurisdiction), start, end)
     total = claims.count()
     decided = claims.filter(
         status__in=[InsuranceClaim.Status.APPROVED, InsuranceClaim.Status.REJECTED,
@@ -665,9 +723,9 @@ def insurance_stats(start=None, end=None, platform=False):
     return out
 
 
-def appointment_stats(start=None, end=None, platform=False):
+def appointment_stats(start=None, end=None, platform=False, jurisdiction=None):
     """Appointment utilization: in-person vs telemedicine split and no-show rate."""
-    appts = apply_range(_manager(Appointment, platform).all(), start, end)
+    appts = apply_range(_scoped(Appointment, platform, jurisdiction), start, end)
     total = appts.count()
     # No-show rate is over appointments that were due (not still scheduled/cancelled).
     attended = appts.filter(status=Appointment.Status.COMPLETED).count()
@@ -714,13 +772,13 @@ def _median_minutes(qs, start_field, end_field):
     return round(sum(s.total_seconds() for s in middle) / len(middle) / 60, 1)
 
 
-def consultation_stats(start=None, end=None, platform=False):
+def consultation_stats(start=None, end=None, platform=False, jurisdiction=None):
     """Clinic load: what patients came with, and where they went next.
 
     ``by_disposition`` is over closed consultations only — an open note has no
     disposition yet, and counting those blanks would read as a fifth outcome.
     """
-    rows = apply_range(_manager(Consultation, platform).all(), start, end)
+    rows = apply_range(_scoped(Consultation, platform, jurisdiction), start, end)
     closed = rows.filter(status=Consultation.Status.CLOSED)
     closed_count = closed.count()
     admitted = closed.filter(disposition=Consultation.Disposition.ADMITTED).count()
@@ -748,9 +806,9 @@ def consultation_stats(start=None, end=None, platform=False):
     return out
 
 
-def immunization_stats(start=None, end=None, platform=False):
+def immunization_stats(start=None, end=None, platform=False, jurisdiction=None):
     """Vaccination coverage rollup: doses by vaccine, region and age band."""
-    reports = apply_range(_manager(Immunization, platform).all(), start, end)
+    reports = apply_range(_scoped(Immunization, platform, jurisdiction), start, end)
     out = {
         "total_doses": reports.count(),
         "by_vaccine": _grouped(reports, "vaccine", 20),
@@ -761,19 +819,20 @@ def immunization_stats(start=None, end=None, platform=False):
     }
     if platform:
         out["by_tenant"] = _grouped(reports, "tenant__name", 20)
-        out["by_state"] = _rollup_by_tier(reports, Jurisdiction.Level.STATE)
-        out["by_national"] = _rollup_by_tier(reports, Jurisdiction.Level.NATIONAL)
+        offered = [Jurisdiction.Level.STATE, Jurisdiction.Level.NATIONAL]
+        for tier in _tiers_for(jurisdiction, offered):
+            out[f"by_{tier}"] = _rollup_by_tier(reports, tier)
     return out
 
 
-def vital_stats(start=None, end=None, platform=False):
+def vital_stats(start=None, end=None, platform=False, jurisdiction=None):
     """Vital-registration rollup with maternal & infant mortality.
 
     Maternal mortality ratio = maternal deaths per 100 000 live births.
     Infant mortality rate     = infant deaths per 1 000 live births.
     Rates are None when there are no recorded births (no denominator).
     """
-    events = apply_range(_manager(VitalEvent, platform).all(), start, end)
+    events = apply_range(_scoped(VitalEvent, platform, jurisdiction), start, end)
     births = events.filter(event_type=VitalEvent.Kind.BIRTH).count()
     deaths = events.filter(event_type=VitalEvent.Kind.DEATH)
     deaths_n = deaths.count()
@@ -796,17 +855,18 @@ def vital_stats(start=None, end=None, platform=False):
     }
     if platform:
         out["by_tenant"] = _grouped(events, "tenant__name", 20)
-        out["by_state"] = _rollup_by_tier(deaths, Jurisdiction.Level.STATE)
+        for tier in _tiers_for(jurisdiction, [Jurisdiction.Level.STATE]):
+            out[f"by_{tier}"] = _rollup_by_tier(deaths, tier)
     return out
 
 
-def stock_stats(start=None, end=None, platform=False):
+def stock_stats(start=None, end=None, platform=False, jurisdiction=None):
     """Pharmacy stock & usage rollup: live shortages and consumption trends.
 
     ``shortages`` is the actionable list — medications flagged stocked-out, most
     recent first — so central can target resupply.
     """
-    reports = apply_range(_manager(StockReport, platform).all(), start, end)
+    reports = apply_range(_scoped(StockReport, platform, jurisdiction), start, end)
     shortages = reports.filter(shortage=True)
     out = {
         "total_reports": reports.count(),
@@ -829,7 +889,7 @@ def stock_stats(start=None, end=None, platform=False):
     return out
 
 
-def prescription_stats(start=None, end=None, platform=False):
+def prescription_stats(start=None, end=None, platform=False, jurisdiction=None):
     """Prescribing & dispensing rollup: what gets prescribed and whether the
     pharmacy actually hands it over.
 
@@ -840,7 +900,7 @@ def prescription_stats(start=None, end=None, platform=False):
     the diagnosis they were written for, so the report answers "what is
     prescribed for this condition", not just "what is prescribed".
     """
-    rx = apply_range(_manager(Prescription, platform).all(), start, end)
+    rx = apply_range(_scoped(Prescription, platform, jurisdiction), start, end)
     fillable = rx.exclude(status=Prescription.Status.CANCELLED)
     dispensed = fillable.filter(status__in=_RX_FILLED).count()
     due = fillable.count()

@@ -12,7 +12,7 @@ from config.ranges import date_range as _range
 from config.responses import success
 
 from apps.accounts.permissions import (
-    IsPlatformAdmin,
+    IsPlatformReader,
     IsTenantMember,
     ReadOnlyOrReportRole,
     sees_whole_tenant,
@@ -97,6 +97,16 @@ def own_reports(qs, user):
     return qs.filter(Q(reporter=user) | Q(reporter__isnull=True))
 
 
+def _seat(request):
+    """The jurisdiction this seat may read, or None for the whole platform.
+
+    A health authority reads its own patch and everything under it (its seat
+    carries the jurisdiction, and IsPlatformReader refuses one without). A
+    super admin carries none, which is the national view.
+    """
+    return getattr(request.user, "jurisdiction", None)
+
+
 class TenantDashboardView(APIView):
     permission_classes = [IsTenantMember]
 
@@ -105,10 +115,10 @@ class TenantDashboardView(APIView):
 
 
 class PlatformDashboardView(APIView):
-    permission_classes = [IsPlatformAdmin]
+    permission_classes = [IsPlatformReader]
 
     def get(self, request):
-        return Response(platform_stats(*_range(request)))
+        return Response(platform_stats(*_range(request), jurisdiction=_seat(request)))
 
 
 class FunnelView(APIView):
@@ -153,10 +163,10 @@ class TenantSpikesView(APIView):
 class PlatformSpikesView(APIView):
     """Cross-tenant outbreak alerts (super-admin)."""
 
-    permission_classes = [IsPlatformAdmin]
+    permission_classes = [IsPlatformReader]
 
     def get(self, request):
-        return Response({"alerts": platform_spikes()})
+        return Response({"alerts": platform_spikes(jurisdiction=_seat(request))})
 
 
 class AiFeedbackView(APIView):
@@ -503,7 +513,9 @@ class _StatsView(APIView):
     platform = False
 
     def get(self, request):
-        return Response(self.stats_fn(*_range(request), platform=self.platform))
+        return Response(self.stats_fn(
+            *_range(request), platform=self.platform, jurisdiction=_seat(request)
+        ))
 
 
 class LabStatsView(_StatsView):
@@ -511,7 +523,7 @@ class LabStatsView(_StatsView):
 
 
 class PlatformLabStatsView(_StatsView):
-    permission_classes = [IsPlatformAdmin]
+    permission_classes = [IsPlatformReader]
     platform = True
     stats_fn = staticmethod(lab_stats)
 
@@ -521,7 +533,7 @@ class ImmunizationStatsView(_StatsView):
 
 
 class PlatformImmunizationStatsView(_StatsView):
-    permission_classes = [IsPlatformAdmin]
+    permission_classes = [IsPlatformReader]
     platform = True
     stats_fn = staticmethod(immunization_stats)
 
@@ -531,7 +543,7 @@ class VitalStatsView(_StatsView):
 
 
 class PlatformVitalStatsView(_StatsView):
-    permission_classes = [IsPlatformAdmin]
+    permission_classes = [IsPlatformReader]
     platform = True
     stats_fn = staticmethod(vital_stats)
 
@@ -541,7 +553,7 @@ class StockStatsView(_StatsView):
 
 
 class PlatformStockStatsView(_StatsView):
-    permission_classes = [IsPlatformAdmin]
+    permission_classes = [IsPlatformReader]
     platform = True
     stats_fn = staticmethod(stock_stats)
 
@@ -551,7 +563,7 @@ class ChwStatsView(_StatsView):
 
 
 class PlatformChwStatsView(_StatsView):
-    permission_classes = [IsPlatformAdmin]
+    permission_classes = [IsPlatformReader]
     platform = True
     stats_fn = staticmethod(chw_stats)
 
@@ -561,7 +573,7 @@ class FacilityStatsView(_StatsView):
 
 
 class PlatformFacilityStatsView(_StatsView):
-    permission_classes = [IsPlatformAdmin]
+    permission_classes = [IsPlatformReader]
     platform = True
     stats_fn = staticmethod(facility_stats)
 
@@ -571,7 +583,7 @@ class InsuranceStatsView(_StatsView):
 
 
 class PlatformInsuranceStatsView(_StatsView):
-    permission_classes = [IsPlatformAdmin]
+    permission_classes = [IsPlatformReader]
     platform = True
     stats_fn = staticmethod(insurance_stats)
 
@@ -581,7 +593,7 @@ class PrescriptionStatsView(_StatsView):
 
 
 class PlatformPrescriptionStatsView(_StatsView):
-    permission_classes = [IsPlatformAdmin]
+    permission_classes = [IsPlatformReader]
     platform = True
     stats_fn = staticmethod(prescription_stats)
 
@@ -591,7 +603,7 @@ class AppointmentStatsView(_StatsView):
 
 
 class PlatformAppointmentStatsView(_StatsView):
-    permission_classes = [IsPlatformAdmin]
+    permission_classes = [IsPlatformReader]
     platform = True
     stats_fn = staticmethod(appointment_stats)
 
@@ -601,7 +613,7 @@ class ConsultationStatsView(_StatsView):
 
 
 class PlatformConsultationStatsView(_StatsView):
-    permission_classes = [IsPlatformAdmin]
+    permission_classes = [IsPlatformReader]
     platform = True
     stats_fn = staticmethod(consultation_stats)
 
@@ -618,10 +630,12 @@ class TenantCaseReportStatsView(APIView):
 class PlatformCaseReportStatsView(APIView):
     """Central collation of all tenants' case reports for analysis (super-admin)."""
 
-    permission_classes = [IsPlatformAdmin]
+    permission_classes = [IsPlatformReader]
 
     def get(self, request):
-        return Response(platform_case_report_stats(*_range(request)))
+        return Response(platform_case_report_stats(
+            *_range(request), jurisdiction=_seat(request)
+        ))
 
 
 class AdrStatsView(APIView):
@@ -632,10 +646,12 @@ class AdrStatsView(APIView):
 
 
 class PlatformAdrStatsView(APIView):
-    permission_classes = [IsPlatformAdmin]
+    permission_classes = [IsPlatformReader]
 
     def get(self, request):
-        return Response(adr_stats(*_range(request), platform=True))
+        return Response(adr_stats(
+            *_range(request), platform=True, jurisdiction=_seat(request)
+        ))
 
 
 class ReportSourcesView(APIView):
@@ -650,10 +666,12 @@ class ReportSourcesView(APIView):
 class PlatformReportSourcesView(APIView):
     """Cross-tenant report sources (super-admin) — origins of all reports."""
 
-    permission_classes = [IsPlatformAdmin]
+    permission_classes = [IsPlatformReader]
 
     def get(self, request):
-        return Response(report_sources(*_range(request), platform=True))
+        return Response(report_sources(
+            *_range(request), platform=True, jurisdiction=_seat(request)
+        ))
 
 
 def _days(request):
@@ -712,11 +730,13 @@ class PlatformIdsrReportView(APIView):
     """Central (NCDC) IDSR collation across all tenants, rolled up the gov
     hierarchy to national (super-admin)."""
 
-    permission_classes = [IsPlatformAdmin]
+    permission_classes = [IsPlatformReader]
 
     def get(self, request):
         days = _days(request)
-        return _idsr_response(platform_idsr_report(days), request)
+        return _idsr_response(
+            platform_idsr_report(days, jurisdiction=_seat(request)), request
+        )
 
 
 class CaseReportExportView(APIView):

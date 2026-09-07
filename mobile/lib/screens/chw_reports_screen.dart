@@ -152,6 +152,9 @@ class _Card extends StatelessWidget {
   }
 }
 
+/// The new-report sheet, for callers outside this screen (the ward's FAB).
+Widget chwReportForm() => const _Form();
+
 class _Form extends StatefulWidget {
   final Map<String, dynamic>? existing;
   const _Form({this.existing});

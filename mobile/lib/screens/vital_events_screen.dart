@@ -161,6 +161,9 @@ class _Card extends StatelessWidget {
   }
 }
 
+/// The new-event sheet, for callers outside this screen (the ward's FAB).
+Widget vitalEventForm() => const _Form();
+
 class _Form extends StatefulWidget {
   final Map<String, dynamic>? existing;
   const _Form({this.existing});

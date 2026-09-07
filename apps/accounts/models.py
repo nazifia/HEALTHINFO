@@ -4,7 +4,7 @@ from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.core.validators import RegexValidator
 from django.db import models
 
-from apps.tenants.models import Tenant
+from apps.tenants.models import Jurisdiction, Tenant
 
 
 class Role(models.TextChoices):
@@ -15,6 +15,11 @@ class Role(models.TextChoices):
     NURSE = "nurse"
     MIDWIFE = "midwife"
     CHEW = "chew", "Community Health Extension Worker"
+    # Seats that read the platform rather than run a facility: an insurer
+    # answering for the money on its own scheme's claims, a health authority
+    # reading aggregate surveillance. Neither files or dispenses anything.
+    HMO = "hmo", "HMO / Insurer"
+    GOVERNMENT = "government", "Government Health Authority"
     PUBLIC = "public"
 
 
@@ -100,6 +105,22 @@ class User(AbstractUser):
     )
     role = models.CharField(
         max_length=20, choices=Role.choices, default=Role.PUBLIC
+    )
+    # Which scheme an HMO seat answers for. NULL for everyone else, and NULL on
+    # an insurer means they read nothing: the claim views scope to this id, so
+    # an unset one filters to no rows rather than to every insurer's.
+    # String reference: pharmacy imports accounts, so a real import would cycle.
+    hmo = models.ForeignKey(
+        "pharmacy.HMO", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="seats",
+    )
+    # Which patch of the country a government seat answers for. NULL for
+    # everyone else, and NULL on a health authority means they read nothing:
+    # the platform rollups narrow to this jurisdiction and everything under it,
+    # so an unset one has no patch to answer for. Same shape as `hmo` above.
+    jurisdiction = models.ForeignKey(
+        Jurisdiction, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="seats",
     )
 
     USERNAME_FIELD = "phone"

@@ -142,6 +142,7 @@ class UserSerializer(serializers.ModelSerializer):
         fields = (
             "id", "username", "phone", "email", "role", "tenant", "tenant_name",
             "is_active", "password", "license_number", "idle_logout_minutes",
+            "hmo", "jurisdiction",
         )
 
     def get_idle_logout_minutes(self, obj):
@@ -164,6 +165,45 @@ class UserSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({
                     "license_number":
                         f"A license number is required for the {role} role.",
+                })
+        tenant = attrs.get("tenant", getattr(self.instance, "tenant", None))
+        # A government seat reads the cross-tenant rollups, and those are
+        # refused inside an organization (IsPlatformReader). One bound to a
+        # tenant would be signed in to a platform that answers it nothing.
+        if role == Role.GOVERNMENT:
+            if tenant is not None:
+                raise serializers.ValidationError({
+                    "tenant": "A government seat belongs to no organization — "
+                              "leave it unset.",
+                })
+            # The rollups it reads narrow to this jurisdiction and everything
+            # under it. Without one the seat reads nothing, so refuse the
+            # account here rather than mint one that answers empty screens.
+            jurisdiction = attrs.get(
+                "jurisdiction", getattr(self.instance, "jurisdiction", None)
+            )
+            if not jurisdiction:
+                raise serializers.ValidationError({
+                    "jurisdiction": "Choose the jurisdiction this health "
+                                    "authority seat answers for.",
+                })
+        if role == Role.HMO:
+            # An insurer signs in to the organization whose claims they answer
+            # for, and reads only their own scheme's rows (see insurer_scope).
+            # Either half missing is an account that can never read anything.
+            hmo = attrs.get("hmo", getattr(self.instance, "hmo", None))
+            if not hmo:
+                raise serializers.ValidationError({
+                    "hmo": "Choose the scheme this insurer seat answers for.",
+                })
+            if tenant is None:
+                raise serializers.ValidationError({
+                    "tenant": "Choose the organization whose claims this seat "
+                              "answers for.",
+                })
+            if hmo.tenant_id != tenant.id:
+                raise serializers.ValidationError({
+                    "hmo": "That scheme belongs to another organization.",
                 })
         if role == Role.PHARMACIST:
             # Pharmacy staff sign in with the last 6 digits of their phone and

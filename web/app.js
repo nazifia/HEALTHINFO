@@ -139,7 +139,9 @@ const RESOURCES = {
                               actions: [{ name: 'submit', label: 'Submit to supplier', when: ['draft'] },
                                         { name: 'cancel', label: 'Cancel order', danger: true, when: ['draft', 'submitted', 'partial'] }] },
   'pharmacy-hospitals':     { title: 'Hospitals',      group: 'Pharmacy', path: 'prescriptions/hospitals',   roles: 'admin', search: true },
-  'pharmacy-prescribers':   { title: 'Prescribers',    group: 'Pharmacy', path: 'prescriptions/prescribers', roles: 'admin', search: true },
+  // What a prescriber has earned and what is still owed them, on their own
+  // page (extra: 'statement') — the two ledgers are settled from there.
+  'pharmacy-prescribers':   { title: 'Prescribers',    group: 'Pharmacy', path: 'prescriptions/prescribers', roles: 'admin', search: true, extra: 'statement' },
   'pharmacy-hmos':          { title: 'HMOs',            group: 'Pharmacy', path: 'pharmacy/hmos',            roles: 'admin', search: true },
   'pharmacy-enrollments':   { title: 'Scheme Members',  group: 'Pharmacy', path: 'pharmacy/enrollments',     roles: 'staff', search: true },
   // What a scheme pays for one drug. 0 is the exclusion; no rule means the
@@ -175,6 +177,9 @@ const RESOURCES = {
                               actions: [{ name: 'top-up', label: 'Top up wallet', ask: 'amount,note', choose: 'method:cash,pos,transfer' },
                                         { name: 'deduct', label: 'Deduct from wallet', ask: 'amount,note', adminOnly: true, danger: true }] },
   'pharmacy-wallet':        { title: 'Wallet Ledger',   group: 'Pharmacy', path: 'wallet-transactions',      roles: 'staff', readOnly: true, noLink: true },
+  // Who owes the counter money, biggest first. The wallet is settled from the
+  // customer's own row, so this list is the reading, not another place to act.
+  'pharmacy-debtors':       { title: 'Debtors',         group: 'Pharmacy', path: 'customers/debtors',        roles: 'staff', readOnly: true, noLink: true },
   // Raise a stocktake over a set of items, count them, then apply the gaps.
   // ``extra: 'count'`` is the counting sheet; ``complete`` writes the
   // corrections to stock, which is why it sits with the admin.
@@ -363,7 +368,38 @@ const navGroup = (name, links) =>
   `<details class="nav-group"${NAV_CLOSED.has(name) ? '' : ' open'} data-group="${name}">` +
   `<summary>${esc(name)}</summary>${links}</details>`;
 
+/* The seats that are not a facility's staff. Each one has its own dashboard
+   and the handful of screens that dashboard links to — the rest of the
+   registry answers 403 for them, so it stays out of their sidebar. */
+const SEAT_NAV = {
+  hmo: ['#/insurer', 'Claims Desk', [
+    ['#/r/pharmacy-preauths', 'flag', 'Authorisation Requests'],
+    ['#/r/pharmacy-claims', 'file', 'Claims'],
+    ['#/r/pharmacy-claim-batches', 'file', 'Claim Batches'],
+    ['#/r/pharmacy-enrollments', 'users', 'Scheme Members'],
+    ['#/r/pharmacy-hmos', 'shield', 'My Scheme'],
+  ]],
+  government: ['#/gov', 'Public Health', [
+    ['#/platform/surveillance', 'flag', 'Outbreak Alerts'],
+    ['#/platform/idsr', 'file', 'IDSR Report'],
+    ['#/platform/cases', 'chart', 'Case Stats'],
+    ['#/platform/immunizations', 'chart', 'Immunization Stats'],
+    ['#/platform/facility', 'chart', 'Facility Stats'],
+    ['#/platform', 'chart', 'All Metrics'],
+  ]],
+};
+
+const seatLink = ([href, icon, title]) =>
+  `<a href="${href}" data-route="${href.slice(1)}">${ico(icon)}${esc(title)}</a>`;
+
 function navHtml() {
+  const seat = SEAT_NAV[ME?.role];
+  if (seat) {
+    const [home, group, links] = seat;
+    return `<a href="${home}" data-route="${home.slice(1)}" class="nav-home">${ico('home')}Dashboard</a>`
+      + navGroup(group, links.map(seatLink).join(''))
+      + navGroup('Account', `<a href="#/profile" data-route="/profile">${ico('users')}Profile</a>`);
+  }
   const iconFor = (slug, r) => slug === 'users' || slug === 'patients' ? 'users'
     : r.group === 'Clinical' ? 'activity' : slug.startsWith('tenants') ? 'shield'
     : r.group === 'Reports' ? 'file' : r.group === 'Pharmacy' ? 'pill' : 'book';
@@ -384,9 +420,13 @@ function navHtml() {
     `<a href="#/notifiable" data-route="/notifiable">${ico('flag')}Notifiable Cases</a>`,
   ];
   let html = `<a href="#/" data-route="/" class="nav-home">${ico('home')}Home</a>`;
-  // A patient reads their own record and nothing else in here.
+  // A patient reads their own record and nothing else in here: their history,
+  // the lookup tools and the catalog. The report registers belong to staff.
   if (ME?.role === 'public') {
-    html += `<a href="#/portal" data-route="/portal">${ico('activity')}My Health</a>`;
+    return `<a href="#/portal" data-route="/portal" class="nav-home">${ico('activity')}My Health</a>`
+      + navGroup('Tools', tools.join(''))
+      + navGroup('Catalog', groups.Catalog.join(''))
+      + navGroup('Account', `<a href="#/profile" data-route="/profile">${ico('users')}Profile</a>`);
   }
   html += navGroup('Tools', tools.join(''));
   html += navGroup('Catalog', groups.Catalog.join(''));
@@ -897,6 +937,10 @@ async function viewProfile() {
 
 async function viewHome() {
   if (!await ensureChrome()) return;
+  // Reloading, or a stale bookmark, lands here whoever you are. The dashboard
+  // for the role is the one place the seat's own work is, so go there.
+  const home = homeHash(ME.role);
+  if (home !== '#/') { location.hash = home; return; }
   spinner();
   const tiles = [
     ['#/search', 'search', 'Global Search', 'Find diseases, drugs, procedures, tests, articles'],
@@ -1023,6 +1067,11 @@ function reportSummaryHtml(slug, rows) {
 }
 
 /* -------------------------------------------------- generic resource views */
+
+/* Acting on a record — submitting a claim, withdrawing a request — is the
+   organization's work. A seat that only reads the module (the insurer on its
+   own claims) gets the record and none of the buttons the API would refuse. */
+const canActRes = (res) => res.group !== 'Pharmacy' || isPharmacyStaff();
 
 // ``createOnly`` resources (the cash drawer) are made and then only acted on:
 // the list still offers "+ New", the detail page offers no edit or delete.
@@ -1190,7 +1239,8 @@ async function viewDetail(slug, id) {
     // Offer only the transitions this record's state actually allows — the API
     // rejects the rest, so a button that always fails is just a trap.
     const acts = (res.actions || []).filter((a) =>
-      (!a.adminOnly || isPharmacyAdmin()) && (!a.when || a.when.includes(obj.status)));
+      canActRes(res) && (!a.adminOnly || isPharmacyAdmin())
+      && (!a.when || a.when.includes(obj.status)));
     const actsHtml = acts.map((a) =>
       `<button class="btn${a.danger ? ' danger' : ''}" data-pa="${a.name}" data-ask="${a.ask || ''}" data-choose="${a.choose || ''}">${esc(a.label)}</button>`).join('');
     if (res.receipt) actions += `<button id="receipt" class="btn ghost">Print receipt</button>`;
@@ -1219,10 +1269,12 @@ async function viewDetail(slug, id) {
       ${res.extra === 'purchase' ? purchaseReceiveHtml(obj) : ''}
       ${res.extra === 'count' ? stockCountHtml(obj) : ''}
       ${res.extra === 'preauth' ? preauthItemsHtml(obj) + preauthDecisionHtml(obj)
-        + preauthTrailHtml() : ''}`);
+        + preauthTrailHtml() : ''}
+      ${res.extra === 'statement' ? '<div id="statement"><p class="loading">Loading…</p></div>' : ''}`);
     if (res.receipt) $('#receipt').onclick = () => printReceipt(id);
     if (res.extra === 'purchase') wirePurchaseReceive(id, () => viewDetail(slug, id));
     if (res.extra === 'count') wireStockCount(id, () => viewDetail(slug, id));
+    if (res.extra === 'statement') loadStatement(slug, id);
     if (res.extra === 'preauth') {
       wirePreauthItems(() => viewDetail(slug, id));
       wirePreauthDecision(slug, id, () => viewDetail(slug, id));
@@ -1366,6 +1418,7 @@ async function viewForm(slug, id, query) {
       </div>` : ''}`);
     wirePatientField($('#f'));
     wireItemField($('#f'), current.item);
+    wireRelFields($('#f'), current);
     const drugRows = multiDrug ? wireExtraDrugs(fields) : null;
     $('#f').onsubmit = async (e) => {
       e.preventDefault();
@@ -1517,6 +1570,14 @@ function fieldHtml(name, f, value) {
       <select name="item"${req} data-items><option value="${esc(v)}">Loading…</option></select>
       ${help}<em class="field-err"></em></label>`;
   }
+  // A scheme and a jurisdiction are short closed lists, so they come up as a
+  // select the app fills after render — same trick as `item`, because an id
+  // typed into a number box is nobody's idea of picking an insurer.
+  if (!f.choices && (name === 'hmo' || name === 'jurisdiction')) {
+    return `<label data-field="${name}">${lbl}
+      <select name="${name}"${req} data-rel="${name}"><option value="${esc(v)}">Loading…</option></select>
+      ${help}<em class="field-err"></em></label>`;
+  }
   let control;
   if (f.choices) {
     const isMulti = M2M_FIELDS.has(name);
@@ -1661,6 +1722,36 @@ async function wireItemField(form, value) {
   try { rows = await allItems(); } catch { sel.innerHTML = '<option value="">Catalogue unavailable</option>'; return; }
   sel.innerHTML = '<option value=""></option>' + rows.map((i) =>
     `<option value="${i.id}"${String(i.id) === String(value ?? '') ? ' selected' : ''}>${esc(i.name)}</option>`).join('');
+}
+
+/* Where each related picker gets its rows, and how one reads. The jurisdiction
+ * list is the public one: a government seat belongs to no organization, so
+ * there is no tenant-scoped list to ask. */
+const REL_FIELDS = {
+  hmo: ['/api/pharmacy/hmos/', (r) => r.name],
+  jurisdiction: ['/api/auth/onboarding/jurisdictions/', (r) => `${r.name} · ${r.level}`],
+};
+
+/* Fill the generated form's related selects, if it has any. */
+async function wireRelFields(form, current) {
+  for (const [name, [path, text]] of Object.entries(REL_FIELDS)) {
+    const sel = form.querySelector(`[data-rel="${name}"]`);
+    if (!sel) continue;
+    let rows;
+    try {
+      rows = name === 'jurisdiction' ? await Api.public(path)
+        : (await Api.list(path)).rows;
+    } catch {
+      // Outside an organization there is no scheme list to offer. The API
+      // still refuses a seat without one, so this fails on save rather than
+      // pretending the field is optional.
+      sel.innerHTML = '<option value="">Unavailable — open the organization first</option>';
+      continue;
+    }
+    const v = String(current[name] ?? '');
+    sel.innerHTML = '<option value=""></option>' + rows.map((r) =>
+      `<option value="${r.id}"${String(r.id) === v ? ' selected' : ''}>${esc(text(r))}</option>`).join('');
+  }
 }
 
 /* Fields the patient's own record already answers, so linking a patient fills
@@ -1919,11 +2010,12 @@ async function viewAnalytics(registry, prefix, key) {
 
 // The nursing cadres: they file reports rather than sell or administer, so
 // their landing screen is the reporting workload, not the tenant KPIs.
-const CLINICAL_ROLES = new Set(['nurse', 'midwife', 'chew']);
+const CLINICAL_ROLES = new Set(['doctor', 'nurse', 'midwife', 'chew']);
 const isClinicalStaff = () => CLINICAL_ROLES.has(ME?.role);
 
 // What each cadre files most; the first entry is their "+ New" button.
 const CLINICAL_WORK = {
+  doctor:  ['consultations', 'prescriptions', 'case-reports', 'lab-results', 'appointments'],
   nurse:   ['case-reports', 'prescriptions', 'immunizations', 'lab-results', 'appointments'],
   midwife: ['vital-events', 'prescriptions', 'immunizations', 'case-reports', 'appointments'],
   chew:    ['chw-reports', 'prescriptions', 'immunizations', 'case-reports', 'adverse-reactions'],
@@ -1960,6 +2052,78 @@ async function viewClinical() {
         <span class="tile-val">${esc(RESOURCES[slug].title)}</span></a>`).join('')}</div>`);
 }
 
+/* -------------------------------------------------------------- insurer */
+
+/* The insurer's desk. Every call here is scoped to their own scheme by the
+   API (see insurer_scope), so this is the pharmacy's claims data with every
+   other scheme's rows taken out — what was asked of them, and what they owe. */
+async function viewInsurer() {
+  if (!await ensureChrome()) return;
+  if (ME.role !== 'hmo' && ME.role !== 'super_admin') {
+    return errorBox(new Error('Insurer seats only.'));
+  }
+  spinner();
+  const [summary, pending, billed] = await Promise.all([
+    Api.get('/api/pharmacy/claims/summary/').catch(() => null),
+    Api.list('/api/pharmacy/pre-authorizations/',
+             { status: 'requested', ordering: '-created_at' }).catch(() => null),
+    Api.list('/api/pharmacy/claims/',
+             { status: 'submitted', ordering: '-created_at' }).catch(() => null),
+  ]);
+  const kpis = [
+    ['Awaiting our answer', pending ? fmtVal(pending.count ?? pending.rows.length) : '—'],
+    ['Claims submitted', billed ? fmtVal(billed.count ?? billed.rows.length) : '—'],
+    ['Claimed', summary ? money(summary.claimed) : '—'],
+    ['Approved', summary ? money(summary.approved) : '—'],
+    ['Paid', summary ? money(summary.paid) : '—'],
+    ['Outstanding', summary ? money(summary.outstanding) : '—'],
+  ];
+  const card = (title, list, slug) => `<div class="card"><h3>${esc(title)}</h3>
+    ${list?.rows?.length ? tableHtml(list.rows.slice(0, 8), (r) => `#/r/${slug}/${r.id}`)
+      : '<p class="muted">Nothing waiting.</p>'}</div>`;
+  render(`<div class="page-head"><h2>Claims Desk</h2>
+      <a class="btn ghost" href="#/r/pharmacy-claims">All claims</a></div>
+    <div class="tiles">${kpis.map(([k, v]) =>
+      `<div class="tile kpi-tile"><span class="tile-label">${esc(k)}</span><span class="tile-val">${esc(v)}</span></div>`).join('')}</div>
+    ${card('Authorisation requests to answer', pending, 'pharmacy-preauths')}
+    ${card('Claims submitted to us', billed, 'pharmacy-claims')}
+    <h3>Go to</h3>
+    <div class="tiles">${SEAT_NAV.hmo[2].map(([href, icon, title]) =>
+      `<a class="tile linktile" href="${href}"><span class="tile-label">${ico(icon)}${esc(title)}</span></a>`).join('')}</div>`);
+}
+
+/* ----------------------------------------------------------- government */
+
+/* The health authority's desk: the cross-tenant rollups and nothing else. The
+   API behind these is aggregate-only (IsPlatformReader), so nothing on this
+   screen names a patient — the surveillance signal is the point, not the case. */
+async function viewGov() {
+  if (!await ensureChrome()) return;
+  if (ME.role !== 'government' && ME.role !== 'super_admin') {
+    return errorBox(new Error('Health authority seats only.'));
+  }
+  spinner();
+  const [dash, spikes] = await Promise.all([
+    Api.get('/api/analytics/platform/').catch(() => null),
+    Api.get('/api/analytics/platform/surveillance/').catch(() => null),
+  ]);
+  const alerts = spikes?.alerts || [];
+  const kpis = [
+    ['Facilities reporting', dash ? fmtVal(dash.total_tenants) : '—'],
+    ['Users', dash ? fmtVal(dash.total_users) : '—'],
+    ['Open outbreak alerts', fmtVal(alerts.length)],
+  ];
+  render(`<div class="page-head"><h2>Public Health</h2>
+      <a class="btn ghost" href="#/platform">All metrics</a></div>
+    <div class="tiles">${kpis.map(([k, v]) =>
+      `<div class="tile kpi-tile"><span class="tile-label">${esc(k)}</span><span class="tile-val">${esc(v)}</span></div>`).join('')}</div>
+    <div class="card"><h3>Outbreak alerts</h3>
+      ${alerts.length ? tableHtml(alerts) : '<p class="muted">No spike above threshold.</p>'}</div>
+    <h3>Go to</h3>
+    <div class="tiles">${SEAT_NAV.government[2].map(([href, icon, title]) =>
+      `<a class="tile linktile" href="${href}"><span class="tile-label">${ico(icon)}${esc(title)}</span></a>`).join('')}</div>`);
+}
+
 /* ------------------------------------------------------------- pharmacy */
 
 const PHARMACY_ADMIN_ROLES = new Set(['super_admin', 'tenant_admin']);
@@ -1993,7 +2157,7 @@ async function viewPharmacy() {
   spinner();
   const today = new Date().toISOString().slice(0, 10);
   try {
-    const [low, expiring, sales, claims, value, scripts] = await Promise.all([
+    const [low, expiring, sales, claims, value, scripts, people, debtors] = await Promise.all([
       Api.get('/api/pharmacy/items/low-stock/').catch(() => []),
       Api.get('/api/pharmacy/batches/expiring/', { days: 60 }).catch(() => []),
       Api.get('/api/pharmacy/sales/summary/', { from: today, to: today }).catch(() => null),
@@ -2002,6 +2166,10 @@ async function viewPharmacy() {
       // An aggregate, not a page of scripts: the counter only wants the number
       // of prescriptions it still owes someone.
       Api.get('/api/prescriptions/scripts/pending-count/').catch(() => null),
+      Api.get('/api/customers/summary/').catch(() => null),
+      // Who owes the counter money, biggest first — the server has already
+      // dropped everyone square with us.
+      Api.get('/api/customers/debtors/').catch(() => []),
     ]);
     const tile = (label, value) =>
       `<div class="tile"><span class="tile-label">${esc(label)}</span><span class="tile-val">${esc(value)}</span></div>`;
@@ -2016,6 +2184,8 @@ async function viewPharmacy() {
         ${tile('Owed by patients', sales ? money(sales.outstanding) : '—')}
         ${tile('Owed by insurers', claims ? money(claims.outstanding) : '—')}
         ${tile('Stock at cost', value ? money(value.cost_value) : '—')}
+        ${tile('Customers', people ? fmtVal(people.total) : '—')}
+        ${tile('Wallets hold', people ? money(people.wallet_balance) : '—')}
       </div>
       <div class="card"><h3>Reorder (${low.length})</h3>
         ${low.length ? tableHtml(low.map((r) => ({
@@ -2028,6 +2198,12 @@ async function viewPharmacy() {
           id: b.id, item: b.item_name, batch: b.batch_number,
           expiry_date: b.expiry_date, quantity: b.quantity,
         })), (b) => `#/r/pharmacy-batches/${b.id}`) : '<p class="muted">Nothing expiring.</p>'}
+      </div>
+      <div class="card"><h3>Debtors (${debtors.length})</h3>
+        ${debtors.length ? tableHtml(debtors.slice(0, 10).map((c) => ({
+          id: c.id, customer: c.name, phone: c.phone,
+          owes: money(c.outstanding_debt), wallet: money(c.wallet_balance),
+        })), (c) => `#/r/pharmacy-customers/${c.id}`) : '<p class="muted">Nobody owes us anything.</p>'}
       </div>
       <div class="card"><h3>Insurers</h3>
         ${claims && claims.by_hmo.length ? tableHtml(claims.by_hmo.map((h) => ({
@@ -2049,7 +2225,9 @@ async function viewSell() {
   let items = [];
   try { items = await allItems(); } catch (e) { return errorBox(e); }
 
-  const optionsHtml = items.map((i) =>
+  // Rebuilt each draw: a scan can turn up an item the catalogue page never
+  // carried, and that item has to be selectable once it has.
+  const optionsHtml = () => items.map((i) =>
     `<option value="${i.id}" data-price="${i.unit_price}" data-stock="${i.quantity_on_hand}">
       ${esc(i.name)} — ${money(i.unit_price)} (${i.quantity_on_hand} in stock)</option>`).join('');
 
@@ -2143,8 +2321,13 @@ async function viewSell() {
         ${filling ? `<p class="muted">This sale fills: ${esc(filling.label)}
           — the order is marked dispensed when the sale completes.</p>` : ''}
       </div>
+      <form id="scan" class="toolbar">
+        <label>Scan a barcode
+          <input name="code" autocomplete="off" placeholder="Scanner, or type the code…"></label>
+        <button class="btn ghost">Find</button>
+      </form>
       <form id="add" class="card form-card">
-        <label>Item<select name="stock_item">${optionsHtml}</select></label>
+        <label>Item<select name="stock_item">${optionsHtml()}</select></label>
         <label>Quantity<input type="number" name="quantity" min="1" value="1"></label>
         <label>Discount<input type="number" name="discount" min="0" step="0.01" value="0"></label>
         <div class="actions"><button class="btn">Add to sale</button></div>
@@ -2187,6 +2370,24 @@ async function viewSell() {
         draw();
       };
     }
+
+    // A scanner types the code and presses Enter, which is what this form is:
+    // the catalogue is already in memory, so a scan is usually answered here
+    // and the API lookup is the fallback for an item past the pages loaded.
+    $('#scan').onsubmit = async (e) => {
+      e.preventDefault();
+      const code = e.target.code.value.trim();
+      if (!code) return;
+      let hit = items.find((i) => i.barcode === code || i.gtin === code);
+      if (!hit) {
+        hit = await Api.get('/api/pharmacy/items/barcode/', { code }).catch(() => null);
+        if (hit) items.push(hit);
+      }
+      if (!hit) return toast('No item carries that code.', true);
+      draw();
+      $('#add').stock_item.value = hit.id;
+      $('#add').quantity.select();
+    };
 
     $('#add').onsubmit = (e) => {
       e.preventDefault();
@@ -2371,6 +2572,45 @@ function wirePreauthItems(reload) {
    Rendered under its detail page, admin only — the answer is what the pharmacy
    is later allowed to bill against, so the API refuses anyone else. A request
    already decided has nothing left to record. */
+/* A prescriber's statement: what each ledger owes them, the rows behind it,
+ * and — for the admin, whose money it is — one button that settles both.
+ *
+ * Paying is two calls because commissions and consultation fees are two
+ * ledgers; the second only runs if the first went through, so a half-failure
+ * leaves a figure on screen that still says what is left. */
+async function loadStatement(slug, id) {
+  const box = $('#statement');
+  if (!box) return;
+  let st;
+  try { st = await Api.get(rdetail(slug, `${id}/statement/`)); }
+  catch (e) { box.innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
+  const owed = st.outstanding || {};
+  const pending = Number(owed.total || 0) > 0;
+  const tile = (k, v) =>
+    `<div class="tile kpi-tile"><span class="tile-label">${esc(k)}</span><span class="tile-val">${esc(v)}</span></div>`;
+  const ledger = (title, rows) => `<div class="card"><h3>${esc(title)}</h3>
+    ${rows.length ? tableHtml(rows) : '<p class="muted">Nothing here yet.</p>'}</div>`;
+  box.innerHTML = `<div class="tiles">
+      ${tile('Commission due', money(owed.commission))}
+      ${tile('Consultations due', money(owed.consultation))}
+      ${tile('Total owed', money(owed.total))}
+    </div>
+    ${pending && isPharmacyAdmin()
+      ? `<div class="actions"><button id="pay-all" class="btn">Pay everything owed</button></div>` : ''}
+    ${ledger('Commissions', st.commissions || [])}
+    ${ledger('Consultation payouts', st.consultation_payouts || [])}`;
+  const btn = $('#pay-all');
+  if (btn) btn.onclick = async () => {
+    btn.disabled = true;
+    try {
+      await Api.post('/api/prescriptions/commissions/pay-all/', { prescriber: id });
+      await Api.post('/api/prescriptions/consultation-payouts/pay-all/', { prescriber: id });
+      toast('Paid.');
+    } catch (e) { toast(e.message, true); }
+    loadStatement(slug, id);
+  };
+}
+
 function preauthDecisionHtml(auth) {
   if (!isPharmacyAdmin()) return '';
   // An itemised request is answered drug by drug and settles itself once every
@@ -2741,6 +2981,8 @@ const routes = [
   [/^\/graph\/([a-z]+)\/(\d+)$/, (m) => viewGraph(m[1], m[2])],
   [/^\/clinical$/, viewClinical],
   [/^\/portal$/, viewPortal],
+  [/^\/insurer$/, viewInsurer],
+  [/^\/gov$/, viewGov],
   [/^\/pharmacy$/, viewPharmacy],
   [/^\/pharmacy\/sell$/, viewSell],
   [/^\/analytics(?:\/([a-z-]+))?$/, (m) => viewAnalytics(ANALYTICS, '/analytics', m[1])],
@@ -2752,6 +2994,8 @@ const routes = [
    counter on the counter, everyone else on the tenant dashboard. */
 const homeHash = (role) => role === 'super_admin' && !Api.tenant ? '#/platform'
   : role === 'public' ? '#/portal'
+  : role === 'hmo' ? '#/insurer'
+  : role === 'government' ? '#/gov'
   : role === 'pharmacist' ? '#/pharmacy'
   : CLINICAL_ROLES.has(role) ? '#/clinical' : '#/';
 

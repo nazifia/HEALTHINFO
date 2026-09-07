@@ -25,10 +25,9 @@ from django.db.models import Count, Q
 from django.db.models.functions import TruncDay
 from django.utils import timezone
 
-from apps.tenants.models import Jurisdiction
 
 from .models import CaseReport
-from .stats import _rollup_by_tier
+from .stats import _rollup_by_tier, _scoped, _tiers_for
 
 # Columns of one IDSR daily summary row, in report order. Reused by the CSV export.
 SUMMARY_COLUMNS = (
@@ -179,10 +178,14 @@ def tenant_idsr_report(days=30):
     }
 
 
-def platform_idsr_report(days=30):
+def platform_idsr_report(days=30, jurisdiction=None):
     """Central (NCDC) collation: pool every tenant, then roll case totals all the
-    way up the gov hierarchy — LGA → state → national."""
-    reports = CaseReport.all_objects.all()
+    way up the gov hierarchy — LGA → state → national.
+
+    ``jurisdiction`` narrows the pool to one authority's patch, so a state seat
+    collates its own LGAs and no others. None is the national view.
+    """
+    reports = _scoped(CaseReport, True, jurisdiction)
     return {
         "days": days,
         "summary": daily_summary(reports, days),
@@ -190,7 +193,10 @@ def platform_idsr_report(days=30):
         # yesterday is exactly what the centre is watching for.
         "immediate": immediate_alerts(reports, hours=48),
         "timeliness": timeliness(reports),
-        "by_local": _rollup_by_tier(reports, Jurisdiction.Level.LOCAL),
-        "by_state": _rollup_by_tier(reports, Jurisdiction.Level.STATE),
-        "by_national": _rollup_by_tier(reports, Jurisdiction.Level.NATIONAL),
+        # Tiers above the seat's own are left out: folded to national, a state
+        # seat's rows would read as the country's return when they are not.
+        **{
+            f"by_{tier}": _rollup_by_tier(reports, tier)
+            for tier in _tiers_for(jurisdiction)
+        },
     }
