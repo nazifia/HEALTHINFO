@@ -96,6 +96,10 @@ class OnboardingViewSet(viewsets.ViewSet):
 class UserViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated, IsTenantMember]
+    # Staff link a patient record to its portal account by searching this list,
+    # so it answers ?search= on the three things anyone would type. No password
+    # or token field is searchable — only what the serializer already returns.
+    search_fields = ("username", "phone", "email", "license_number")
 
     def get_queryset(self):
         user = self.request.user

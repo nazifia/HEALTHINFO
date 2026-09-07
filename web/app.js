@@ -1467,7 +1467,7 @@ async function viewForm(slug, id, query) {
       <div class="actions">
         <button type="button" id="add-drug" class="btn ghost">Add another drug</button>
       </div>` : ''}`);
-    wirePatientField($('#f'));
+    wirePickerFields($('#f'));
     wireItemField($('#f'), current.item);
     wireRelFields($('#f'), current);
     const drugRows = multiDrug ? wireExtraDrugs(fields) : null;
@@ -1604,15 +1604,16 @@ function fieldHtml(name, f, value) {
   const hint = f.help_text || FIELD_HINTS[name] || '';
   const help = hint ? `<small class="muted">${esc(hint)}</small>` : '';
   const v = value ?? '';
-  // A tenant's registry outgrows a <select> of every patient in it, so the
-  // link is a type-ahead over /api/patients/ instead. The picked id lives in
-  // the hidden input, which is the one collectForm reads.
-  if (name === 'patient') {
-    return `<label data-field="patient">${lbl}
-      <input type="search" id="patient-q" autocomplete="off"
-             placeholder="Name, hospital number or phone…">
-      <input type="hidden" name="patient" value="${esc(v)}">
-      <div id="patient-hit" class="muted"></div>${help}<em class="field-err"></em></label>`;
+  // A tenant's registry outgrows a <select> of every patient in it, and its
+  // staff list outgrows one of every account, so both are type-aheads instead
+  // (see PICKERS). The picked id lives in the hidden input, which is the one
+  // collectForm reads.
+  if (PICKERS[name]) {
+    return `<label data-field="${name}">${lbl}
+      <input type="search" id="${name}-q" autocomplete="off"
+             placeholder="${esc(PICKERS[name].placeholder)}">
+      <input type="hidden" name="${name}" value="${esc(v)}">
+      <div id="${name}-hit" class="muted"></div>${help}<em class="field-err"></em></label>`;
   }
   // Same reason as `patient`: nobody knows a stock item by its id. The list is
   // long but finite, so it is a <select> wireItemField fills after render.
@@ -1682,7 +1683,7 @@ function collectForm(form, fields) {
   return body;
 }
 
-/* ------------------------------------------------------- patient type-ahead */
+/* ---------------------------------------------------------- field type-ahead */
 
 const patientHitHtml = (p) => {
   // What the registry already holds about them. Shown so the details are read
@@ -1700,12 +1701,37 @@ const patientHitHtml = (p) => {
     + (allergies ? `<br><span class="err">Allergies: ${esc(allergies)}</span>` : '');
 };
 
-/* Search the registry as the user types (250ms after the last keystroke) and
- * report the resolved patient — or null while nothing is resolved — through
- * onPick. One match binds itself; several are listed to be picked, because
- * linking the wrong record is worse than one more click. */
-function patientPicker(box, out, onPick) {
-  const bind = (p) => { out.innerHTML = patientHitHtml(p); onPick(p); };
+/* One account of the tenant, named the way whoever links it would say it. */
+const userHitHtml = (u) => {
+  const bits = [u.phone, u.role, u.email].filter((v) => String(v ?? '').trim() !== '');
+  return `<b>${esc(u.username || u.phone || `#${u.id}`)}</b>`
+    + (bits.length ? `<br><span class="muted">${esc(bits.join(' · '))}</span>` : '');
+};
+
+/* Where each type-ahead field searches, how one hit reads, and what a bound
+ * row puts back in the box. Both lists are tenant-scoped by the API, so a
+ * search here can only ever offer rows this organization owns. */
+const PICKERS = {
+  patient: {
+    path: '/api/patients/', hit: patientHitHtml,
+    placeholder: 'Name, hospital number or phone…',
+    none: 'No patient found.', which: 'Which patient?',
+    name: (p) => p.full_name || '',
+  },
+  user: {
+    path: '/api/users/', hit: userHitHtml,
+    placeholder: 'Name, phone or email…',
+    none: 'No account found.', which: 'Which account?',
+    name: (u) => u.username || u.phone || '',
+  },
+};
+
+/* Search as the user types (250ms after the last keystroke) and report the
+ * resolved row — or null while nothing is resolved — through onPick. One
+ * match binds itself; several are listed to be picked, because linking the
+ * wrong record is worse than one more click. */
+function picker(box, out, cfg, onPick) {
+  const bind = (r) => { out.innerHTML = cfg.hit(r); onPick(r); };
   let timer;
   let latest = 0;  // only the newest reply may paint
   const lookup = async () => {
@@ -1715,12 +1741,12 @@ function patientPicker(box, out, onPick) {
     const seq = ++latest;
     out.textContent = 'Searching…';
     try {
-      const { rows } = await Api.list('/api/patients/', { search: q, page_size: 5 });
+      const { rows } = await Api.list(cfg.path, { search: q, page_size: 5 });
       if (seq !== latest) return;  // a later keystroke already asked
-      if (!rows.length) return (out.textContent = 'No patient found.');
+      if (!rows.length) return (out.textContent = cfg.none);
       if (rows.length === 1) return bind(rows[0]);
-      out.innerHTML = '<span class="muted">Which patient?</span><div class="chips">'
-        + rows.map((r, i) => `<button type="button" class="chip pick" data-hit="${i}">${patientHitHtml(r)}</button>`).join('')
+      out.innerHTML = `<span class="muted">${esc(cfg.which)}</span><div class="chips">`
+        + rows.map((r, i) => `<button type="button" class="chip pick" data-hit="${i}">${cfg.hit(r)}</button>`).join('')
         + '</div>';
       for (const b of out.querySelectorAll('[data-hit]')) {
         b.onclick = () => { ++latest; bind(rows[Number(b.dataset.hit)]); };
@@ -1731,23 +1757,25 @@ function patientPicker(box, out, onPick) {
   return { bind };
 }
 
-/* The generated form's `patient` field, if it has one. */
-function wirePatientField(form) {
-  const box = form.querySelector('#patient-q');
-  if (!box) return;
-  const hidden = form.elements.patient;
-  const out = form.querySelector('#patient-hit');
-  const picker = patientPicker(box, out, (p) => {
-    hidden.value = p ? p.id : '';
-    if (p) carryPatientFields(form, p);
-  });
-  // A record that already names a patient — an edit, or a form opened from the
-  // patient — shows who that is rather than an id nobody can read.
-  if (hidden.value) {
-    Api.get(`/api/patients/${hidden.value}/`).then((p) => {
-      box.value = p.full_name || '';
-      picker.bind(p);
-    }, () => { out.textContent = `Patient #${hidden.value}`; });
+/* Whichever type-ahead fields the generated form has. */
+function wirePickerFields(form) {
+  for (const [name, cfg] of Object.entries(PICKERS)) {
+    const box = form.querySelector(`#${name}-q`);
+    if (!box) continue;
+    const hidden = form.elements[name];
+    const out = form.querySelector(`#${name}-hit`);
+    const bound = picker(box, out, cfg, (row) => {
+      hidden.value = row ? row.id : '';
+      if (row && name === 'patient') carryPatientFields(form, row);
+    });
+    // A record that already names one — an edit, or a form opened from that
+    // record — shows who it is rather than an id nobody can read.
+    if (hidden.value) {
+      Api.get(`${cfg.path}${hidden.value}/`).then((row) => {
+        box.value = cfg.name(row);
+        bound.bind(row);
+      }, () => { out.textContent = `#${hidden.value}`; });
+    }
   }
 }
 
@@ -2460,7 +2488,7 @@ async function viewSell() {
     // patient's active schemes, which is what decides who pays.
     const search = $('#checkout').patient_search;
     let pickSeq = 0;  // only the newest pick's schemes may paint
-    patientPicker(search, $('#patient-hit'), async (p) => {
+    picker(search, $('#patient-hit'), PICKERS.patient, async (p) => {
       const seq = ++pickSeq;
       patient = p;
       schemes = [];

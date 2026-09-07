@@ -313,11 +313,12 @@ class _FormState extends State<_Form> {
   bool _consent = false;
   bool _saving = false;
   String? _error;
-  // The portal account this record is read by, and the accounts it could be.
-  // The picker only appears once the list is in: a staff member who may not
-  // read it must not be shown an empty picker that looks like "not linked".
+  // The portal account this record is read by, and what it is called. The
+  // picker only appears once the account list is known to be readable: a staff
+  // member who may not read it must not be shown an empty picker that looks
+  // like "not linked".
   int? _user;
-  List<Map<String, dynamic>> _accounts = const [];
+  String? _userLabel;
   bool _accountsLoaded = false;
 
   bool get _isEdit => widget.existing != null;
@@ -327,7 +328,7 @@ class _FormState extends State<_Form> {
     super.initState();
     final e = widget.existing;
     _user = e?['user'] as int?;
-    _loadAccounts();
+    _loadAccountLink();
     if (e == null) return;
     if (_sexes.contains(e['sex'])) _sex = e['sex'];
     // Takes the status as-is, even one the dropdown doesn't offer ('merged'),
@@ -365,25 +366,66 @@ class _FormState extends State<_Form> {
     super.dispose();
   }
 
-  /// The tenant's accounts, for the portal-account picker.
+  /// Whether this seat may read the account list, and what the linked account
+  /// is called. The accounts themselves are searched when the picker opens, so
+  /// a tenant with more of them than one page holds is no longer a problem.
   ///
   /// Failure is not an error here: a role that may not list users simply gets
   /// no picker, and a link it cannot see is one it cannot clear either (see
   /// _submit, which leaves `user` out of the body then).
-  ///
-  /// ponytail: first page of /api/users/ only. Add a search-as-you-type
-  /// lookup if a tenant ever has more accounts than one page holds.
-  Future<void> _loadAccounts() async {
+  Future<void> _loadAccountLink() async {
     try {
-      final rows = await api.getList('/api/users/');
+      // One row is enough to answer "may I read these at all?".
+      await api.getList('/api/users/', {'page_size': '1'});
+      // A record that already names an account shows who that is rather than
+      // an id nobody can read. An account that no longer resolves keeps the id.
+      String? label;
+      if (_user != null) {
+        try {
+          label = accountLabel(
+              (await api.get('/api/users/$_user/')) as Map<String, dynamic>);
+        } catch (_) {
+          label = 'Account #$_user';
+        }
+      }
       if (!mounted) return;
       setState(() {
-        _accounts = linkableAccounts(rows.cast<Map<String, dynamic>>(), _user);
+        _userLabel = label;
         _accountsLoaded = true;
       });
     } catch (_) {
       /* no picker */
     }
+  }
+
+  /// Search the tenant's accounts for the one this patient signs in with.
+  Future<void> _pickAccount() async {
+    final picked = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => SearchSheet(
+        path: '/api/users/',
+        title: 'Link a portal account',
+        hint: 'Name, phone or email',
+        errorTitle: 'Could not load accounts',
+        emptyIcon: Icons.person_search_outlined,
+        emptyTitle: 'No account found',
+        emptyMessage:
+            'The patient registers themselves first, then link it here.',
+        label: accountLabel,
+        sub: (u) => [
+          '${u['role'] ?? ''}',
+          if ('${u['email'] ?? ''}'.isNotEmpty) '${u['email']}',
+        ].where((v) => v.isNotEmpty).join(' · '),
+        filter: (rows) => linkableAccounts(rows, _user),
+      ),
+    );
+    if (picked == null) return;
+    setState(() {
+      _user = picked['id'] as int?;
+      _userLabel = accountLabel(picked);
+    });
   }
 
   Future<void> _pickDob() async {
@@ -691,20 +733,35 @@ class _FormState extends State<_Form> {
         ),
         if (_accountsLoaded) ...[
           const SizedBox(height: 8),
-          SearchableDropdown<int?>(
-            initialValue: _user,
-            isExpanded: true,
+          InputDecorator(
             decoration: const InputDecoration(
               labelText: 'Portal account',
               helperText: 'Lets this patient sign in and read their own record',
             ),
-            items: [
-              const DropdownMenuItem(value: null, child: Text('Not linked')),
-              for (final a in _accounts)
-                DropdownMenuItem(
-                    value: a['id'] as int, child: Text(accountLabel(a))),
-            ],
-            onChanged: (v) => setState(() => _user = v),
+            child: Row(children: [
+              Expanded(
+                child: Text(
+                  _userLabel ??
+                      (_user == null ? 'Not linked' : 'Account #$_user'),
+                  style: TextStyle(
+                      color:
+                          _user == null ? context.hintColor : context.labelColor),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (_user != null)
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.clear, size: 18),
+                  onPressed: () => setState(() {
+                    _user = null;
+                    _userLabel = null;
+                  }),
+                ),
+              TextButton(
+                  onPressed: _pickAccount,
+                  child: Text(_user == null ? 'Link' : 'Change')),
+            ]),
           ),
           const SizedBox(height: 12),
         ],

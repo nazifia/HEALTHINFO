@@ -486,7 +486,23 @@ class _PatientPickerState extends State<PatientPicker> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => const _PatientSearchSheet(),
+      builder: (_) => SearchSheet(
+        path: '/api/patients/',
+        title: 'Link a patient',
+        hint: 'Name, hospital number or phone',
+        errorTitle: 'Could not load patients',
+        emptyIcon: Icons.person_search_outlined,
+        emptyTitle: 'No patients found',
+        emptyMessage: 'Register the patient first, or search again.',
+        label: (r) => '${r['full_name']}',
+        sub: (r) => [
+          '${r['hospital_number'] ?? ''}',
+          if ('${r['sex'] ?? ''}'.isNotEmpty) '${r['sex']}',
+          if (r['age'] != null) '${r['age']}y',
+          // The number is searchable, so show which one the row was found by.
+          if ('${r['phone'] ?? ''}'.isNotEmpty) '${r['phone']}',
+        ].join(' · '),
+      ),
     );
     if (picked == null) return;
     setState(() {
@@ -530,16 +546,47 @@ class _PatientPickerState extends State<PatientPicker> {
   }
 }
 
-/// Search sheet behind [PatientPicker]. Pops the chosen patient row.
-class _PatientSearchSheet extends StatefulWidget {
-  const _PatientSearchSheet();
+/// Search sheet behind a picker: type, and the rows the API matches come
+/// back. Pops the chosen row, or null when the sheet is dismissed.
+///
+/// The list is whatever [path] answers, so it is tenant-scoped by the API and
+/// can only ever offer rows this organization owns. [filter] narrows that
+/// further when a field accepts only some of them (see linkableAccounts).
+class SearchSheet extends StatefulWidget {
+  final String path;
+  final String title;
+  final String hint;
+  final String errorTitle;
+  final IconData emptyIcon;
+  final String emptyTitle;
+  final String emptyMessage;
+  final String Function(Map<String, dynamic>) label;
+  final String Function(Map<String, dynamic>) sub;
+  final List<Map<String, dynamic>> Function(List<Map<String, dynamic>>)? filter;
+  /// Sent with every lookup, e.g. the role a field may link.
+  final Map<String, String> query;
+
+  const SearchSheet({
+    super.key,
+    required this.path,
+    required this.title,
+    required this.hint,
+    required this.errorTitle,
+    required this.emptyIcon,
+    required this.emptyTitle,
+    required this.emptyMessage,
+    required this.label,
+    required this.sub,
+    this.filter,
+    this.query = const {},
+  });
 
   @override
-  State<_PatientSearchSheet> createState() => _PatientSearchSheetState();
+  State<SearchSheet> createState() => _SearchSheetState();
 }
 
-class _PatientSearchSheetState extends State<_PatientSearchSheet> {
-  Future<List<dynamic>> _future = api.getList('/api/patients/');
+class _SearchSheetState extends State<SearchSheet> {
+  late Future<List<dynamic>> _future = api.getList(widget.path, widget.query);
   Timer? _debounce;
   // Same guard as the list screen: the last query typed wins, not the last
   // reply to arrive.
@@ -558,8 +605,8 @@ class _PatientSearchSheetState extends State<_PatientSearchSheet> {
       if (!mounted) return;
       final id = ++_requestId;
       setState(() {
-        _future = _guard(id,
-            api.getList('/api/patients/', q.isEmpty ? null : {'search': q}));
+        _future = _guard(id, api.getList(widget.path,
+            {...widget.query, if (q.isNotEmpty) 'search': q}));
       });
     });
   }
@@ -582,7 +629,7 @@ class _PatientSearchSheetState extends State<_PatientSearchSheet> {
         ),
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
         child: Column(children: [
-          Text('Link a patient',
+          Text(widget.title,
               style: TextStyle(
                   color: context.labelColor,
                   fontSize: 18,
@@ -591,9 +638,9 @@ class _PatientSearchSheetState extends State<_PatientSearchSheet> {
           TextField(
             autofocus: true,
             onChanged: _search,
-            decoration: const InputDecoration(
-              hintText: 'Name, hospital number or phone',
-              prefixIcon: Icon(Icons.search, size: 20),
+            decoration: InputDecoration(
+              hintText: widget.hint,
+              prefixIcon: const Icon(Icons.search, size: 20),
               isDense: true,
             ),
           ),
@@ -610,17 +657,18 @@ class _PatientSearchSheetState extends State<_PatientSearchSheet> {
                 if (snap.hasError) {
                   return EmptyState(
                     icon: Icons.error_outline,
-                    title: 'Could not load patients',
+                    title: widget.errorTitle,
                     message: '${snap.error}',
                     color: EnhancedTheme.errorRed,
                   );
                 }
-                final rows = (snap.data ?? []).cast<Map<String, dynamic>>();
+                var rows = (snap.data ?? []).cast<Map<String, dynamic>>();
+                if (widget.filter != null) rows = widget.filter!(rows);
                 if (rows.isEmpty) {
-                  return const EmptyState(
-                    icon: Icons.person_search_outlined,
-                    title: 'No patients found',
-                    message: 'Register the patient first, or search again.',
+                  return EmptyState(
+                    icon: widget.emptyIcon,
+                    title: widget.emptyTitle,
+                    message: widget.emptyMessage,
                   );
                 }
                 return ListView.builder(
@@ -629,17 +677,10 @@ class _PatientSearchSheetState extends State<_PatientSearchSheet> {
                     final r = rows[i];
                     return ListTile(
                       dense: true,
-                      title: Text('${r['full_name']}',
+                      title: Text(widget.label(r),
                           style: TextStyle(color: context.labelColor)),
                       subtitle: Text(
-                        [
-                          '${r['hospital_number'] ?? ''}',
-                          if ('${r['sex'] ?? ''}'.isNotEmpty) '${r['sex']}',
-                          if (r['age'] != null) '${r['age']}y',
-                          // The number is searchable, so show which one the
-                          // row was found by.
-                          if ('${r['phone'] ?? ''}'.isNotEmpty) '${r['phone']}',
-                        ].join(' · '),
+                        widget.sub(r),
                         style: TextStyle(color: context.hintColor, fontSize: 12),
                       ),
                       onTap: () => Navigator.of(context).pop(r),
