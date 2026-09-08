@@ -2923,6 +2923,97 @@ function pharmaciesHtml(rows) {
       <td>${map(r)}</td></tr>`).join('')}</tbody></table></div>`;
 }
 
+function visitsHtml(rows) {
+  if (!rows.length) {
+    return '<p class="muted">No visit has been written up yet.</p>';
+  }
+  // What was found, in the order a patient would read it: the diagnosis
+  // reached, what the clinician wrote about it, anything the triage vitals
+  // flagged, and the visit's own notes. Any of them can be empty.
+  const findings = (r) => [
+    r.case_report_disease, r.case_report_notes,
+    (r.abnormal_vitals || []).map(label).join(', '), r.notes,
+  ].filter(Boolean).join(' · ');
+  return `<div class="table-wrap"><table><thead><tr>
+      <th>Date</th><th>Complaint</th><th>Findings</th><th>Seen by</th>
+      </tr></thead><tbody>${rows.map((r) => `<tr class="rowlink"
+      onclick="location.hash='#/portal/visit/${r.id}'">
+      <td>${esc(fmtVal(r.created_at))}</td>
+      <td>${esc(r.chief_complaint || '—')}</td>
+      <td>${esc(findings(r) || '—')}</td>
+      <td>${esc(r.reporter_name || '—')}</td></tr>`).join('')}</tbody></table></div>`;
+}
+
+function labsHtml(rows) {
+  if (!rows.length) {
+    return '<p class="muted">No test result has been filed yet.</p>';
+  }
+  return `<div class="table-wrap"><table><thead><tr>
+      <th>Date</th><th>Test</th><th>Result</th><th>Reading</th><th>Notes</th>
+      </tr></thead><tbody>${rows.map((r) => `<tr>
+      <td>${esc(fmtVal(r.created_at))}</td>
+      <td>${esc(r.lab_test_name || r.disease_name || '—')}</td>
+      <td>${esc(r.value || '—')}</td>
+      <td>${cellHtml('flag', r.flag)}${r.organism
+        ? ` ${esc(r.organism)}${r.antibiotic
+          ? ` / ${esc(r.antibiotic)} ${esc(r.susceptibility || '')}` : ''}` : ''}</td>
+      <td>${esc(r.notes || '—')}</td></tr>`).join('')}</tbody></table></div>`;
+}
+
+// The vitals taken at the visit, only the ones actually measured. Blood
+// pressure comes pre-joined from the API, so its two halves are skipped here.
+const VISIT_VITALS = [
+  ['blood_pressure', 'Blood pressure', ''], ['temperature_c', 'Temperature', ' °C'],
+  ['pulse_bpm', 'Pulse', ' bpm'], ['respiratory_rate', 'Breathing rate', ' /min'],
+  ['oxygen_saturation', 'Oxygen', ' %'], ['weight_kg', 'Weight', ' kg'],
+  ['height_cm', 'Height', ' cm'], ['bmi', 'BMI', ''],
+];
+
+function visitDetailHtml(v) {
+  const rows = VISIT_VITALS
+    .filter(([k]) => v[k] !== null && v[k] !== undefined && v[k] !== '')
+    .map(([k, name, unit]) => `<dt>${esc(name)}</dt><dd>${esc(v[k])}${unit}</dd>`);
+  const said = (k, name) => v[k] ? `<dt>${esc(name)}</dt><dd>${esc(v[k])}</dd>` : '';
+  return `<div class="card"><h3>What I came with</h3>
+      <dl class="detail">
+        <dt>Date</dt><dd>${esc(fmtVal(v.created_at))}</dd>
+        <dt>Complaint</dt><dd>${esc(v.chief_complaint || '—')}</dd>
+        <dt>Seen by</dt><dd>${esc(v.reporter_name || '—')}</dd>
+      </dl></div>
+    <div class="card"><h3>What was found</h3>
+      <dl class="detail">
+        ${said('case_report_disease', 'Diagnosis')}
+        ${said('case_report_notes', 'Diagnosis notes')}
+        ${said('notes', 'Visit notes')}
+        ${(v.abnormal_vitals || []).length
+          ? `<dt>Flagged</dt><dd>${esc((v.abnormal_vitals).map(label).join(', '))}</dd>` : ''}
+        ${rows.length ? rows.join('') : '<dt>Vitals</dt><dd>Not taken</dd>'}
+      </dl></div>
+    <div class="card"><h3>What happened next</h3>
+      <dl class="detail">
+        <dt>Status</dt><dd>${cellHtml('status', v.status)}</dd>
+        <dt>Outcome</dt><dd>${esc(v.disposition ? label(v.disposition) : '—')}</dd>
+        <dt>Follow-up</dt><dd>${esc(fmtVal(v.follow_up_on))}</dd>
+      </dl></div>`;
+}
+
+// ponytail: the detail page re-reads the whole history and picks its one row.
+// The portal has no per-consultation endpoint, and a patient's history is a
+// page or two — add /api/portal/history/<id>/ only if that stops being true.
+async function viewPortalVisit(id) {
+  if (!await ensureChrome()) return;
+  spinner();
+  let history;
+  try {
+    history = await Api.get('/api/portal/history/');
+  } catch (e) { return errorBox(e); }
+  const visit = (history.consultations || []).find((c) => String(c.id) === String(id));
+  render(`<div class="page-head"><h2>My visit</h2>
+      <a class="btn ghost" href="#/portal">&larr; My Health</a></div>
+    ${visit ? visitDetailHtml(visit)
+      : '<div class="card"><p class="muted">That visit is not on your record.</p></div>'}`);
+}
+
 async function loadPharmacies(medication) {
   const box = $('#pharmacies');
   if (!box) return;
@@ -2955,11 +3046,18 @@ async function viewPortal() {
   );
   // Only the record types this patient actually has anything under: a
   // timeline of eleven empty headings is a timeline nobody reads.
+  // Consultations and lab results get their own cards below, so they are
+  // dropped from the generic timeline rather than shown twice.
   const filed = Object.entries(history)
-    .filter(([k, v]) => k !== 'counts' && Array.isArray(v) && v.length);
+    .filter(([k, v]) => k !== 'counts' && k !== 'consultations'
+      && k !== 'lab_results' && Array.isArray(v) && v.length);
 
   render(`<div class="page-head"><h2>My Health</h2></div>
     <div class="card">${dlHtml(details)}</div>
+    <div class="card"><h3>My complaints and findings</h3>
+      ${visitsHtml(history.consultations || [])}</div>
+    <div class="card"><h3>My test results</h3>
+      ${labsHtml(history.lab_results || [])}</div>
     <div class="card"><h3>My medications</h3>${portalMedsHtml(meds)}</div>
     <div class="card"><h3>Where to get them</h3>
       <div class="actions"><button id="find-pharmacies" class="btn">Find pharmacies near me</button></div>
@@ -3061,6 +3159,7 @@ const routes = [
   [/^\/notifications$/, viewNotifications],
   [/^\/graph\/([a-z]+)\/(\d+)$/, (m) => viewGraph(m[1], m[2])],
   [/^\/clinical$/, viewClinical],
+  [/^\/portal\/visit\/(\d+)$/, (m) => viewPortalVisit(m[1])],
   [/^\/portal$/, viewPortal],
   [/^\/insurer$/, viewInsurer],
   [/^\/gov$/, viewGov],
