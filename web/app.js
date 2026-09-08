@@ -298,7 +298,6 @@ const ANALYTICS = [
   { key: 'consultations', label: 'Visit Stats',       path: '/api/analytics/consultations/', dates: true },
   { key: 'prescriptions', label: 'Prescribing Stats', path: '/api/analytics/prescriptions/', dates: true },
   { key: 'funnel',        label: 'Funnel',            path: '/api/analytics/funnel/' },
-  { key: 'ai-quality',    label: 'AI Quality',        path: '/api/analytics/ai-quality/', dates: true },
   { key: 'retention',     label: 'Retention',         path: '/api/analytics/retention/' },
   { key: 'benchmark',     label: 'Benchmark',         path: '/api/analytics/benchmark/' },
 ];
@@ -422,7 +421,6 @@ function navHtml() {
   }
   const tools = [
     `<a href="#/search" data-route="/search">${ico('search')}Search</a>`,
-    `<a href="#/ask" data-route="/ask">${ico('chat')}Ask AI</a>`,
     `<a href="#/differential" data-route="/differential">${ico('activity')}Differential Dx</a>`,
     `<a href="#/interaction-check" data-route="/interaction-check">${ico('pill')}Interaction Check</a>`,
     `<a href="#/notifiable" data-route="/notifiable">${ico('flag')}Notifiable Cases</a>`,
@@ -1006,7 +1004,6 @@ async function viewHome() {
   spinner();
   const tiles = [
     ['#/search', 'search', 'Global Search', 'Find diseases, drugs, procedures, tests, articles'],
-    ['#/ask', 'chat', 'Ask AI', 'RAG answers grounded in the catalog'],
     ['#/differential', 'activity', 'Differential Dx', 'Rank diseases by matched symptoms'],
     ['#/interaction-check', 'pill', 'Interaction Check', 'Conflicts among a set of medications'],
     ['#/r/case-reports', 'file', 'Case Reports', 'File and browse case reports'],
@@ -1014,20 +1011,15 @@ async function viewHome() {
   ];
   if (ME.role === 'public') tiles.unshift(['#/portal', 'activity', 'My Health',
     'Your record, your medications and where to fill them']);
-  if (Api.roleCanReport(ME.role)) tiles.splice(4, 0, ['#/r/patients', 'users', 'Patients', 'Register and open patient records']);
+  if (Api.roleCanReport(ME.role)) tiles.splice(3, 0, ['#/r/patients', 'users', 'Patients', 'Register and open patient records']);
   if (isPlatformScope()) tiles.push(['#/platform', 'chart', 'Platform', 'Cross-tenant analytics']);
   // The organization lists stay inside an organization: they are the way out of it.
   if (ME.role === 'super_admin') tiles.push(['#/r/tenants-hospitals', 'shield', 'Hospitals', 'Approve and manage hospitals'], ['#/r/tenants-pharmacies', 'shield', 'Pharmacies', 'Approve and manage pharmacies']);
-  const [health, dash] = await Promise.all([
-    Api.public('/api/health/').then((h) => `API: ${h.status} · DB: ${h.db}`, () => 'API unreachable'),
-    Api.get('/api/analytics/tenant/').catch(() => null),
-  ]);
+  const dash = await Api.get('/api/analytics/tenant/').catch(() => null);
   let dashHtml = '';
   if (dash) {
     const kpis = [
       ['Active Users (30d)', dash.active_users],
-      ['AI Answers Rated Up', dash.ai_feedback?.up],
-      ['AI Answers Rated Down', dash.ai_feedback?.down],
     ].filter(([, v]) => v !== undefined);
     dashHtml = `<div class="tiles">${kpis.map(([k, v]) =>
       `<div class="tile kpi-tile"><span class="tile-label">${esc(k)}</span><span class="tile-val">${esc(fmtVal(v))}</span></div>`).join('')}</div>`;
@@ -1040,7 +1032,6 @@ async function viewHome() {
     if (panels) dashHtml += `<div class="grid-2">${panels}</div>`;
   }
   render(`<h2>Welcome${ME.username ? ', ' + esc(ME.username) : ''}</h2>
-    <p class="page-sub">${esc(Api.base)} · ${esc(health)}</p>
     ${dashHtml}
     <h3>Quick Actions</h3>
     <div class="tiles home-tiles">${tiles.map(([href, icon, t, d]) =>
@@ -1899,38 +1890,6 @@ async function viewSearch() {
         html += `<h3>${esc(label(key))}</h3>` + tableHtml(rows, (r) => `#/r/${slug}/${r.id}`);
       }
       $('#out').innerHTML = html || '<p class="muted">No results.</p>';
-    } catch (err) { $('#out').innerHTML = `<p class="err">${esc(err.message)}</p>`; }
-  };
-}
-
-async function viewAsk() {
-  if (!await ensureChrome()) return;
-  render(`<h2>Ask AI</h2>
-    <p class="muted">Answers are educational only — not medical advice.</p>
-    <form id="f" class="toolbar"><input name="q" placeholder="Ask a clinical question…" required autofocus>
-    <button>Ask</button></form><div id="out"></div>`);
-  $('#f').onsubmit = async (e) => {
-    e.preventDefault();
-    $('#out').innerHTML = '<div class="loading">Thinking…</div>';
-    try {
-      const data = await Api.get('/api/ai/ask/', { q: new FormData(e.target).get('q').trim() });
-      let html = `<div class="card"><p class="answer">${esc(data.answer)}</p>`;
-      if (data.interaction_id) {
-        html += `<div class="actions"><span class="muted">Helpful?</span>
-          <button class="btn ghost" data-vote="up">&#128077;</button>
-          <button class="btn ghost" data-vote="down">&#128078;</button></div>`;
-      }
-      html += '</div>';
-      if (data.sources?.length) html += '<h3>Sources</h3>' + renderData(data.sources);
-      $('#out').innerHTML = html;
-      for (const b of document.querySelectorAll('[data-vote]')) {
-        b.onclick = async () => {
-          try {
-            const r = await Api.post(`/api/analytics/ai/${data.interaction_id}/feedback/`, { vote: b.dataset.vote });
-            toast(r?.message || 'Thanks for the feedback.');
-          } catch (err) { toast(err.message, true); }
-        };
-      }
     } catch (err) { $('#out').innerHTML = `<p class="err">${esc(err.message)}</p>`; }
   };
 }
@@ -3174,7 +3133,6 @@ const routes = [
   [/^\/r\/([a-z-]+)\/(\d+)$/, (m) => viewDetail(m[1], m[2])],
   [/^\/r\/([a-z-]+)$/, (m) => viewList(m[1])],
   [/^\/search$/, viewSearch],
-  [/^\/ask$/, viewAsk],
   [/^\/differential$/, viewDifferential],
   [/^\/interaction-check$/, viewInteractionCheck],
   [/^\/notifiable$/, viewNotifiable],

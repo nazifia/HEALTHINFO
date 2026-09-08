@@ -84,9 +84,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           final d = snap.data!;
           final trend = ((d['search_trend'] as List?) ?? [])
               .cast<Map<String, dynamic>>();
-          final fb = (d['ai_feedback'] as Map?)?.cast<String, dynamic>() ?? const {};
-          final up = (fb['up'] as num?)?.toInt() ?? 0;
-          final down = (fb['down'] as num?)?.toInt() ?? 0;
           final searchTotal =
               trend.fold<num>(0, (a, r) => a + ((r['count'] as num?) ?? 0));
           final diagnoses = (d['top_diagnoses'] as List?) ?? [];
@@ -117,18 +114,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   label: 'Search Volume',
                   value: '$searchTotal',
                   color: EnhancedTheme.accentCyan,
-                ),
-                KpiChip(
-                  icon: Icons.thumb_up,
-                  label: 'Thumbs Up',
-                  value: '$up',
-                  color: EnhancedTheme.successGreen,
-                ),
-                KpiChip(
-                  icon: Icons.thumb_down,
-                  label: 'Thumbs Down',
-                  value: '$down',
-                  color: EnhancedTheme.errorRed,
                 ),
               ]),
               const SizedBox(height: 14),

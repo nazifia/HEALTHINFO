@@ -58,7 +58,6 @@ from .serializers import (
 )
 from .stats import (
     adr_stats,
-    ai_quality_stats,
     appointment_stats,
     benchmark_stats,
     case_report_stats,
@@ -128,13 +127,6 @@ class FunnelView(APIView):
         return Response(funnel_stats(*_range(request)))
 
 
-class AiQualityView(APIView):
-    permission_classes = [IsTenantMember]
-
-    def get(self, request):
-        return Response(ai_quality_stats(*_range(request)))
-
-
 class RetentionView(APIView):
     permission_classes = [IsTenantMember]
 
@@ -167,22 +159,6 @@ class PlatformSpikesView(APIView):
 
     def get(self, request):
         return Response({"alerts": platform_spikes(jurisdiction=_seat(request))})
-
-
-class AiFeedbackView(APIView):
-    """Thumbs up/down on a RAG answer. Tenant-scoped manager means a member can
-    only rate interactions belonging to their own tenant."""
-
-    permission_classes = [IsTenantMember]
-
-    def post(self, request, pk):
-        vote = request.data.get("vote")
-        if vote not in (AiInteraction.UP, AiInteraction.DOWN):
-            raise ValidationError("vote must be 'up' or 'down'")
-        updated = AiInteraction.objects.filter(pk=pk).update(feedback=vote)
-        if not updated:
-            raise NotFound("Interaction not found")
-        return success("Thanks for the feedback.", {"vote": vote})
 
 
 class CaseReportViewSet(viewsets.ModelViewSet):

@@ -14,7 +14,7 @@ def track(request, event_type, **fields):
 
 
 def log_ai_interaction(request, question, answer, sources, model_name=""):
-    """Persist a RAG Q&A and return its id so the client can attach feedback.
+    """Persist a RAG Q&A and return its id for audit trails.
 
     Synchronous (one INSERT) because the caller needs the id back — celery can't
     return it. Best-effort: a DB hiccup returns None, never 500s the answer.

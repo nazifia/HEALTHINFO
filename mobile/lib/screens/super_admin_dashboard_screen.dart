@@ -89,11 +89,6 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
               ((d['search_trend'] as List?) ?? []).cast<Map<String, dynamic>>();
           final byTenant = ((d['searches_by_tenant'] as List?) ?? [])
               .cast<Map<String, dynamic>>();
-          final fb = (d['ai_feedback'] as Map?)?.cast<String, dynamic>() ?? const {};
-          final up = (fb['up'] as num?)?.toInt() ?? 0;
-          final down = (fb['down'] as num?)?.toInt() ?? 0;
-          final satTotal = up + down;
-          final satPct = satTotal == 0 ? null : (up / satTotal * 100).round();
           final adr = (d['adverse_reactions'] as Map?)?.cast<String, dynamic>() ?? const {};
           final searchTotal =
               trend.fold<num>(0, (a, r) => a + ((r['count'] as num?) ?? 0));
@@ -140,12 +135,6 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                   color: EnhancedTheme.errorRed,
                 ),
                 KpiChip(
-                  icon: Icons.thumb_up_alt_outlined,
-                  label: 'AI Positive',
-                  value: satPct == null ? '—' : '$satPct%',
-                  color: EnhancedTheme.successGreen,
-                ),
-                KpiChip(
                   icon: Icons.show_chart,
                   label: 'Search Vol 90d',
                   value: '$searchTotal',
@@ -171,35 +160,6 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                         value: (r['count'] as num?) ?? 0,
                         color: EnhancedTheme.primaryTeal,
                       ),
-                  ],
-                ),
-              ),
-              PanelCard(
-                title: 'AI Answer Satisfaction',
-                accent: EnhancedTheme.successGreen,
-                child: Row(
-                  children: [
-                    DonutChart(
-                      value: up,
-                      total: satTotal,
-                      color: EnhancedTheme.successGreen,
-                      centerLabel: satPct == null ? '—' : '$satPct%',
-                      centerSub: 'positive',
-                      size: 110,
-                    ),
-                    const SizedBox(width: 20),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          StatMetric('thumbs up', '$up',
-                              color: EnhancedTheme.successGreen),
-                          const SizedBox(height: 10),
-                          StatMetric('thumbs down', '$down',
-                              color: EnhancedTheme.errorRed),
-                        ],
-                      ),
-                    ),
                   ],
                 ),
               ),

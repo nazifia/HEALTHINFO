@@ -128,9 +128,18 @@ def test_platform_collation_keys_on_icd10(db):
     CaseReport.objects.create(disease=d2)
     CaseReport.objects.create(disease=d2)
 
+    c = Tenant.objects.create(name="C", slug="c")
+    set_current_tenant(c)
+    d3 = Disease.objects.create(name="AAA diabetes", slug="aaa", icd10_code="E11")
+    CaseReport.objects.create(disease=d3)
+
     clear_current_tenant()
-    by_icd10 = {r["icd10_code"]: r["count"] for r in platform_case_report_stats()["by_icd10"]}
-    assert by_icd10 == {"E11": 3}  # collated despite name mismatch
+    rows = platform_case_report_stats()["by_icd10"]
+    assert {r["icd10_code"]: r["count"] for r in rows} == {"E11": 4}  # collated despite name mismatch
+    # One row, so one name stands for every spelling: the one most cases were
+    # filed under. "AAA diabetes" sorts first and would win a tiebreak, but it
+    # was written once against T2DM's two, so the modal spelling takes it.
+    assert rows[0]["disease"] == "T2DM"
 
 
 def test_adr_stats_rollup(tenant):

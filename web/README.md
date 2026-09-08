@@ -69,7 +69,7 @@ CORS_ALLOWED_ORIGINS=https://<your-project>.web.app,https://<your-project>.fireb
 - Auth: login (JWT, phone), register, org onboarding (+ jurisdictions), logout, profile (`/api/users/me/`)
 - Catalog CRUD: diseases, medications, symptoms, drug interactions, specialties, procedures, lab tests, articles — plus workflow transitions + audit history
 - Reports CRUD: case reports, ADRs, lab results, immunizations, vital events, stock, CHW, facility metrics, insurance claims, appointments
-- Tools: global search, Ask AI (with feedback votes), differential diagnosis, interaction check, notifiable-cases report (+ CSV)
+- Tools: global search, differential diagnosis, interaction check, notifiable-cases report (+ CSV)
 - Knowledge graph pages for diseases / medications / procedures / specialties
 - Analytics: tenant dashboard + all stats endpoints; platform variants for super admins; CSV exports
 - Admin: user management, tenant approve/reject/suspend (super admin)

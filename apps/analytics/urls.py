@@ -4,8 +4,6 @@ from rest_framework.routers import SimpleRouter
 from .views import (
     AdrStatsView,
     AdverseDrugReactionViewSet,
-    AiFeedbackView,
-    AiQualityView,
     AppointmentStatsView,
     AppointmentViewSet,
     BenchmarkView,
@@ -73,7 +71,6 @@ urlpatterns = router.urls + [
     path("analytics/tenant/", TenantDashboardView.as_view(), name="tenant-dashboard"),
     path("analytics/platform/", PlatformDashboardView.as_view(), name="platform-dashboard"),
     path("analytics/funnel/", FunnelView.as_view(), name="funnel"),
-    path("analytics/ai-quality/", AiQualityView.as_view(), name="ai-quality"),
     path("analytics/retention/", RetentionView.as_view(), name="retention"),
     path("analytics/benchmark/", BenchmarkView.as_view(), name="benchmark"),
     path("analytics/surveillance/", TenantSpikesView.as_view(), name="tenant-spikes"),
@@ -82,7 +79,6 @@ urlpatterns = router.urls + [
         PlatformSpikesView.as_view(),
         name="platform-spikes",
     ),
-    path("analytics/ai/<int:pk>/feedback/", AiFeedbackView.as_view(), name="ai-feedback"),
     path("analytics/cases/", TenantCaseReportStatsView.as_view(), name="tenant-case-stats"),
     path("analytics/cases/export/", CaseReportExportView.as_view(), name="case-export"),
     path(

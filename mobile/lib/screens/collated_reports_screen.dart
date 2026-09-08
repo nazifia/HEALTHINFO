@@ -70,7 +70,7 @@ class _CollatedReportsScreenState extends State<CollatedReportsScreen> {
           final byTenant = (d['by_tenant'] as List?) ?? [];
           final byRegion = (d['by_region'] as List?) ?? [];
           final byRegionState = (d['by_region_state'] as List?) ?? [];
-          final byIcd10 = (d['by_icd10'] as List?) ?? [];
+          final byDisease = (d['by_icd10'] as List?) ?? [];
           final byLocal = (d['by_local'] as List?) ?? [];
           final byState = (d['by_state'] as List?) ?? [];
           final byNational = (d['by_national'] as List?) ?? [];
@@ -152,12 +152,12 @@ class _CollatedReportsScreenState extends State<CollatedReportsScreen> {
                   rows: byRegion,
                   labelKey: 'region',
                 ),
-              if (byIcd10.isNotEmpty)
+              if (byDisease.isNotEmpty)
                 BreakdownCard(
-                  heading: 'By ICD-10 code',
-                  icon: Icons.qr_code_2_outlined,
-                  rows: byIcd10,
-                  labelKey: 'icd10_code',
+                  heading: 'By disease',
+                  icon: Icons.coronavirus_outlined,
+                  rows: byDisease,
+                  labelKey: 'disease',
                 ),
               if (byLocal.isNotEmpty)
                 BreakdownCard(

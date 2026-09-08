@@ -159,17 +159,10 @@ class AiInteraction(TenantOwnedModel):
     user = models.ForeignKey(
         "accounts.User", null=True, blank=True, on_delete=models.SET_NULL
     )
-    UP = "up"
-    DOWN = "down"
-
     question = models.TextField()
     answer = models.TextField(null=True, blank=True)
     sources = models.JSONField(default=list, blank=True)  # ranked hits w/ scores
     model_name = models.CharField(max_length=100, blank=True)
-    feedback = models.CharField(
-        max_length=4, blank=True,
-        choices=[(UP, "thumbs up"), (DOWN, "thumbs down")],
-    )
 
     class Meta:
         indexes = [models.Index(fields=["tenant", "created_at"])]

@@ -75,12 +75,10 @@ Set `CELERY_TASK_ALWAYS_EAGER=1` to run tasks inline without a broker.
 ## Analytics dashboards
 All dashboards accept `?from=YYYY-MM-DD&to=YYYY-MM-DD` to window the rollup.
 - `GET /api/analytics/tenant/` — active users (30d), popular
-  diseases/medications, AI feedback, search trend, content gaps. Tenant-scoped.
+  diseases/medications, search trend, content gaps. Tenant-scoped.
 - `GET /api/analytics/platform/` — super-admin: tenant/user/search totals,
   searches per tenant, search trend, ADR rollup.
 - `GET /api/analytics/funnel/` — search→view→case counts + conversion ratios.
-- `GET /api/analytics/ai-quality/` — RAG answered vs retrieval-only, downvote
-  rate, top downvoted questions.
 - `GET /api/analytics/retention/` — distinct active users per day (30d).
 - `GET /api/analytics/benchmark/` — your case load vs anonymized platform median.
 
@@ -435,7 +433,7 @@ screen strings fall back to English until translated (mechanical drop-in).
 ## Next steps
 Done: content modules, draft/review workflow + audit log, knowledge-graph
 relations, semantic search + RAG, Celery (async embeddings, analytics), Flutter
-client (incl. differential dx, interaction checker, Ask AI),
+client (incl. differential dx, interaction checker),
 i18n pipeline (4 languages, UI shell translated).
 Remaining roadmap: native-reviewed translations for all screens → CI/CD →
 Nginx/Gunicorn prod compose.

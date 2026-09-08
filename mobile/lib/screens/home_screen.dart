@@ -61,7 +61,6 @@ import 'analytics_screen.dart';
 import 'interactions_screen.dart';
 import 'interaction_check_screen.dart';
 import 'differential_screen.dart';
-import 'ask_screen.dart';
 import 'global_search_screen.dart';
 import 'dashboard_screen.dart';
 import 'super_admin_dashboard_screen.dart';
@@ -125,7 +124,6 @@ const _toolsGroup = _Group('Tools', [
   _Section('Interactions', Icons.warning_amber_outlined, InteractionsScreen()),
   _Section('Interaction checker', Icons.rule, InteractionCheckScreen()),
   _Section('Differential', Icons.healing_outlined, DifferentialScreen()),
-  _Section('Ask AI', Icons.auto_awesome, AskScreen()),
 ]);
 
 const _reportsGroup = _Group('Reports', [

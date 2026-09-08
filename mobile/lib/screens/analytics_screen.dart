@@ -7,8 +7,8 @@ import '../shared/widgets/bar_chart.dart';
 import '../shared/widgets/skeleton_cards.dart';
 import '../shared/widgets/stats_kit.dart';
 
-/// Secondary analytics dashboards in one scroll: conversion funnel, AI answer
-/// quality, peer benchmark, daily retention, and adverse-reaction signal.
+/// Secondary analytics dashboards in one scroll: conversion funnel, peer
+/// benchmark, daily retention, and adverse-reaction signal.
 /// Each card fetches its own endpoint and degrades independently — one failing
 /// call never blanks the whole screen.
 class AnalyticsScreen extends StatefulWidget {
@@ -40,7 +40,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   Future<_Bundle> _load() async {
     final r = await Future.wait([
       _one('/api/analytics/funnel/'),
-      _one('/api/analytics/ai-quality/'),
       _one('/api/analytics/benchmark/'),
       _one('/api/analytics/retention/'),
       _one('/api/analytics/adr/'),
@@ -49,11 +48,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     Map<String, dynamic>? m(int i) => (r[i] as Map?)?.cast<String, dynamic>();
     return _Bundle(
       funnel: m(0),
-      aiQuality: m(1),
-      benchmark: m(2),
-      retention: (r[3] as List?) ?? const [],
-      adr: m(4),
-      consultations: m(5),
+      benchmark: m(1),
+      retention: (r[2] as List?) ?? const [],
+      adr: m(3),
+      consultations: m(4),
     );
   }
 
@@ -89,7 +87,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             children: [
               const DashTitleBar(
                 title: 'Analytics',
-                subtitle: 'Funnel, AI quality, benchmarks & signals',
+                subtitle: 'Funnel, benchmarks & signals',
                 accent: EnhancedTheme.accentPurple,
               ),
               KpiStrip(tiles: [
@@ -112,12 +110,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   color: EnhancedTheme.accentPurple,
                 ),
                 KpiChip(
-                  icon: Icons.thumb_down_alt_outlined,
-                  label: 'Downvote Rate',
-                  value: pctOf(bn(b.aiQuality, 'downvote_rate')),
-                  color: EnhancedTheme.errorRed,
-                ),
-                KpiChip(
                   icon: Icons.medication_liquid_outlined,
                   label: 'Adverse Rxns',
                   value: '${bn(b.adr, 'total') ?? 0}',
@@ -134,7 +126,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               if (b.consultations != null)
                 _ConsultationStatsCard(d: b.consultations!),
               if (b.funnel != null) _FunnelCard(d: b.funnel!),
-              if (b.aiQuality != null) _AiQualityCard(d: b.aiQuality!),
               if (b.benchmark != null) _BenchmarkCard(d: b.benchmark!),
               if (b.retention.isNotEmpty) _RetentionCard(rows: b.retention),
               if (b.adr != null) _AdrStatsCard(d: b.adr!),
@@ -148,14 +139,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
 
 class _Bundle {
   final Map<String, dynamic>? funnel;
-  final Map<String, dynamic>? aiQuality;
   final Map<String, dynamic>? benchmark;
   final List<dynamic> retention;
   final Map<String, dynamic>? adr;
   final Map<String, dynamic>? consultations;
   _Bundle({
     required this.funnel,
-    required this.aiQuality,
     required this.benchmark,
     required this.retention,
     required this.adr,
@@ -191,71 +180,6 @@ class _FunnelCard extends StatelessWidget {
                       'cases / view', pctOf(d['case_per_view'] as num?))),
             ],
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AiQualityCard extends StatelessWidget {
-  final Map<String, dynamic> d;
-  const _AiQualityCard({required this.d});
-
-  @override
-  Widget build(BuildContext context) {
-    final fb = (d['feedback'] as Map?)?.cast<String, dynamic>() ?? const {};
-    final downvoted = (d['top_downvoted'] as List?) ?? [];
-    final up = (fb['up'] as num?)?.toInt() ?? 0;
-    final down = (fb['down'] as num?)?.toInt() ?? 0;
-    return PanelCard(
-      title: 'AI Answer Quality',
-      accent: EnhancedTheme.accentPurple,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              DonutChart(
-                value: down,
-                total: up + down,
-                color: EnhancedTheme.errorRed,
-                centerLabel: pctOf(d['downvote_rate'] as num?),
-                centerSub: 'downvoted',
-                size: 104,
-              ),
-              const SizedBox(width: 18),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    StatMetric('answered', '${d['answered'] ?? 0}'),
-                    const SizedBox(height: 8),
-                    StatMetric('retrieval only', '${d['retrieval_only'] ?? 0}'),
-                    const SizedBox(height: 8),
-                    Text('▲ $up   ▼ $down   ·   ${d['unrated'] ?? 0} unrated',
-                        style:
-                            TextStyle(color: context.hintColor, fontSize: 12)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          if (downvoted.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text('Most-downvoted questions',
-                style: TextStyle(
-                    color: context.subLabelColor,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            MiniBarChart(rows: [
-              for (final r in downvoted.cast<Map<String, dynamic>>())
-                (
-                  label: '${r['question'] ?? '—'}',
-                  value: (r['count'] as num?) ?? 0
-                ),
-            ]),
-          ],
         ],
       ),
     );

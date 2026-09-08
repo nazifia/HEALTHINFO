@@ -26,10 +26,10 @@ class AnalyticsEventAdmin(admin.ModelAdmin):
 
 @admin.register(AiInteraction)
 class AiInteractionAdmin(admin.ModelAdmin):
-    list_display = ("question", "tenant", "user", "model_name", "feedback", "created_at")
-    list_filter = ("tenant", "model_name", "feedback")
+    list_display = ("question", "tenant", "user", "model_name", "created_at")
+    list_filter = ("tenant", "model_name")
     search_fields = ("question", "answer")
-    readonly_fields = ("question", "answer", "sources", "model_name", "tenant", "user", "feedback")
+    readonly_fields = ("question", "answer", "sources", "model_name", "tenant", "user")
 
 
 @admin.register(CaseReport)

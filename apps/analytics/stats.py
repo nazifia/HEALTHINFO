@@ -97,18 +97,9 @@ def _content_gaps(events, limit=10):
     )
 
 
-def _ai_feedback(interactions):
-    """Thumbs tally on RAG answers — answer-quality signal."""
-    return {
-        "up": interactions.filter(feedback=AiInteraction.UP).count(),
-        "down": interactions.filter(feedback=AiInteraction.DOWN).count(),
-    }
-
-
 def tenant_stats(start=None, end=None):
     """Current-tenant dashboard. Relies on the tenant-scoped manager."""
     events = apply_range(AnalyticsEvent.objects.all(), start, end)
-    ai = apply_range(AiInteraction.objects.all(), start, end)
     since = timezone.now() - timedelta(days=30)
     return {
         "content_gaps": _content_gaps(events),
@@ -119,7 +110,6 @@ def tenant_stats(start=None, end=None):
         .count(),
         "popular_diseases": _popular(events, "disease"),
         "popular_medications": _popular(events, "medication"),
-        "ai_feedback": _ai_feedback(ai),
         "search_trend": _series(events.filter(event_type="search"), days=30),
         **_prescribing_rollup(start, end),
     }
@@ -141,29 +131,6 @@ def funnel_stats(start=None, end=None):
         "case_reports": cases,
         "view_per_search": ratio(views, searches),
         "case_per_view": ratio(cases, views),
-    }
-
-
-def ai_quality_stats(start=None, end=None):
-    """RAG answer-quality dashboard from stored AiInteractions."""
-    qs = apply_range(AiInteraction.objects.all(), start, end)
-    total = qs.count()
-    answered = qs.exclude(answer__isnull=True).exclude(answer="").count()
-    down = qs.filter(feedback=AiInteraction.DOWN).count()
-    rated = qs.exclude(feedback="").count()
-    return {
-        "total": total,
-        "answered": answered,
-        "retrieval_only": total - answered,  # no API key / no synthesis
-        "feedback": _ai_feedback(qs),
-        "unrated": total - rated,
-        "downvote_rate": round(down / rated, 3) if rated else None,
-        "top_downvoted": list(
-            qs.filter(feedback=AiInteraction.DOWN)
-            .values("question")
-            .annotate(count=Count("id"))
-            .order_by("-count")[:10]
-        ),
     }
 
 
@@ -328,22 +295,41 @@ def case_report_stats(start=None, end=None):
 
 
 def _normalized_diseases(reports, limit=20):
-    """Collate cases across tenants by ICD-10 code, not free-text name.
+    """Collate cases across tenants by ICD-10 code, and label them by name.
 
     Same disease is spelled differently per tenant ("Type 2 diabetes" vs
     "T2DM"); the shared ICD-10 code is the join key that makes cross-tenant
-    totals correct. Rows with no code fall back to their name.
+    totals correct. Grouping still keys on the code, but a code is not a thing
+    anyone reads, so each row also carries a name: whichever spelling the most
+    cases were filed under, so the label reads the way most of the country
+    writes it. Ties break alphabetically, so the same data names itself the
+    same way twice. The code rides along for a reader who wants the
+    unambiguous identity behind the name.
+
+    The database groups by (code, name) and the fold to one row per code
+    happens here: picking a modal value per group is not something the ORM
+    expresses, and the row count is bounded by the distinct diseases, not by
+    the cases.
     """
-    coded = (
+    spellings = (
         reports.exclude(disease=None)
         .exclude(disease__icd10_code="")
-        .values("disease__icd10_code")
+        .values("disease__icd10_code", "disease__name")
         .annotate(count=Count("id"))
-        .order_by("-count")[:limit]
     )
-    return [
-        {"icd10_code": r["disease__icd10_code"], "count": r["count"]} for r in coded
+    totals, names = {}, {}
+    for r in spellings:
+        code, name, n = r["disease__icd10_code"], r["disease__name"], r["count"]
+        totals[code] = totals.get(code, 0) + n
+        names.setdefault(code, []).append((n, name))
+    rows = [
+        {"disease": min(names[code], key=lambda p: (-p[0], p[1]))[1],
+         "icd10_code": code,
+         "count": total}
+        for code, total in totals.items()
     ]
+    rows.sort(key=lambda r: -r["count"])
+    return rows[:limit]
 
 
 def _rollup_by_tier(reports, level):
@@ -531,9 +517,6 @@ def platform_stats(start=None, end=None, jurisdiction=None):
             .values("tenant__name")
             .annotate(count=Count("id"))
             .order_by("-count")[:20]
-        ),
-        "ai_feedback": _ai_feedback(
-            apply_range(_scoped(AiInteraction, True, jurisdiction), start, end)
         ),
         "search_trend": _series(events.filter(event_type="search"), days=90),
         "adverse_reactions": adr_stats(platform=True, jurisdiction=jurisdiction),

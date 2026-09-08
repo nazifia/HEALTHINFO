@@ -329,25 +329,25 @@ class Command(BaseCommand):
             qa = [
                 ("What are the symptoms of malaria?",
                  "Common symptoms include fever, headache, muscle aches and nausea. "
-                 "Seek testing promptly in endemic areas.", "up"),
+                 "Seek testing promptly in endemic areas."),
                 ("Can I take ibuprofen with warfarin?",
                  "No — NSAIDs like ibuprofen raise bleeding risk with anticoagulants. "
-                 "Prefer paracetamol and consult the prescriber.", "up"),
+                 "Prefer paracetamol and consult the prescriber."),
                 ("First-line treatment for type 2 diabetes?",
                  "Lifestyle modification plus metformin is first-line unless "
-                 "contraindicated.", "up"),
+                 "contraindicated."),
                 ("How is strep throat diagnosed?",
-                 "A rapid antigen test or throat culture confirms group A strep.", ""),
+                 "A rapid antigen test or throat culture confirms group A strep."),
                 ("What relieves an acute asthma attack?",
                  "A short-acting beta agonist such as salbutamol is the reliever of "
-                 "choice; escalate if no response.", "down"),
+                 "choice; escalate if no response."),
                 ("Normal blood pressure range?",
-                 "Below 120/80 mmHg is considered normal for most adults.", "up"),
+                 "Below 120/80 mmHg is considered normal for most adults."),
             ]
-            for q, a, fb in qa:
+            for q, a in qa:
                 AiInteraction.all_objects.create(
                     tenant=tenant, user=doctor, question=q, answer=a,
-                    model_name="seed-demo", feedback=fb, sources=[],
+                    model_name="seed-demo", sources=[],
                 )
             self.stdout.write(f"ai interactions: {len(qa)}")
 
