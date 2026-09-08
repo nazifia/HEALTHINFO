@@ -144,6 +144,16 @@ else:
         }
     }
 
+# One shared cache once more than one worker runs; the default per-process
+# LocMemCache makes each worker warm its own copy.
+if os.getenv("REDIS_URL"):
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": os.getenv("REDIS_URL"),
+        }
+    }
+
 AUTH_USER_MODEL = "accounts.User"
 
 AUTH_PASSWORD_VALIDATORS = [
