@@ -481,7 +481,8 @@ async function ensureChrome() {
     location.hash = '#/platform';
     location.reload();
   } : null;
-  $('#user-badge').textContent = `${ME.phone || ME.username || 'me'} · ${ME.role}`;
+  // Display name only: the sign-in number never reads out in the topbar.
+  $('#user-badge').textContent = `${ME.username || 'me'} · ${ME.role}`;
   refreshBell();
   // Re-parsing the same nav on every navigation is the one thing between a
   // hash change and the view. The active-link pass below still runs each time.
