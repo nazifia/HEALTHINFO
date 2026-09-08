@@ -276,10 +276,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   static const _usersSection =
       _Section('Users', Icons.manage_accounts_outlined, UserManagementScreen());
 
+  // The super-admin's landing screen. The tenant dashboard reads the
+  // tenant-scoped manager, so outside an organization it renders all zeros —
+  // the platform rollup is the one with numbers in it.
+  static const _platformHome = _Section(
+      'Platform', Icons.admin_panel_settings_outlined,
+      SuperAdminDashboardScreen());
+
   // Central-only cross-tenant views. Hidden from non-super-admins.
+  // _platformHome is the drawer's home row above the groups, so it is not
+  // repeated here.
   static const _platformGroup = _Group('Administration', [
-    _Section('Platform', Icons.admin_panel_settings_outlined,
-        SuperAdminDashboardScreen()),
     _tenantsSection,
     _usersSection,
     _accessLogSection,
@@ -353,17 +360,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       // organization: the cross-tenant block goes away and every screen left
       // reads that tenant only. The API refuses the platform rollups here
       // too, so this is the menu telling the truth, not the control.
-      _setGroups(tenantSlug.isEmpty
-          ? [_platformGroup, ...pharmacy, ..._baseGroups]
-          : [
-              const _Group('Administration', [
-                _tenantsSection,
-                _usersSection,
-                _accessLogSection,
-              ]),
-              ...pharmacy,
-              ..._baseGroups,
-            ]);
+      _setGroups(
+          tenantSlug.isEmpty
+              ? [_platformGroup, ...pharmacy, ..._baseGroups]
+              : [
+                  const _Group('Administration', [
+                    _tenantsSection,
+                    _usersSection,
+                    _accessLogSection,
+                  ]),
+                  ...pharmacy,
+                  ..._baseGroups,
+                ],
+          home: tenantSlug.isEmpty ? _platformHome : null);
       return;
     }
     if (role == 'public') {
