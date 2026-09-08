@@ -344,21 +344,13 @@ The `web/` PWA carries the counter screens: `#/pharmacy` (reorder list, stock
 expiring, the day's takings, what insurers owe) and `#/pharmacy/sell`
 (dispensing), with the rest of the module under its Pharmacy nav group.
 
-| Counter | Dispensing | Receipt |
-| :---: | :---: | :---: |
-| ![Web counter: the day's takings and what is owed, over the reorder and expiry lists](docs/screenshots/web-pharmacy-counter.png) | ![Dispensing an insured sale: the pharmacist typed the patient's name and the scheme membership filled itself in](docs/screenshots/web-pharmacy-dispense.png) | ![Receipt: batch and expiry per line, then the HMO and patient split](docs/screenshots/web-pharmacy-receipt.png) |
+Dispensing takes the card-less path where it can: name the patient and the one
+scheme they hold is picked for them — the server would have resolved it either
+way, and asks which only when a patient is on two.
 
-The dispensing shot is the card-less path: the counter named the patient, and
-the one scheme they hold was picked for them — the server would have resolved
-it either way, and asks which only when a patient is on two.
-
-The receipt above is the printable endpoint, not a picture of one: batch and
+The receipt is a printable endpoint rather than a rendered page: batch and
 expiry sit under each line, and an insured sale shows what the scheme covered
 against what the patient paid.
-
-| One purchase order | One claim |
-| :---: | :---: |
-| ![A part-delivered order: 80 of 200 ORS sachets in, the antibiotic still on back-order, and the form that books the next delivery](docs/screenshots/web-pharmacy-order.png) | ![An approved claim: claimed, approved and paid kept apart, offering only the transition its state allows](docs/screenshots/web-pharmacy-claim.png) |
 
 Both clients offer only the transitions a record's state allows — an approved
 claim can be paid, not re-submitted — because the API rejects the rest, and a
@@ -390,20 +382,13 @@ bodies — live in `mobile/lib/pharmacy.dart` rather than in the widgets, so the
 are unit-tested and can't drift between screens. They mirror the API, which
 enforces them regardless: a hidden button is convenience, not the control.
 
-| Counter | Purchase orders | One order |
-| :---: | :---: | :---: |
-| ![Pharmacy counter: the day's takings against what patients and insurers owe, the reorder and expiry lists, then what each insurer has been billed](docs/screenshots/pharmacy-counter.png) | ![Purchase orders: units on order and ordered value, with a part-delivered order listed](docs/screenshots/pharmacy-orders.png) | ![One order: each line's received-of-ordered count and what is still due, with receive and cancel](docs/screenshots/pharmacy-order.png) |
+Both clients read the same `seed_pharmacy` demo data and agree on it: 5 sales
+and ₦6,017.50 collected on either, and 170 units still owed on that order is
+120 ORS sachets plus the 50 ceftriaxone nothing has been delivered against yet.
 
-Shot against `seed_pharmacy`'s demo data — the same run as the web screens
-above, so the two agree: 5 sales and ₦6,017.50 collected on either client, and
-170 units still owed on that order is 120 ORS sachets plus the 50 ceftriaxone
-nothing has been delivered against yet.
-
-![HMO claims on mobile: claimed, approved and outstanding across the tenant, then each claim with the actions its state allows](docs/screenshots/pharmacy-claims.png)
-
-Both routes to an insurer are on that screen: the Reliance claim went out with
-its sale and is waiting on a decision, while the batched Hygeia ones have been
-approved and are waiting on money.
+Both routes to an insurer show on the claims screen: a claim raised with its
+own sale waits on a decision, while batched claims that have been approved wait
+on money.
 
 ## Tenant resolution (any of)
 1. Header `X-Tenant-ID: hospital-a`
