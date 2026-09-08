@@ -1,3 +1,4 @@
+from django.core.cache import cache
 from django.core.validators import MaxValueValidator
 from django.db import models
 from django.db.models import Q
@@ -112,6 +113,16 @@ class Tenant(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # TenantMiddleware caches the row it resolves per request; drop the
+        # entry so an approval or a rename is live now, not in 30 seconds.
+        cache.delete_many([f"tenant:{self.slug}", f"tenant:@{self.domain}"])
+
+    def delete(self, *args, **kwargs):
+        cache.delete_many([f"tenant:{self.slug}", f"tenant:@{self.domain}"])
+        return super().delete(*args, **kwargs)
 
     def __str__(self):
         # Kind included: this string is the label in every tenant picker, and

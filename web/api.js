@@ -19,6 +19,11 @@ const Api = (() => {
   let access = localStorage.getItem('access');
   let refresh = localStorage.getItem('refresh');
   let me = null; // cached /api/users/me/ for the session
+  // OPTIONS metadata is the shape of a form, not its data: it is the same for
+  // every record of a resource and doesn't change while a session lasts. Cached
+  // by path, cleared whenever the signed-in user does, since the field list a
+  // role may write is part of the answer.
+  const metaCache = new Map();
 
   // Mirrors backend WRITE_ROLES / REPORT_ROLES.
   const WRITE_ROLES = new Set(['super_admin', 'tenant_admin', 'doctor', 'pharmacist']);
@@ -118,7 +123,15 @@ const Api = (() => {
     post: (path, body) => request('POST', path, { body: body ?? {} }),
     patch: (path, body) => request('PATCH', path, { body }),
     del: (path) => request('DELETE', path, {}),
-    options: (path) => request('OPTIONS', path, {}),
+    options: (path) => {
+      let p = metaCache.get(path);
+      if (!p) {
+        p = request('OPTIONS', path, {});
+        p.catch(() => metaCache.delete(path));  // a failed fetch must not stick
+        metaCache.set(path, p);
+      }
+      return p;
+    },
     public: (path, query) => request('GET', path, { query, auth: false }),
     /* Signed-out POST: no token, and no tenant header either — someone
        locked out may have a stale slug stored from whoever used this
@@ -166,6 +179,7 @@ const Api = (() => {
       localStorage.setItem('access', access);
       localStorage.setItem('refresh', refresh);
       me = null;
+      metaCache.clear();
       // The token names the user's organization; every later call carries it.
       // A super-admin comes back with none, and that empty slug is stored too:
       // they start outside every organization instead of inheriting the slug
@@ -185,6 +199,7 @@ const Api = (() => {
         } catch { /* idempotent */ }
       }
       access = refresh = me = null;
+      metaCache.clear();
       localStorage.removeItem('access');
       localStorage.removeItem('refresh');
     },

@@ -339,6 +339,7 @@ const PHARMACY_REPORTS = [
 /* ----------------------------------------------------------------- layout */
 
 let ME = null; // current user object
+let navCache = null; // last sidebar markup rendered, to skip identical rebuilds
 
 /* Sign out after ME.idle_logout_minutes of no input (0 = never). The tenant
    sets the number; this only counts down to it. Client-side by design: the
@@ -484,7 +485,10 @@ async function ensureChrome() {
   } : null;
   $('#user-badge').textContent = `${ME.phone || ME.username || 'me'} · ${ME.role}`;
   refreshBell();
-  $('#sidebar').innerHTML = navHtml();
+  // Re-parsing the same nav on every navigation is the one thing between a
+  // hash change and the view. The active-link pass below still runs each time.
+  const nav = navHtml();
+  if (nav !== navCache) { $('#sidebar').innerHTML = nav; navCache = nav; }
   const route = location.hash.slice(1) || '/';
   for (const a of document.querySelectorAll('#sidebar a')) {
     const on = route === a.dataset.route || (a.dataset.route !== '/' && route.startsWith(a.dataset.route));
@@ -1791,7 +1795,7 @@ function wirePickerFields(form) {
 
 /* The dispensable catalogue, fetched once per session - the dispense screen
  * and every `item` field pick from the same rows.
- * ponytail: capped at 10 pages; past ~250 items this wants a search box. */
+ * ponytail: capped at 10 pages of 100; past ~1000 items this wants a search box. */
 let itemCache;
 const allItems = () => (itemCache ||= (async () => {
   // An insurer seat is refused /pharmacy/items/ — cost prices and margins are
@@ -1799,7 +1803,7 @@ const allItems = () => (itemCache ||= (async () => {
   if (ME?.role === 'hmo') return Api.get('/api/pharmacy/item-rules/items/');
   const rows = [];
   for (let page = 1; page <= 10; page++) {
-    const r = await Api.list('/api/pharmacy/items/', { is_active: true, page });
+    const r = await Api.list('/api/pharmacy/items/', { is_active: true, page, page_size: 100 });
     rows.push(...r.rows);
     if (!r.next) break;
   }

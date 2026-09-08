@@ -14,3 +14,5 @@ web/web/
 
 # Firebase deploy cache (per-machine, rewritten on every deploy)
 .firebase/
+db.sqlite3-shm
+db.sqlite3-wal

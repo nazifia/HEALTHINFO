@@ -68,6 +68,9 @@ MIDDLEWARE = [
     # Serves STATIC_ROOT in prod (gunicorn has no static handler). Must sit
     # right after SecurityMiddleware.
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    # Compresses API JSON and HTML on the way out. Safe here: the API is
+    # JWT-authenticated, so there is no secret in a cookie for BREACH to chase.
+    "django.middleware.gzip.GZipMiddleware",
     "config.cors.ModeAwareCorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     # Picks the active language from the Accept-Language header (or ?language=).
@@ -123,6 +126,10 @@ if os.getenv("DB_HOST"):
             "PASSWORD": os.getenv("DB_PASSWORD", "health"),
             "HOST": os.getenv("DB_HOST"),
             "PORT": os.getenv("DB_PORT", _default_port),
+            # Reuse the socket across requests instead of a TCP+auth handshake
+            # per view; the health check drops one the DB closed under us.
+            "CONN_MAX_AGE": int(os.getenv("CONN_MAX_AGE", "60")),
+            "CONN_HEALTH_CHECKS": True,
         }
     }
 else:
@@ -130,6 +137,10 @@ else:
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": BASE_DIR / "db.sqlite3",
+            "CONN_MAX_AGE": 60,
+            # WAL lets readers run while a write is in flight (default DELETE
+            # journal blocks them); NORMAL sync skips an fsync per commit.
+            "OPTIONS": {"init_command": "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;"},
         }
     }
 

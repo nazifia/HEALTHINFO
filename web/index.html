@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>HEALTH INFO</title>
   <meta name="theme-color" content="#0f766e">
+  <!-- Opens the DNS/TLS handshake to the API while the shell parses, so the
+       first call after sign-in isn't paying for the connection. Ignored in
+       dev, where the API is on localhost. -->
+  <link rel="preconnect" href="https://healthinfo.pythonanywhere.com" crossorigin>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="favicon.png">
   <link rel="stylesheet" href="styles.css">
