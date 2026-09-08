@@ -334,6 +334,20 @@ class Api {
     return r.body.isEmpty ? null : jsonDecode(r.body);
   }
 
+  /// Authenticated DELETE. Retries once after refresh on 401.
+  ///
+  /// The endpoints that take one answer 204 with an empty body, so nothing is
+  /// decoded — a caller that still needs the row keeps its own copy.
+  Future<void> delete(String path) async {
+    var r = await http.delete(_uri(path), headers: _headers());
+    if (r.statusCode == 401 && await _refreshAccess()) {
+      r = await http.delete(_uri(path), headers: _headers());
+    }
+    if (r.statusCode < 200 || r.statusCode >= 300) {
+      throw ApiException('DELETE $path failed (${r.statusCode})', r.body);
+    }
+  }
+
   /// DRF list endpoints paginate; unwrap to the row list either way.
   Future<List<dynamic>> getList(String path, [Map<String, String>? query]) async {
     final data = await get(path, query);

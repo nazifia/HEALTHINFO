@@ -37,6 +37,36 @@ def _audit(obj, user, from_status, to_status, note=""):
     )
 
 
+def notify_scheme_change(rule, title, message, by=None):
+    """Tell the two sides of a contract that its price list moved.
+
+    A sale prices itself off these rows, so the counter has to hear about a
+    change it did not make — and an insurer has to hear when the pharmacy
+    admin keeps the list on its behalf. Whoever made the change is left out:
+    they were the one typing.
+    """
+    from apps.accounts.models import Role, User
+    from apps.pos.models import Notification
+
+    audience = User.objects.filter(
+        tenant_id=rule.tenant_id, is_active=True
+    ).filter(
+        models.Q(role__in=(Role.TENANT_ADMIN, Role.PHARMACIST))
+        | models.Q(role=Role.HMO, hmo_id=rule.hmo_id)
+    )
+    if by is not None and by.pk:
+        audience = audience.exclude(pk=by.pk)
+    Notification.objects.bulk_create([
+        Notification(
+            tenant_id=rule.tenant_id, user=user,
+            kind=Notification.Kind.SYSTEM,
+            priority=Notification.Priority.MEDIUM,
+            title=title[:200], message=message,
+        )
+        for user in audience
+    ])
+
+
 
 class HMO(TenantOwnedModel):
     """An insurer the pharmacy bills - an HMO, or NHIA itself.
@@ -77,12 +107,17 @@ class HMO(TenantOwnedModel):
 
 
 class HmoItemRule(TenantOwnedModel):
-    """What one scheme pays for one particular drug, overriding its default.
+    """One line of a scheme's price list: what it pays for one particular drug.
 
     A contract rarely covers everything at one rate: antimalarials at 100,
     branded alternatives at 50, supplements at nothing. ``coverage_percent``
     of 0 is the exclusion — the drug falls entirely to the patient even on a
     covered sale. A drug with no rule is covered at the scheme's default.
+
+    ``tariff`` is the other half of the list: the scheme's own unit price,
+    which caps what the percentage is taken of. The insurer keeps these rows
+    itself (see ``HmoItemRuleViewSet``), so a contract change is entered by
+    the party that agreed it rather than retyped by the pharmacy.
     """
 
     hmo = models.ForeignKey(HMO, on_delete=models.CASCADE,
@@ -91,6 +126,13 @@ class HmoItemRule(TenantOwnedModel):
                              related_name="hmo_rules")
     coverage_percent = models.DecimalField(
         max_digits=5, decimal_places=2, default=Decimal("0.00")
+    )
+    # The scheme's own price for this drug: the most it reimburses for one
+    # unit, whatever the pharmacy charges. NULL is no ceiling - the shelf
+    # price is covered at ``coverage_percent``. A pharmacy pricing above the
+    # tariff is not refused the sale; the excess simply stays with the patient.
+    tariff = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True
     )
     note = models.CharField(max_length=200, blank=True)
 

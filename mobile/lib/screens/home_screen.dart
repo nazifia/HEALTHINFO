@@ -235,8 +235,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       _Section('My health', Icons.favorite_outline, MyHealthScreen());
 
   // The insurer's seat. The API scopes each of these to their own scheme
-  // (insurer_scope) and refuses them every write, so the screens come up
-  // read-only on their own — the action rows gate on isPharmacyStaff.
+  // (insurer_scope), and the claims screens refuse them every write — the
+  // action rows gate on isPharmacyStaff. Their scheme's price list is the one
+  // thing they do keep, and the bell is how they hear that the pharmacy admin
+  // kept it for them.
   static const _insurerHome = _Section(
       'Claims desk', Icons.request_quote_outlined, PharmacyClaimsScreen());
 
@@ -245,6 +247,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         PharmacyPreauthScreen()),
     _Section('Schemes', Icons.health_and_safety_outlined,
         PharmacySchemesScreen()),
+    _Section('Notifications', Icons.notifications_none_outlined,
+        NotificationsScreen()),
   ]);
 
   // The health authority's seat: cross-tenant rollups and nothing

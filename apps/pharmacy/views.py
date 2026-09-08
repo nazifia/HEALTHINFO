@@ -18,11 +18,13 @@ from apps.accounts.permissions import (
     IsPharmacyAdminOrReadOnly,
     IsPharmacyStaff,
     IsPharmacyStaffOrInsurerReadOnly,
+    IsSchemePriceListEditor,
     IsTenantMember,
     is_pharmacy_admin,
 )
 from apps.governance.models import AuditLog
 from apps.governance.serializers import AuditLogSerializer
+from apps.inventory.models import StockItem
 from apps.inventory.views import PharmacyViewSet, body
 from config.ranges import apply_range as _apply_range, date_range as _range
 from config.responses import success
@@ -35,6 +37,8 @@ from .models import (
     HmoItemRule,
     PreAuthorization,
     PreAuthorizationItem,
+    _audit,
+    notify_scheme_change,
 )
 from .serializers import (
     AddClaimsSerializer,
@@ -83,20 +87,79 @@ class HMOViewSet(PharmacyViewSet):
 
 
 class HmoItemRuleViewSet(PharmacyViewSet):
-    """Per-drug cover: what one scheme pays for one item, 0 being an exclusion.
+    """A scheme's price list: what it pays for one item, 0 being an exclusion.
 
-    Money policy, so admin writes and the counter only reads.
+    The insurer keeps its own list — adds a drug, moves a tariff, drops a row —
+    and the pharmacy admin keeps the list of any scheme with no seat of its
+    own. The counter only reads: what a sale was covered at is not a
+    dispensing mistake's way out.
+
+    Every write lands in the audit trail and notifies the other side of the
+    contract, so the counter never prices a sale off cover it never saw move.
     """
 
     model = HmoItemRule
     serializer_class = HmoItemRuleSerializer
-    permission_classes = [IsTenantMember, IsPharmacyStaff, IsPharmacyAdminOrReadOnly]
+    permission_classes = [IsTenantMember, IsSchemePriceListEditor]
+    insurer_ok = True
     filterset_fields = ("hmo", "item")
     search_fields = ("item__name", "note")
-    ordering_fields = ("coverage_percent", "created_at")
+    ordering_fields = ("coverage_percent", "tariff", "created_at")
 
     def get_queryset(self):
-        return HmoItemRule.objects.select_related("hmo", "item")
+        return insurer_scope(
+            HmoItemRule.objects.select_related("hmo", "item"), self.request.user
+        )
+
+    @staticmethod
+    def _terms(rule):
+        """How one row reads in a log line: the cover, and the tariff if any."""
+        terms = f"{rule.coverage_percent}%"
+        if rule.tariff is not None:
+            terms += f" up to {rule.tariff} a unit"
+        return terms
+
+    def perform_create(self, serializer):
+        rule = serializer.save()
+        self._record(rule, "added", f"{rule.item.name} is now covered at "
+                                    f"{self._terms(rule)}.")
+
+    def perform_update(self, serializer):
+        before = self._terms(self.get_object())
+        rule = serializer.save()
+        self._record(rule, "changed",
+                     f"{rule.item.name}: {before} is now {self._terms(rule)}.")
+
+    def perform_destroy(self, instance):
+        # Recorded before the delete: afterwards there is no row left to read
+        # the drug's name off, and the trail is all that says it ever existed.
+        self._record(instance, "removed",
+                     f"{instance.item.name} is off the list — it now covers at "
+                     f"the {instance.hmo.coverage_percent}% scheme default.")
+        instance.delete()
+
+    def _record(self, rule, verb, message):
+        """Write the change down, then tell the people who price sales by it."""
+        _audit(rule, self.request.user, "", verb, message)
+        notify_scheme_change(
+            rule, f"{rule.hmo.name} price list {verb}", message,
+            by=self.request.user,
+        )
+
+    @action(detail=False, methods=["get"], url_path="items")
+    def items(self, request):
+        """The drugs a list can be written against: id, name, shelf price.
+
+        An insurer is not pharmacy staff and never reads ``/inventory/items/``
+        — cost prices and margins are the pharmacy's own business — but it
+        cannot price a list against drugs it cannot name.
+        """
+        qs = StockItem.objects.filter(is_active=True)
+        search = request.query_params.get("search", "").strip()
+        if search:
+            qs = qs.filter(name__icontains=search)
+        # ponytail: first 200 by name; add paging when a tenant outgrows it.
+        return Response(list(qs.values("id", "name", "unit_price")[:200]))
 
 
 class PreAuthorizationViewSet(PharmacyViewSet):

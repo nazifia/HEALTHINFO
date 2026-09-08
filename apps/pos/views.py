@@ -17,6 +17,7 @@ from rest_framework.response import Response
 from apps.accounts.permissions import (
     IsPharmacyAdminOrReadOnly,
     IsPharmacyStaff,
+    IsPharmacyStaffOrInsurer,
     IsTenantMember,
     is_pharmacy_admin,
 )
@@ -411,10 +412,18 @@ class ExpenseViewSet(PharmacyViewSet):
 
 class NotificationViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
                           mixins.UpdateModelMixin, viewsets.GenericViewSet):
-    """What the app is telling this user. Only the read flag is writable."""
+    """What the app is telling this user. Only the read flag is writable.
+
+    Open to the insurer seat as well as pharmacy staff: a scheme is told when
+    the pharmacy admin keeps its price list on its behalf. The queryset is the
+    real fence — everyone reads their own notifications and nobody else's, and
+    clears their own badge. The serializer keeps every other field read-only,
+    so marking one read cannot rewrite what it said.
+    """
 
     serializer_class = NotificationSerializer
-    permission_classes = [IsTenantMember, IsPharmacyStaff]
+    permission_classes = [IsTenantMember, IsPharmacyStaffOrInsurer]
+    insurer_ok = True
     filterset_fields = ("kind", "priority", "is_read")
     ordering_fields = ("created_at",)
 

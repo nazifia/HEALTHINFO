@@ -474,8 +474,9 @@ class Sale(TenantOwnedModel):
     def _insurer_share(self, total):
         """What the HMO pays of ``total`` on this sale.
 
-        Three things cut it down, in the order the contract applies them: the
-        drugs the scheme excludes come off the covered base, the coverage
+        Four things cut it down, in the order the contract applies them: the
+        drugs the scheme excludes come off the covered base, a line priced
+        above the scheme's tariff is covered only to that tariff, the coverage
         percentage is taken of what is left, and the member's remaining annual
         benefit caps the result. Whatever the insurer does not pay stays with
         the patient, so the two sides still add back to the total.
@@ -485,12 +486,21 @@ class Sale(TenantOwnedModel):
             return ZERO
         # Drugs the contract prices for itself; everything else takes the
         # scheme default. A rule of 0 is the outright exclusion.
-        rules = dict(self.enrollment.hmo.item_rules.values_list(
-            "item_id", "coverage_percent"))
+        rules = {
+            r["item_id"]: (r["coverage_percent"], r["tariff"])
+            for r in self.enrollment.hmo.item_rules.values(
+                "item_id", "coverage_percent", "tariff")
+        }
         share = ZERO
         for line in SaleItem.all_objects.filter(sale=self):
-            rate = rules.get(line.item_id, percent)
-            share += max(line.gross - line.discount, ZERO) * rate / Decimal("100")
+            rate, tariff = rules.get(line.item_id, (percent, None))
+            covered = max(line.gross - line.discount, ZERO)
+            if tariff is not None:
+                # The scheme's price list is a ceiling, not the price charged:
+                # whatever the pharmacy asks above the tariff is the patient's,
+                # so the percentage is taken of the tariff instead.
+                covered = min(covered, _money(tariff * line.quantity))
+            share += covered * rate / Decimal("100")
         # The consultation fee is not a drug, so no item rule reaches it.
         share += Decimal(self.consultation_fee) * percent / Decimal("100")
         # Never bill the insurer more than the bill: rounding per line, and a

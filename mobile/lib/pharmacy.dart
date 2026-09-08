@@ -14,6 +14,16 @@ const pharmacyStaffRoles = {...pharmacyAdminRoles, 'pharmacist'};
 bool isPharmacyAdmin(String? role) => pharmacyAdminRoles.contains(role);
 bool isPharmacyStaff(String? role) => pharmacyStaffRoles.contains(role);
 
+/// Who keeps a scheme's price list (mirrors IsSchemePriceListEditor).
+///
+/// The insurer keeps its own — it agreed the contract, so a change to it is
+/// entered by the party that agreed it — and the pharmacy admin keeps the list
+/// of a scheme with no seat of its own. A seat with no scheme has no list to
+/// keep. The counter reads and never writes: what a sale was covered at is not
+/// a dispensing mistake's way out.
+bool canEditPriceList(String? role, {Object? hmoId}) =>
+    role == 'hmo' ? hmoId != null : isPharmacyAdmin(role);
+
 final _money = NumberFormat('#,##0.00');
 
 /// Naira, thousands-separated, always two decimals. Accepts the strings DRF

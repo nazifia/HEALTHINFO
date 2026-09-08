@@ -226,6 +226,21 @@ class IsPharmacyStaffOrInsurerReadOnly(IsPharmacyStaff):
         return super().has_permission(request, view)
 
 
+class IsPharmacyStaffOrInsurer(IsPharmacyStaff):
+    """Pharmacy staff as usual; the insurer seat on the same footing.
+
+    Only for a view whose queryset is already narrowed to the caller's own
+    records — a notification is addressed to one person, so that scoping is
+    the fence and this settles nothing but whether the seat is admitted.
+    """
+
+    def has_permission(self, request, view):
+        user = request.user
+        if user.is_authenticated and user.role in INSURER_ROLES:
+            return True
+        return super().has_permission(request, view)
+
+
 class IsPharmacyAdminOrReadOnly(BasePermission):
     """Staff read; only the pharmacy admin writes.
 
@@ -238,3 +253,38 @@ class IsPharmacyAdminOrReadOnly(BasePermission):
         if request.method in SAFE_METHODS:
             return True
         return is_pharmacy_admin(request.user)
+
+
+class IsSchemePriceListEditor(BasePermission):
+    """A scheme's price list: its own insurer writes it, pharmacy staff read.
+
+    The rows say what a contract pays, so the party that agreed the contract
+    keeps them — an insurer editing its own scheme, or the pharmacy admin for
+    a scheme with no seat of its own. A pharmacist reads and never writes: a
+    dispensing error must not be fixable by moving what the cover was.
+
+    Pair with ``insurer_scope`` on the queryset; this only settles who writes,
+    ``has_object_permission`` settles that an insurer writes its scheme alone.
+    """
+
+    def _may_write(self, user, hmo_id=None):
+        if not user.is_authenticated:
+            return False
+        if user.role in INSURER_ROLES:
+            # A seat with no scheme has no list of its own to keep.
+            return user.hmo_id is not None and hmo_id in (None, user.hmo_id)
+        return is_pharmacy_admin(user)
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user.is_authenticated:
+            return False
+        if request.method in SAFE_METHODS:
+            return (user.is_super_admin or user.role in PHARMACY_STAFF_ROLES
+                    or user.role in INSURER_ROLES)
+        return self._may_write(user)
+
+    def has_object_permission(self, request, view, obj):
+        if request.method in SAFE_METHODS:
+            return True
+        return self._may_write(request.user, obj.hmo_id)

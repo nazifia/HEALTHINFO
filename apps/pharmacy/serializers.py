@@ -2,6 +2,8 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
+from apps.accounts.permissions import INSURER_ROLES
+
 from .models import (
     HMO,
     Claim,
@@ -22,6 +24,23 @@ class HMOSerializer(serializers.ModelSerializer):
     def validate_coverage_percent(self, value):
         if not Decimal("0") <= value <= Decimal("100"):
             raise serializers.ValidationError("Coverage must be between 0 and 100.")
+        return value
+
+    def validate_tariff(self, value):
+        if value is not None and value < Decimal("0"):
+            raise serializers.ValidationError("A tariff cannot be negative.")
+        return value
+
+    def validate_hmo(self, value):
+        # An insurer keeps its own price list and nobody else's. The view
+        # already refuses an edit to another scheme's row; this refuses a new
+        # row filed under someone else's scheme, which has no row yet to check.
+        user = self.context["request"].user
+        if user.is_authenticated and user.role in INSURER_ROLES:
+            if value.pk != user.hmo_id:
+                raise serializers.ValidationError(
+                    "You can only price your own scheme's list."
+                )
         return value
 
     def validate_preauth_threshold(self, value):
@@ -136,6 +155,11 @@ class AddClaimsSerializer(serializers.Serializer):
 class HmoItemRuleSerializer(serializers.ModelSerializer):
     hmo_name = serializers.CharField(source="hmo.name", read_only=True)
     item_name = serializers.CharField(source="item.name", read_only=True)
+    # What the pharmacy charges today, so a tariff is set against a real price
+    # rather than from memory.
+    item_price = serializers.DecimalField(
+        source="item.unit_price", max_digits=12, decimal_places=2, read_only=True
+    )
 
     class Meta:
         model = HmoItemRule
@@ -145,6 +169,23 @@ class HmoItemRuleSerializer(serializers.ModelSerializer):
     def validate_coverage_percent(self, value):
         if not Decimal("0") <= value <= Decimal("100"):
             raise serializers.ValidationError("Coverage must be between 0 and 100.")
+        return value
+
+    def validate_tariff(self, value):
+        if value is not None and value < Decimal("0"):
+            raise serializers.ValidationError("A tariff cannot be negative.")
+        return value
+
+    def validate_hmo(self, value):
+        # An insurer keeps its own price list and nobody else's. The view
+        # already refuses an edit to another scheme's row; this refuses a new
+        # row filed under someone else's scheme, which has no row yet to check.
+        user = self.context["request"].user
+        if user.is_authenticated and user.role in INSURER_ROLES:
+            if value.pk != user.hmo_id:
+                raise serializers.ValidationError(
+                    "You can only price your own scheme's list."
+                )
         return value
 
 

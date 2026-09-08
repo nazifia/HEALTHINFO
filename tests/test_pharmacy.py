@@ -12,7 +12,10 @@ import pytest
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from django.contrib.contenttypes.models import ContentType
+
 from apps.accounts.models import Role, User
+from apps.governance.models import AuditLog
 from apps.patients.models import Patient
 from apps.pharmacy.models import (
     HMO,
@@ -858,6 +861,207 @@ def _scheme(tenant, patient, **hmo_kwargs):
         tenant=tenant, patient=patient, hmo=hmo, member_number="LW-1"
     )
     return hmo, enrollment
+
+
+def _insurer_seat(tenant, hmo, phone="08030000777"):
+    """A seat that signs in to the pharmacy and answers for one scheme only."""
+    return User.objects.create_user(phone=phone, password="x", tenant=tenant,
+                                    role=Role.HMO, hmo=hmo, username="insurer")
+
+
+def test_tariff_caps_what_the_scheme_pays_for_a_line(pharmacy):
+    """A drug priced above the scheme's tariff is covered only to the tariff.
+
+    The pharmacy still charges its own price; the excess falls to the patient,
+    and the two sides add back to the bill.
+    """
+    tenant, item = pharmacy["tenant"], pharmacy["item"]
+    patient = Patient.all_objects.create(tenant=tenant, first_name="Uche",
+                                         last_name="Obi")
+    hmo, enrollment = _scheme(tenant, patient,
+                              coverage_percent=Decimal("100.00"))
+    # Shelf price is 12.50; the contract prices this drug at 10.00 a unit.
+    HmoItemRule.all_objects.create(tenant=tenant, hmo=hmo, item=item,
+                                   coverage_percent=Decimal("100.00"),
+                                   tariff=Decimal("10.00"))
+
+    response = _client(pharmacy["staff"], tenant).post("/api/pharmacy/sales/", {
+        "patient": patient.id, "payment_method": "hmo",
+        "enrollment": enrollment.id,
+        "items": [{"item": item.id, "quantity": 4}],
+    }, format="json")
+    assert response.status_code == 201, response.content
+
+    sale = Sale.all_objects.get(pk=response.json()["id"])
+    assert sale.total == Decimal("50.00")          # 4 x 12.50, what was charged
+    assert sale.hmo_payable == Decimal("40.00")    # 4 x 10.00, what was agreed
+    assert sale.patient_payable == Decimal("10.00")
+
+
+def test_tariff_above_the_shelf_price_never_bills_more_than_charged(pharmacy):
+    """A generous tariff is a ceiling, not a floor: the bill is still the bill."""
+    tenant, item = pharmacy["tenant"], pharmacy["item"]
+    patient = Patient.all_objects.create(tenant=tenant, first_name="Ngozi",
+                                         last_name="Eze")
+    hmo, enrollment = _scheme(tenant, patient,
+                              coverage_percent=Decimal("100.00"))
+    HmoItemRule.all_objects.create(tenant=tenant, hmo=hmo, item=item,
+                                   coverage_percent=Decimal("100.00"),
+                                   tariff=Decimal("99.00"))
+
+    response = _client(pharmacy["staff"], tenant).post("/api/pharmacy/sales/", {
+        "patient": patient.id, "payment_method": "hmo",
+        "enrollment": enrollment.id,
+        "items": [{"item": item.id, "quantity": 2}],
+    }, format="json")
+    sale = Sale.all_objects.get(pk=response.json()["id"])
+    assert sale.hmo_payable == Decimal("25.00")
+    assert sale.patient_payable == Decimal("0.00")
+
+
+def test_insurer_keeps_its_own_price_list(pharmacy):
+    """The scheme adds a drug, moves its tariff, and drops it again."""
+    tenant, item = pharmacy["tenant"], pharmacy["item"]
+    patient = Patient.all_objects.create(tenant=tenant, first_name="Ada",
+                                         last_name="Nwosu")
+    hmo, _ = _scheme(tenant, patient, coverage_percent=Decimal("80.00"))
+    insurer = _client(_insurer_seat(tenant, hmo), tenant)
+
+    created = insurer.post("/api/pharmacy/item-rules/", {
+        "hmo": hmo.id, "item": item.id, "coverage_percent": "60.00",
+        "tariff": "10.00",
+    }, format="json")
+    assert created.status_code == 201, created.content
+    rule_id = created.json()["id"]
+    # The shelf price rides along, so a tariff is set against a real price.
+    assert created.json()["item_price"] == "12.50"
+
+    moved = insurer.patch("/api/pharmacy/item-rules/%s/" % rule_id,
+                          {"tariff": "11.00"}, format="json")
+    assert moved.status_code == 200, moved.content
+    assert HmoItemRule.all_objects.get(pk=rule_id).tariff == Decimal("11.00")
+
+    dropped = insurer.delete("/api/pharmacy/item-rules/%s/" % rule_id)
+    assert dropped.status_code == 204
+    assert not HmoItemRule.all_objects.filter(pk=rule_id).exists()
+
+
+def test_insurer_cannot_price_another_scheme(pharmacy):
+    """Two schemes on one pharmacy: neither reads or writes the other's list."""
+    tenant, item = pharmacy["tenant"], pharmacy["item"]
+    patient = Patient.all_objects.create(tenant=tenant, first_name="Sade",
+                                         last_name="Bello")
+    mine, _ = _scheme(tenant, patient, coverage_percent=Decimal("80.00"))
+    theirs = HMO.all_objects.create(tenant=tenant, name="Hygeia")
+    other_rule = HmoItemRule.all_objects.create(
+        tenant=tenant, hmo=theirs, item=item, coverage_percent=Decimal("50.00")
+    )
+    insurer = _client(_insurer_seat(tenant, mine), tenant)
+
+    filed = insurer.post("/api/pharmacy/item-rules/", {
+        "hmo": theirs.id, "item": item.id, "coverage_percent": "100.00",
+    }, format="json")
+    assert filed.status_code == 400, filed.content
+    assert "own scheme" in str(filed.json()["errors"]["hmo"])
+
+    # Not even visible, so the edit is a 404 rather than a 403.
+    assert insurer.patch("/api/pharmacy/item-rules/%s/" % other_rule.id,
+                         {"coverage_percent": "100.00"},
+                         format="json").status_code == 404
+    assert insurer.get("/api/pharmacy/item-rules/").json()["results"] == []
+
+
+def test_pharmacist_reads_the_price_list_but_never_writes_it(pharmacy):
+    """What a sale was covered at is not a dispensing mistake's way out."""
+    tenant, item = pharmacy["tenant"], pharmacy["item"]
+    hmo = HMO.all_objects.create(tenant=tenant, name="Leadway")
+    rule = HmoItemRule.all_objects.create(
+        tenant=tenant, hmo=hmo, item=item, coverage_percent=Decimal("50.00")
+    )
+    counter = _client(pharmacy["staff"], tenant)
+
+    assert counter.get("/api/pharmacy/item-rules/").status_code == 200
+    assert counter.patch("/api/pharmacy/item-rules/%s/" % rule.id,
+                         {"coverage_percent": "100.00"},
+                         format="json").status_code == 403
+    assert counter.delete("/api/pharmacy/item-rules/%s/" % rule.id).status_code == 403
+
+
+def test_a_price_list_change_notifies_the_counter(pharmacy):
+    """The counter prices sales off these rows, so it hears about a move.
+
+    The insurer who typed it is left out; the pharmacy's admin and pharmacist
+    are told, and the change is on the audit trail either way.
+    """
+    tenant, item = pharmacy["tenant"], pharmacy["item"]
+    hmo = HMO.all_objects.create(tenant=tenant, name="Leadway")
+    seat = _insurer_seat(tenant, hmo)
+
+    created = _client(seat, tenant).post("/api/pharmacy/item-rules/", {
+        "hmo": hmo.id, "item": item.id, "coverage_percent": "60.00",
+        "tariff": "10.00",
+    }, format="json")
+    assert created.status_code == 201, created.content
+
+    told = Notification.all_objects.filter(tenant=tenant)
+    assert {n.user_id for n in told} == {pharmacy["admin"].id, pharmacy["staff"].id}
+    assert "Leadway price list added" in told[0].title
+    assert "60.00% up to 10.00 a unit" in told[0].message
+
+    trail = AuditLog.all_objects.filter(
+        content_type=ContentType.objects.get_for_model(HmoItemRule)
+    )
+    assert [(l.to_status, l.user_id) for l in trail] == [("added", seat.id)]
+
+    # Dropping the row says so before it goes, while the drug still has a name.
+    _client(seat, tenant).delete(
+        "/api/pharmacy/item-rules/%s/" % created.json()["id"])
+    assert "off the list" in told.order_by("-id")[0].message
+
+
+def test_insurer_reads_the_drugs_it_can_price_without_the_cost_prices(pharmacy):
+    """An insurer names the drugs to price; margins stay the pharmacy's own."""
+    tenant = pharmacy["tenant"]
+    hmo = HMO.all_objects.create(tenant=tenant, name="Leadway")
+    insurer = _client(_insurer_seat(tenant, hmo), tenant)
+
+    rows = insurer.get("/api/pharmacy/item-rules/items/").json()
+    assert rows == [{"id": pharmacy["item"].id, "name": "Paracetamol 500mg",
+                     "unit_price": 12.5}]
+    # The full item list, cost prices and all, is still staff-only.
+    assert insurer.get("/api/pharmacy/items/").status_code == 403
+
+
+def test_the_insurer_clears_its_own_badge_and_nobody_else_s(pharmacy):
+    """A scheme is told when the pharmacy keeps its list, so it can mark it
+    read - its own row only, and the flag only."""
+    tenant, item = pharmacy["tenant"], pharmacy["item"]
+    hmo = HMO.all_objects.create(tenant=tenant, name="Leadway")
+    seat = _insurer_seat(tenant, hmo)
+    insurer = _client(seat, tenant)
+    _client(pharmacy["admin"], tenant).post("/api/pharmacy/item-rules/", {
+        "hmo": hmo.id, "item": item.id, "coverage_percent": "60.00",
+    }, format="json")
+
+    mine = Notification.all_objects.get(user=seat)
+    theirs = Notification.all_objects.filter(user=pharmacy["staff"]).latest("id")
+
+    read = insurer.patch("/api/pos/notifications/%s/" % mine.id,
+                         {"is_read": True, "title": "rewritten"}, format="json")
+    assert read.status_code == 200, read.content
+    mine.refresh_from_db()
+    assert mine.is_read is True
+    # Only the flag: what the notification said still says it.
+    assert mine.title != "rewritten"
+
+    # The counter's bell is not the insurer's to clear.
+    assert insurer.patch("/api/pos/notifications/%s/" % theirs.id,
+                         {"is_read": True}, format="json").status_code == 404
+    insurer.post("/api/pos/notifications/read-all/")
+    theirs.refresh_from_db()
+    assert theirs.is_read is False
+    assert insurer.get("/api/pos/notifications/",
+                       {"is_read": "false"}).json()["count"] == 0
 
 
 def test_per_drug_rules_price_each_line_and_zero_excludes(pharmacy):

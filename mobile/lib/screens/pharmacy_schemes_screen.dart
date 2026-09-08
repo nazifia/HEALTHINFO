@@ -4,6 +4,7 @@ import '../main.dart';
 import '../pharmacy.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
+import '../shared/widgets/snack.dart';
 import 'pharmacy_kit.dart';
 import 'report_scaffold.dart';
 
@@ -11,17 +12,23 @@ import 'report_scaffold.dart';
 /// scheme pays for a particular drug.
 ///
 /// The counter reads all three every time it prices an insured sale, but only
-/// the pharmacy admin sets them — the same split the API enforces, so a hidden
-/// button here is convenience rather than the control itself.
+/// the pharmacy admin sets the first two — the same split the API enforces, so
+/// a hidden button here is convenience rather than the control itself.
+///
+/// The price list is the exception: an insurer signed in on its own seat keeps
+/// its own (IsSchemePriceListEditor), so the whole user is read here rather
+/// than the role alone — the scheme a seat answers for decides what it writes.
 class PharmacySchemesScreen extends StatelessWidget {
   const PharmacySchemesScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<String?>(
-      future: api.myRole(),
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: api.me(),
       builder: (context, snap) {
-        final admin = isPharmacyAdmin(snap.data);
+        final role = snap.data?['role']?.toString();
+        final admin = isPharmacyAdmin(role);
+        final myHmo = snap.data?['hmo'];
         return DefaultTabController(
           length: 3,
           child: Column(children: [
@@ -31,14 +38,18 @@ class PharmacySchemesScreen extends StatelessWidget {
               tabs: [
                 Tab(text: 'Insurers'),
                 Tab(text: 'Members'),
-                Tab(text: 'Drug cover'),
+                Tab(text: 'Price list'),
               ],
             ),
             Expanded(
               child: TabBarView(children: [
                 _HmosTab(admin: admin),
                 _MembersTab(admin: admin),
-                _RulesTab(admin: admin),
+                _RulesTab(
+                  canEdit: canEditPriceList(role, hmoId: myHmo),
+                  insurer: role == 'hmo',
+                  myHmoId: myHmo is int ? myHmo : null,
+                ),
               ]),
             ),
           ]),
@@ -570,40 +581,83 @@ class _MemberFormState extends State<_MemberForm> {
   }
 }
 
-/* ----------------------------------------------------------- drug cover */
+/* ------------------------------------------------------------ price list */
 
 class _RulesTab extends StatelessWidget {
-  final bool admin;
-  const _RulesTab({required this.admin});
+  final bool canEdit;
+  final bool insurer;
+  final int? myHmoId;
+  const _RulesTab({required this.canEdit, required this.insurer, this.myHmoId});
 
   @override
   Widget build(BuildContext context) {
     return ReportListScreen(
       path: '/api/pharmacy/item-rules/',
       searchHint: 'Drug or insurer…',
-      fabLabel: 'Add a rule',
-      showFab: admin,
+      fabLabel: 'Price a drug',
+      showFab: canEdit,
       emptyIcon: Icons.rule_outlined,
-      emptyTitle: 'No drug rules',
-      emptyMessage: admin
-          ? "Every drug is covered at the insurer's default until a rule says otherwise."
-          : 'The pharmacy admin sets what each scheme pays per drug.',
-      savedMessage: 'Rule saved.',
-      card: (row, reload, edit) => _RuleCard(row: row, admin: admin, edit: edit),
-      form: (existing) => _RuleForm(existing: existing),
+      emptyTitle: 'Nothing priced yet',
+      emptyMessage: canEdit
+          ? "Every drug is covered at the scheme's default until a row says otherwise."
+          : 'The scheme and the pharmacy admin keep what it pays per drug.',
+      savedMessage: 'Price list saved.',
+      card: (row, reload, edit) =>
+          _RuleCard(row: row, canEdit: canEdit, edit: edit, reload: reload),
+      form: (existing) =>
+          _RuleForm(existing: existing, insurer: insurer, myHmoId: myHmoId),
     );
   }
 }
 
 class _RuleCard extends StatelessWidget {
   final Map<String, dynamic> row;
-  final bool admin;
+  final bool canEdit;
   final VoidCallback edit;
-  const _RuleCard({required this.row, required this.admin, required this.edit});
+  final VoidCallback reload;
+  const _RuleCard(
+      {required this.row,
+      required this.canEdit,
+      required this.edit,
+      required this.reload});
+
+  /// Dropping a row is not editing it: the drug goes back to the scheme's own
+  /// default, which is a different cover from the one on screen. The
+  /// confirmation says what it will be covered at afterwards rather than only
+  /// that the row goes.
+  Future<void> _drop(BuildContext context) async {
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Stop pricing ${row['item_name'] ?? 'this drug'}?'),
+        content: Text(
+            "It goes back to ${row['hmo_name']}'s scheme default. Sales "
+            'already made keep what they were covered at.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Keep it')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Take it off')),
+        ],
+      ),
+    );
+    if (go != true || !context.mounted) return;
+    try {
+      await api.delete('/api/pharmacy/item-rules/${row['id']}/');
+      if (!context.mounted) return;
+      showSuccess(context, 'Off the price list.');
+      reload();
+    } catch (e) {
+      if (context.mounted) showError(context, '$e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final cover = num.tryParse('${row['coverage_percent'] ?? 0}') ?? 0;
+    final tariff = num.tryParse('${row['tariff'] ?? ''}');
     return GlassCard(
       borderRadius: 16,
       padding: const EdgeInsets.all(14),
@@ -618,6 +672,14 @@ class _RuleCard extends StatelessWidget {
                     fontSize: 15)),
             Text('${row['hmo_name']} pays $cover%',
                 style: TextStyle(color: context.hintColor, fontSize: 13)),
+            // The tariff is the other half of the row, and it only reads
+            // against the shelf price: a pharmacy charging above it keeps the
+            // sale, the excess simply stays with the patient.
+            if (tariff != null)
+              Text(
+                  'up to ${money(tariff)} a unit'
+                  '${row['item_price'] == null ? '' : ' · shelf ${money(row['item_price'])}'}',
+                  style: TextStyle(color: context.hintColor, fontSize: 12)),
             if ('${row['note'] ?? ''}'.isNotEmpty)
               Text('${row['note']}',
                   style: TextStyle(color: context.hintColor, fontSize: 12)),
@@ -627,9 +689,13 @@ class _RuleCard extends StatelessWidget {
         // list: the drug falls entirely to the patient even on a covered sale.
         if (cover == 0)
           const ReportBadge(text: 'excluded', color: EnhancedTheme.errorRed),
-        if (admin)
+        if (canEdit) ...[
           IconButton(
               icon: const Icon(Icons.edit_outlined, size: 18), onPressed: edit),
+          IconButton(
+              icon: const Icon(Icons.delete_outline, size: 18),
+              onPressed: () => _drop(context)),
+        ],
       ]),
     );
   }
@@ -637,7 +703,12 @@ class _RuleCard extends StatelessWidget {
 
 class _RuleForm extends StatefulWidget {
   final Map<String, dynamic>? existing;
-  const _RuleForm({this.existing});
+  // An insurer seat prices its own scheme and nobody else's, so the scheme is
+  // not a question it is asked — and the drugs come from a catalogue it may
+  // actually read.
+  final bool insurer;
+  final int? myHmoId;
+  const _RuleForm({this.existing, this.insurer = false, this.myHmoId});
 
   @override
   State<_RuleForm> createState() => _RuleFormState();
@@ -645,11 +716,15 @@ class _RuleForm extends StatefulWidget {
 
 class _RuleFormState extends State<_RuleForm> {
   final _coverage = TextEditingController(text: '0');
+  final _tariff = TextEditingController();
   final _note = TextEditingController();
   int? _hmoId;
   String? _hmoName;
   int? _itemId;
   String? _itemName;
+  // What the pharmacy charges for the picked drug, so a tariff is set against
+  // a real price rather than from memory.
+  Object? _shelfPrice;
   bool _saving = false;
   String? _error;
 
@@ -661,17 +736,24 @@ class _RuleFormState extends State<_RuleForm> {
     final e = widget.existing;
     if (e != null) {
       _coverage.text = '${e['coverage_percent'] ?? '0'}';
+      _tariff.text = '${e['tariff'] ?? ''}';
       _note.text = '${e['note'] ?? ''}';
       _hmoId = e['hmo'] as int?;
       _hmoName = e['hmo_name'] as String?;
       _itemId = e['item'] as int?;
       _itemName = e['item_name'] as String?;
+      _shelfPrice = e['item_price'];
+    } else if (widget.insurer) {
+      // The only scheme this seat may file under; the API refuses the rest.
+      _hmoId = widget.myHmoId;
+      _hmoName = 'My scheme';
     }
   }
 
   @override
   void dispose() {
     _coverage.dispose();
+    _tariff.dispose();
     _note.dispose();
     super.dispose();
   }
@@ -694,10 +776,17 @@ class _RuleFormState extends State<_RuleForm> {
     }
   }
 
+  /// The drugs a list can be written against.
+  ///
+  /// An insurer is not pharmacy staff and is refused /pharmacy/items/ — cost
+  /// prices and margins are the pharmacy's own business — so it reads names
+  /// and shelf prices off the price list's own catalogue instead.
   Future<void> _pickItem() async {
     final row = await pickRow(
       context,
-      path: '/api/pharmacy/items/',
+      path: widget.insurer
+          ? '/api/pharmacy/item-rules/items/'
+          : '/api/pharmacy/items/',
       title: 'Which drug?',
       hint: 'Drug name…',
       label: (r) => '${r['name']}',
@@ -707,6 +796,7 @@ class _RuleFormState extends State<_RuleForm> {
       setState(() {
         _itemId = row['id'] as int?;
         _itemName = '${row['name']}';
+        _shelfPrice = row['unit_price'];
       });
     }
   }
@@ -721,10 +811,14 @@ class _RuleFormState extends State<_RuleForm> {
       _error = null;
     });
     try {
+      final tariff = _tariff.text.trim();
       final body = {
         'hmo': _hmoId,
         'item': _itemId,
         'coverage_percent': _coverage.text.trim(),
+        // Blank is no ceiling, and clears one that was set — so it travels as
+        // null rather than being left out of an edit.
+        'tariff': tariff.isEmpty ? null : tariff,
         'note': _note.text.trim(),
       };
       if (_isEdit) {
@@ -760,14 +854,18 @@ class _RuleFormState extends State<_RuleForm> {
   @override
   Widget build(BuildContext context) {
     return ReportFormSheet(
-      title: _isEdit ? 'Edit drug cover' : 'New drug cover',
+      title: _isEdit ? 'Edit what this pays' : 'Price a drug',
       saving: _saving,
       error: _error,
-      submitLabel: _isEdit ? 'Save changes' : 'Add rule',
+      submitLabel: _isEdit ? 'Save changes' : 'Add to the list',
       onSubmit: _submit,
       children: [
-        _picker('Insurer', _hmoName, _pickHmo),
-        const SizedBox(height: 12),
+        // An insurer has one scheme to price, so it is told which rather than
+        // asked — the picker would offer a list of one.
+        if (!widget.insurer) ...[
+          _picker('Insurer', _hmoName, _pickHmo),
+          const SizedBox(height: 12),
+        ],
         _picker('Drug', _itemName, _pickItem),
         const SizedBox(height: 12),
         TextField(
@@ -776,6 +874,18 @@ class _RuleFormState extends State<_RuleForm> {
           decoration: const InputDecoration(
             labelText: 'Cover %',
             helperText: '0 excludes the drug — the patient pays all of it',
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _tariff,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(
+            labelText: 'Tariff (optional)',
+            helperText: 'Most the scheme pays for one unit, whatever the '
+                'pharmacy charges. Blank covers the shelf price.'
+                '${_shelfPrice == null ? '' : ' Charged today: ${money(_shelfPrice)}.'}',
+            helperMaxLines: 3,
           ),
         ),
         const SizedBox(height: 12),

@@ -57,7 +57,7 @@ class ClaimBatchAdmin(admin.ModelAdmin):
 
 @admin.register(HmoItemRule)
 class HmoItemRuleAdmin(admin.ModelAdmin):
-    list_display = ("hmo", "tenant", "item", "coverage_percent", "note")
+    list_display = ("hmo", "tenant", "item", "coverage_percent", "tariff", "note")
     list_filter = ("tenant", "hmo")
     search_fields = ("item__name", "note")
     raw_id_fields = ("hmo", "item")

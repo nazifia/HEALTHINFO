@@ -8,6 +8,20 @@ void main() {
     expect(line.lineTotal, 0);
   });
 
+  test('a scheme keeps its own price list, the counter never does', () {
+    // The insurer that agreed the contract, and the pharmacy admin keeping
+    // the list of a scheme with no seat of its own.
+    expect(canEditPriceList('hmo', hmoId: 4), isTrue);
+    expect(canEditPriceList('tenant_admin'), isTrue);
+    expect(canEditPriceList('super_admin'), isTrue);
+    // A seat with no scheme has no list to keep.
+    expect(canEditPriceList('hmo'), isFalse);
+    // What a sale was covered at is not a dispensing mistake's way out.
+    expect(canEditPriceList('pharmacist'), isFalse);
+    expect(canEditPriceList('doctor'), isFalse);
+    expect(canEditPriceList(null), isFalse);
+  });
+
   test('the basket adds its lines up', () {
     final lines = [
       const BasketLine(

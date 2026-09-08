@@ -144,9 +144,11 @@ const RESOURCES = {
   'pharmacy-prescribers':   { title: 'Prescribers',    group: 'Pharmacy', path: 'prescriptions/prescribers', roles: 'admin', search: true, extra: 'statement' },
   'pharmacy-hmos':          { title: 'HMOs',            group: 'Pharmacy', path: 'pharmacy/hmos',            roles: 'admin', search: true },
   'pharmacy-enrollments':   { title: 'Scheme Members',  group: 'Pharmacy', path: 'pharmacy/enrollments',     roles: 'staff', search: true },
-  // What a scheme pays for one drug. 0 is the exclusion; no rule means the
-  // scheme's own default covers it.
-  'pharmacy-item-rules':    { title: 'Drug Cover',       group: 'Pharmacy', path: 'pharmacy/item-rules',      roles: 'admin', search: true },
+  // A scheme's price list: what it pays for one drug, and the most it pays
+  // for a unit of it. 0 cover is the exclusion; no row means the scheme's own
+  // default covers it. The insurer keeps its own list (roles: 'scheme').
+  'pharmacy-item-rules':    { title: 'Price List',      group: 'Pharmacy', path: 'pharmacy/item-rules',      roles: 'scheme', search: true,
+                              filters: [{ param: 'hmo', label: 'Scheme', path: '/api/pharmacy/hmos/', text: (r) => r.name }] },
   // The insurer's answer is four fields at once — a code, what they stand
   // behind, when it lapses, or why they refused — so it gets a form of its own
   // (extra: 'preauth') rather than a chain of prompts.
@@ -259,6 +261,7 @@ const M2M_FIELDS = new Set(['symptoms', 'medications', 'procedures', 'lab_tests'
 const FIELD_HINTS = {
   annual_limit: "Most this member's plan pays out in a calendar year. Blank is uncapped.",
   preauth_threshold: 'Insured amount above which this HMO clears a sale before it happens. 0 asks for no authorisation.',
+  tariff: "Most the scheme pays for one unit, whatever the pharmacy charges. Blank covers the shelf price.",
 };
 
 // The drug fields of a clinical drug order. Everything else on that form —
@@ -377,7 +380,9 @@ const SEAT_NAV = {
     ['#/r/pharmacy-claims', 'file', 'Claims'],
     ['#/r/pharmacy-claim-batches', 'file', 'Claim Batches'],
     ['#/r/pharmacy-enrollments', 'users', 'Scheme Members'],
+    ['#/r/pharmacy-item-rules', 'pill', 'Price List'],
     ['#/r/pharmacy-hmos', 'shield', 'My Scheme'],
+    ['#/notifications', 'flag', 'Notifications'],
   ]],
   government: ['#/gov', 'Public Health', [
     ['#/platform/surveillance', 'flag', 'Outbreak Alerts'],
@@ -1129,6 +1134,9 @@ const canActRes = (res) => res.group !== 'Pharmacy' || isPharmacyStaff();
 function canWriteRes(slug, res) {
   if (res.readOnly || res.createOnly) return false;
   if (res.roles === 'admin') return isPharmacyAdmin();
+  // A scheme's price list is written by that scheme, or by the pharmacy admin
+  // for a scheme with no seat of its own. Mirrors IsSchemePriceListEditor.
+  if (res.roles === 'scheme') return isPharmacyAdmin() || (ME?.role === 'hmo' && !!ME?.hmo);
   if (res.roles === 'staff') return isPharmacyStaff();
   if (res.roles === 'tenant_admin') return ['super_admin', 'tenant_admin'].includes(ME.role);
   // Patients: the same cadres that may read them may register and edit them.
@@ -1784,6 +1792,9 @@ function wirePickerFields(form) {
  * ponytail: capped at 10 pages; past ~250 items this wants a search box. */
 let itemCache;
 const allItems = () => (itemCache ||= (async () => {
+  // An insurer seat is refused /pharmacy/items/ — cost prices and margins are
+  // the pharmacy's own business — so it reads names and shelf prices instead.
+  if (ME?.role === 'hmo') return Api.get('/api/pharmacy/item-rules/items/');
   const rows = [];
   for (let page = 1; page <= 10; page++) {
     const r = await Api.list('/api/pharmacy/items/', { is_active: true, page });
@@ -1799,8 +1810,11 @@ async function wireItemField(form, value) {
   if (!sel) return;
   let rows = [];
   try { rows = await allItems(); } catch { sel.innerHTML = '<option value="">Catalogue unavailable</option>'; return; }
+  // The shelf price rides along in the label: a tariff is a ceiling on what
+  // the pharmacy charges, so it is set against that number, not from memory.
   sel.innerHTML = '<option value=""></option>' + rows.map((i) =>
-    `<option value="${i.id}"${String(i.id) === String(value ?? '') ? ' selected' : ''}>${esc(i.name)}</option>`).join('');
+    `<option value="${i.id}"${String(i.id) === String(value ?? '') ? ' selected' : ''}>${
+      esc(i.name)}${i.unit_price == null ? '' : ` · ${money(i.unit_price)}`}</option>`).join('');
 }
 
 /* Where each related picker gets its rows, and how one reads. The jurisdiction
@@ -1827,8 +1841,10 @@ async function wireRelFields(form, current) {
       sel.innerHTML = '<option value="">Unavailable — open the organization first</option>';
       continue;
     }
-    const v = String(current[name] ?? '');
-    sel.innerHTML = '<option value=""></option>' + rows.map((r) =>
+    // One choice and nothing chosen yet: pick it. An insurer seat is scoped to
+    // its own scheme, so the field is a formality it should not have to fill.
+    const v = String(current[name] ?? (rows.length === 1 ? rows[0].id : ''));
+    sel.innerHTML = (rows.length === 1 && v ? '' : '<option value=""></option>') + rows.map((r) =>
       `<option value="${r.id}"${String(r.id) === v ? ' selected' : ''}>${esc(text(r))}</option>`).join('');
   }
 }
@@ -3084,7 +3100,7 @@ let bellTimer = null;
 
 async function refreshBell() {
   const bell = $('#bell');
-  bell.hidden = !PHARMACY_STAFF_ROLES.has(ME?.role);
+  bell.hidden = !PHARMACY_STAFF_ROLES.has(ME?.role) && ME?.role !== 'hmo';
   if (bell.hidden) return;
   // ponytail: one poll for the whole session, cleared on reload. Swap for a
   // websocket if a minute of staleness ever matters.
