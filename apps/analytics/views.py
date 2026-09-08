@@ -749,3 +749,21 @@ class CaseReportExportView(APIView):
 
         reports = apply_range(CaseReport.objects.all(), *_range(request))
         return case_reports_csv(reports)
+
+
+class PlatformCaseReportExportView(APIView):
+    """The central collation as CSV — every tenant's reports in one sheet.
+
+    Same rows the platform case rollup counts, narrowed to the seat's own
+    jurisdiction, with the tenant named on each line.
+    """
+
+    permission_classes = [IsPlatformReader]
+
+    def get(self, request):
+        from .stats import _scoped, apply_range
+
+        reports = apply_range(
+            _scoped(CaseReport, True, _seat(request)), *_range(request)
+        )
+        return case_reports_csv(reports, tenant_column=True)

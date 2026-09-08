@@ -14,15 +14,18 @@ def csv_response(filename, header, rows):
     return resp
 
 
-def case_reports_csv(reports):
+def case_reports_csv(reports, tenant_column=False):
+    """One tenant's reports, or the central collation with a tenant column."""
     header = [
         "id", "created_at", "disease", "severity", "outcome",
         "age_group", "sex", "region", "reporter",
     ]
-    rows = (
-        reports.select_related("disease", "reporter").values_list(
-            "id", "created_at", "disease__name", "severity", "outcome",
-            "patient_age_group", "patient_sex", "region", "reporter__username",
-        )
-    )
+    fields = [
+        "id", "created_at", "disease__name", "severity", "outcome",
+        "patient_age_group", "patient_sex", "region", "reporter__username",
+    ]
+    if tenant_column:
+        header.insert(1, "tenant")
+        fields.insert(1, "tenant__name")
+    rows = reports.select_related("disease", "reporter").values_list(*fields)
     return csv_response("case_reports.csv", header, rows)

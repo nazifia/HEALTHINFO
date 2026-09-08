@@ -63,3 +63,24 @@ def test_benchmark_ignores_global_rows(tenants):
     assert stats["your_case_reports"] == 2
     assert stats["tenants_compared"] == 2  # A and B only, not the global row
     assert stats["platform_median"] == 1.5  # median(2, 1), no phantom None bucket
+
+
+def test_platform_export_names_every_tenant(tenants):
+    """The collated CSV carries one line per tenant's report, tenant named."""
+    from apps.analytics.export import case_reports_csv
+    from apps.analytics.stats import _scoped
+
+    a, b = tenants
+    set_current_tenant(a)
+    CaseReport.objects.create(disease=Disease.objects.create(name="Lassa", slug="lassa"))
+    set_current_tenant(b)
+    CaseReport.objects.create(disease=Disease.objects.create(name="Mpox", slug="mpox"))
+
+    clear_current_tenant()
+    body = case_reports_csv(
+        _scoped(CaseReport, True), tenant_column=True
+    ).content.decode()
+    header, *rows = [line for line in body.splitlines() if line]
+    assert header.split(",")[:3] == ["id", "tenant", "created_at"]
+    assert len(rows) == 2
+    assert {"Hospital A", "Hospital B"} == {r.split(",")[1] for r in rows}

@@ -296,6 +296,7 @@ const ANALYTICS = [
   { key: 'insurance',     label: 'Insurance Stats',   path: '/api/analytics/insurance/', dates: true },
   { key: 'appointments',  label: 'Appointment Stats', path: '/api/analytics/appointments/', dates: true },
   { key: 'consultations', label: 'Visit Stats',       path: '/api/analytics/consultations/', dates: true },
+  { key: 'prescriptions', label: 'Prescribing Stats', path: '/api/analytics/prescriptions/', dates: true },
   { key: 'funnel',        label: 'Funnel',            path: '/api/analytics/funnel/' },
   { key: 'ai-quality',    label: 'AI Quality',        path: '/api/analytics/ai-quality/', dates: true },
   { key: 'retention',     label: 'Retention',         path: '/api/analytics/retention/' },
@@ -304,7 +305,7 @@ const ANALYTICS = [
 
 const PLATFORM = [
   { key: 'dashboard',     label: 'Platform Dashboard', path: '/api/analytics/platform/' },
-  { key: 'cases',         label: 'Case Stats',         path: '/api/analytics/platform/cases/', dates: true },
+  { key: 'cases',         label: 'Case Stats',         path: '/api/analytics/platform/cases/', dates: true, exportPath: '/api/analytics/platform/cases/export/' },
   { key: 'surveillance',  label: 'Outbreak Alerts',    path: '/api/analytics/platform/surveillance/' },
   { key: 'idsr',          label: 'IDSR Report',        path: '/api/analytics/platform/idsr/', days: true, csv: true },
   { key: 'sources',       label: 'Report Sources',     path: '/api/analytics/platform/sources/' },
@@ -318,6 +319,7 @@ const PLATFORM = [
   { key: 'insurance',     label: 'Insurance Stats',    path: '/api/analytics/platform/insurance/', dates: true },
   { key: 'appointments',  label: 'Appointment Stats',  path: '/api/analytics/platform/appointments/', dates: true },
   { key: 'consultations', label: 'Visit Stats',        path: '/api/analytics/platform/consultations/', dates: true },
+  { key: 'prescriptions', label: 'Prescribing Stats', path: '/api/analytics/platform/prescriptions/', dates: true },
 ];
 
 /* The trading reports (/api/reports/*). Kept out of ANALYTICS because the API
