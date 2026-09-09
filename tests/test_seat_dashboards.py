@@ -108,8 +108,9 @@ def test_patient_reads_their_portal_not_the_registers(desk):
                  "/api/lab-results/", "/api/immunizations/",
                  "/api/consultations/", "/api/prescriptions/"):
         assert client.get(path).status_code == 403, path
-    # Their own history still answers, filtered to them.
-    assert client.get("/api/portal/history/").status_code == 200
+    # Their own portal still answers, filtered to them.
+    assert client.get("/api/portal/me/").status_code == 200
+    assert client.get("/api/portal/medications/").status_code == 200
 
 
 @pytest.fixture

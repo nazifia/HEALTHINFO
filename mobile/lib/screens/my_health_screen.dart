@@ -10,11 +10,14 @@ import '../shared/widgets/snack.dart';
 
 /// A patient's own record — GET /api/portal/*.
 ///
-/// Their details, what has been prescribed to them, and where to go and get
-/// it. No patient id is sent anywhere: the API reads it off the signed-in
-/// account (apps.patients.portal), so this screen cannot show anyone else's
-/// record. An account nobody has linked to a patient row gets 403, and the
-/// message says who can fix that.
+/// Their details, the drugs the pharmacy has actually handed over, and where
+/// to go and get more. Nothing else: the clinical timeline is the facility's
+/// working record and the portal API does not serve it.
+///
+/// No patient id is sent anywhere: the API reads it off the signed-in account
+/// (apps.patients.portal), so this screen cannot show anyone else's record. An
+/// account nobody has linked to a patient row gets 403, and the message says
+/// who can fix that.
 class MyHealthScreen extends StatefulWidget {
   const MyHealthScreen({super.key});
 
@@ -91,7 +94,7 @@ class _MyHealthScreenState extends State<MyHealthScreen>
   }
 
   Future<List<dynamic>> _load() =>
-      Future.wait([api.portalMe(), api.portalMedications(), api.portalHistory()]);
+      Future.wait([api.portalMe(), api.portalMedications()]);
 
   void _reload() => setState(() {
         _pharmacies = null;
@@ -153,7 +156,6 @@ class _MyHealthScreenState extends State<MyHealthScreen>
             }
             final me = (snap.data![0] as Map).cast<String, dynamic>();
             final meds = (snap.data![1] as List).cast<Map<String, dynamic>>();
-            final history = (snap.data![2] as Map).cast<String, dynamic>();
             return ListView(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
               children: [
@@ -169,8 +171,6 @@ class _MyHealthScreenState extends State<MyHealthScreen>
                   busy: _findingPharmacies,
                   onFind: _findPharmacies,
                 ),
-                const SizedBox(height: 12),
-                _HistoryCard(history: history),
               ],
             );
           },
@@ -238,8 +238,10 @@ class _MedicationsCard extends StatelessWidget {
         children: [
           Text('My medications', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 4),
+          // Dispensed drugs only reach this list, so empty means nothing has
+          // been collected, not that nothing was written.
           if (meds.isEmpty)
-            const Text('Nothing has been prescribed yet.',
+            const Text('You have not collected any medication yet.',
                 style: TextStyle(color: Colors.grey))
           else
             for (final m in meds)
@@ -316,63 +318,5 @@ class _PharmaciesCard extends StatelessWidget {
         ],
       ),
     );
-  }
-}
-
-class _HistoryCard extends StatelessWidget {
-  final Map<String, dynamic> history;
-  const _HistoryCard({required this.history});
-
-  @override
-  Widget build(BuildContext context) {
-    final counts = (history['counts'] as Map?)?.cast<String, dynamic>() ?? {};
-    // Only the record types this patient actually has something under: a list
-    // of eleven zeroes is a list nobody reads.
-    final filed = counts.entries.where((e) => (e.value as num? ?? 0) > 0).toList();
-    return GlassCard(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('My history', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          if (filed.isEmpty)
-            const Text('No records filed yet.',
-                style: TextStyle(color: Colors.grey))
-          else
-            for (final entry in filed)
-              ExpansionTile(
-                tilePadding: EdgeInsets.zero,
-                title: Text(
-                  '${entry.key.replaceAll('_', ' ')} (${entry.value})',
-                ),
-                children: [
-                  for (final row
-                      in (history[entry.key] as List).cast<Map<String, dynamic>>())
-                    ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(_summarize(row)),
-                      subtitle: Text(_text(row['created_at']).split('T').first),
-                    ),
-                ],
-              ),
-        ],
-      ),
-    );
-  }
-
-  /// One line for a record whose shape differs per type: the first named field
-  /// it carries. ponytail: a name lookup, not a per-type renderer — add one
-  /// when a type needs more than its title on this screen.
-  static String _summarize(Map<String, dynamic> row) {
-    for (final key in const [
-      'disease_name', 'medication_name', 'test_name', 'vaccine_name',
-      'title', 'diagnosis', 'reason', 'event_type', 'status',
-    ]) {
-      final v = row[key];
-      if (v != null && '$v'.trim().isNotEmpty) return '$v';
-    }
-    return 'Record #${row['id']}';
   }
 }

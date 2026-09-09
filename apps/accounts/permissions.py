@@ -177,8 +177,8 @@ class ReadOnlyOrReportRole(BasePermission):
             return False
         if request.method in SAFE_METHODS:
             # Listing a register is reading other people's records, so the
-            # patient seat is not "anyone in the tenant" here: theirs comes
-            # back from /api/portal/history/, filtered to them.
+            # patient seat is not "anyone in the tenant" here: what they may
+            # read of themselves comes back from /api/portal/.
             return user.is_super_admin or user.role not in PATIENT_ROLES
         return user.is_super_admin or user.role in REPORT_ROLES
 

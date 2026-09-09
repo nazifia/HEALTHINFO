@@ -1,5 +1,6 @@
-"""Patient portal: a login reaches its own record and nothing else, and the
-nearby-pharmacy list orders sites by how far away they actually are."""
+"""Patient portal: a login reaches its own details and the drugs it has
+actually been given — nothing else — and the nearby-pharmacy list orders sites
+by how far away they actually are."""
 import pytest
 from rest_framework.test import APIClient
 
@@ -56,24 +57,60 @@ def test_account_with_no_patient_record_is_refused(db_clean):
     stranger = User.objects.create_user("08039999999", "pw", tenant=tenant,
                                         role=Role.PUBLIC)
 
-    for path in ("me", "history", "medications"):
+    for path in ("me", "medications"):
         assert _portal(stranger).get(f"/api/portal/{path}/").status_code == 403
 
 
-def test_medications_lists_what_was_prescribed(linked):
+def test_medications_lists_only_what_was_dispensed(linked):
+    """Their own drugs, and only the ones the counter actually handed over."""
     tenant, user, patient = linked
     drug = Medication.objects.create(tenant=tenant, generic_name="Amoxicillin")
+    part = Medication.objects.create(tenant=tenant, generic_name="Metformin")
+    waiting = Medication.objects.create(tenant=tenant, generic_name="Ibuprofen")
     other = Patient.objects.create(tenant=tenant, first_name="Bola",
                                    last_name="Eze")
     Prescription.objects.create(tenant=tenant, patient=patient, medication=drug,
-                                dose="500 mg")
-    Prescription.objects.create(tenant=tenant, patient=other, medication=drug)
+                                dose="500 mg",
+                                status=Prescription.Status.DISPENSED)
+    # Part of it is in their hands, so it counts.
+    Prescription.objects.create(tenant=tenant, patient=patient, medication=part,
+                                status=Prescription.Status.PARTIAL)
+    # Written but not filled, and cancelled at the counter: neither is a drug
+    # the patient has.
+    Prescription.objects.create(tenant=tenant, patient=patient,
+                                medication=waiting,
+                                status=Prescription.Status.PRESCRIBED)
+    Prescription.objects.create(tenant=tenant, patient=patient, medication=drug,
+                                status=Prescription.Status.CANCELLED)
+    # Somebody else's dispensed drug stays theirs.
+    Prescription.objects.create(tenant=tenant, patient=other, medication=drug,
+                                status=Prescription.Status.DISPENSED)
 
     r = _portal(user).get("/api/portal/medications/")
 
     assert r.status_code == 200
-    assert [row["medication_name"] for row in r.data] == ["Amoxicillin"]
-    assert r.data[0]["dose"] == "500 mg"
+    assert sorted(row["medication_name"] for row in r.data) == [
+        "Amoxicillin", "Metformin",
+    ]
+    assert [row for row in r.data if row["dose"] == "500 mg"]
+
+
+def test_a_pending_script_cannot_be_asked_for(linked):
+    """?status= is not a way back to what has not been dispensed yet."""
+    tenant, user, patient = linked
+    drug = Medication.objects.create(tenant=tenant, generic_name="Ibuprofen")
+    Prescription.objects.create(tenant=tenant, patient=patient, medication=drug,
+                                status=Prescription.Status.PRESCRIBED)
+
+    r = _portal(user).get("/api/portal/medications/?status=prescribed")
+
+    assert r.status_code == 200
+    assert r.data == []
+
+
+def test_the_clinical_timeline_is_not_served_to_patients(linked):
+    _tenant, user, _patient = linked
+    assert _portal(user).get("/api/portal/history/").status_code == 404
 
 
 def test_pharmacies_are_ordered_by_distance(linked):

@@ -358,23 +358,21 @@ class Api {
   }
 
   // --- patient portal ---------------------------------------------------
-  // A patient reading their own record. No patient id is ever sent: the API
-  // reads it off the signed-in account (apps.patients.portal), so these calls
-  // cannot reach anybody else's record.
+  // A patient reading their own record: their details, the drugs they have
+  // collected, and where to get more. No patient id is ever sent — the API
+  // reads it off the signed-in account (apps.patients.portal) — so these
+  // calls cannot reach anybody else's record. The clinical timeline is not
+  // served to patients at all, so there is no call for it here.
 
   /// GET /api/portal/me/ — the signed-in patient's details.
   Future<Map<String, dynamic>> portalMe() async =>
       (await get('/api/portal/me/') as Map).cast<String, dynamic>();
 
-  /// GET /api/portal/medications/ — everything prescribed to them, newest
-  /// first. [status] narrows it; 'prescribed' is what is still to collect.
-  Future<List<dynamic>> portalMedications([String? status]) =>
-      getList('/api/portal/medications/',
-          {'status': ?status});
-
-  /// GET /api/portal/history/ — the whole timeline, grouped by record type.
-  Future<Map<String, dynamic>> portalHistory() async =>
-      (await get('/api/portal/history/') as Map).cast<String, dynamic>();
+  /// GET /api/portal/medications/ — the drugs the pharmacy has actually
+  /// handed over, newest first. Orders not yet dispensed are not served: the
+  /// API decides that, so there is no status to pass.
+  Future<List<dynamic>> portalMedications() =>
+      getList('/api/portal/medications/');
 
   /// GET /api/portal/pharmacies/ — where a script can be filled, nearest
   /// first when the device shares a position. [medication] is a catalog

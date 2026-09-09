@@ -4,8 +4,12 @@ Every staff endpoint answers "which of my patients"; this one answers "my
 record". The difference is where the patient id comes from: here it is never
 sent by the caller, only read off the signed-in account (``Patient.user``), so
 a portal account can only ever reach the one record it is linked to. Nothing
-here writes — a patient reads their details, their history, what was
-prescribed, and where to go and get it.
+here writes, and it is deliberately narrow: a patient reads their own details,
+the drugs the pharmacy actually handed over, and where to go and get more.
+
+The clinical timeline — diagnoses, labs, claims, consultation notes — is the
+facility's working record and is not served here. A patient asks the facility
+that wrote it for it.
 
 Reads leave the same audit trail staff reads do (see PatientAccessLog): "the
 patient themselves" is an answer that log should be able to give.
@@ -24,7 +28,6 @@ from apps.tenants.models import Tenant
 
 from .models import Patient, PatientAccessLog
 from .serializers import PatientSerializer
-from .views import _history_sources
 
 EARTH_RADIUS_KM = 6371.0
 
@@ -125,42 +128,29 @@ class PatientPortalViewSet(viewsets.ViewSet):
         return Response(PatientSerializer(patient).data)
 
     @action(detail=False, methods=["get"])
-    def history(self, request):
-        """The whole medical history, grouped by record type.
-
-        Same shape and same sources as the clinician's timeline (see
-        PatientViewSet.history), so one client renderer serves both.
-        """
-        patient = self._record()
-        out = {}
-        for key, (model, serializer_class) in _history_sources().items():
-            rows = model.all_objects.filter(patient=patient)
-            out[key] = serializer_class(rows, many=True).data
-        out["counts"] = {k: len(v) for k, v in out.items()}
-        self._log(patient, PatientAccessLog.Action.HISTORY,
-                  sum(out["counts"].values()))
-        return Response(out)
-
-    @action(detail=False, methods=["get"])
     def medications(self, request):
-        """Everything prescribed to this patient, newest first.
+        """The drugs this patient has actually been given, newest first.
+
+        Dispensed only. An order a clinician has written but the pharmacy has
+        not filled is not yet a fact about the patient — it can still be
+        changed or cancelled at the counter — so the portal shows a drug from
+        the moment it is handed over, not from the moment it is written. A
+        partly filled script counts: some of it is in the patient's hands.
 
         One list whichever route the drug came down: an order a clinician wrote
         and a line off a counter script both land in ``analytics.Prescription``
-        (see apps.analytics.capture), so reading that is reading both.
-        ``?status=`` narrows to one state — what is still to be collected is
-        ``?status=prescribed``.
+        (see apps.analytics.capture), so reading that is reading both. The
+        caller chooses no status: what is still to be collected is between the
+        patient and the counter, not something this endpoint answers.
         """
         from apps.analytics.models import Prescription
         from apps.analytics.serializers import PrescriptionSerializer
 
+        dispensed = (Prescription.Status.DISPENSED, Prescription.Status.PARTIAL)
         patient = self._record()
         rows = Prescription.all_objects.filter(
-            patient=patient
+            patient=patient, status__in=dispensed
         ).select_related("medication")
-        status = request.query_params.get("status")
-        if status:
-            rows = rows.filter(status=status)
         data = PrescriptionSerializer(rows, many=True).data
         self._log(patient, PatientAccessLog.Action.HISTORY, len(data))
         return Response(data)
