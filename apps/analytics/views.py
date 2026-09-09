@@ -18,6 +18,7 @@ from apps.accounts.permissions import (
     sees_whole_tenant,
 )
 from apps.tenants.models import Tenant
+from apps.tenants.scope import selected_jurisdiction
 
 from .capture import capture_consultation
 from .export import case_reports_csv, csv_response
@@ -97,13 +98,15 @@ def own_reports(qs, user):
 
 
 def _seat(request):
-    """The jurisdiction this seat may read, or None for the whole platform.
+    """The jurisdiction this request reads, or None for the whole platform.
 
     A health authority reads its own patch and everything under it (its seat
     carries the jurisdiction, and IsPlatformReader refuses one without). A
-    super admin carries none, which is the national view.
+    super admin carries none, which is the national view — until they pick a
+    state, which selected_jurisdiction reads off the request and which narrows
+    every rollup below to that state. A pick never widens a seat.
     """
-    return getattr(request.user, "jurisdiction", None)
+    return selected_jurisdiction(request)
 
 
 class TenantDashboardView(APIView):

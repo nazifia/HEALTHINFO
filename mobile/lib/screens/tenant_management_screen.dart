@@ -26,10 +26,44 @@ class _TenantManagementScreenState extends State<TenantManagementScreen> {
   late Future<List<dynamic>> _future;
   String _kind = 'hospitals'; // 'hospitals' | 'pharmacies'
 
+  /// States, each followed by its own local governments, for the picker
+  /// below. Empty until the first load answers.
+  List<Map<String, dynamic>> _places = const [];
+
   @override
   void initState() {
     super.initState();
     _future = api.getList('/api/tenants/$_kind/');
+    _loadPlaces();
+  }
+
+  Future<void> _loadPlaces() async {
+    try {
+      final rows = await api.jurisdictions();
+      if (!mounted) return;
+      // A state, then the local governments under it: the same order the
+      // dropdown shows, worked out once here rather than per rebuild.
+      final places = <Map<String, dynamic>>[];
+      for (final st in rows.where((j) => j['level'] == 'state')) {
+        places.add(Map<String, dynamic>.from(st as Map));
+        places.addAll(rows
+            .where((j) => j['level'] == 'local' && j['parent'] == st['id'])
+            .map((j) => Map<String, dynamic>.from(j as Map)));
+      }
+      setState(() => _places = places);
+    } catch (_) {
+      // No picker rather than an error page: the national view still works.
+    }
+  }
+
+  /// Work in one state, or in one local government inside it: every
+  /// cross-tenant read narrows to it — this facility list, the platform
+  /// rollups, the user list — down to the organization opened from here and
+  /// the patients inside it.
+  Future<void> _pickPlace(String? id) async {
+    await setJurisdiction(id ?? '');
+    if (!mounted) return;
+    _reload();
   }
 
   void _reload() => setState(() { _future = api.getList('/api/tenants/$_kind/'); });
@@ -141,6 +175,35 @@ class _TenantManagementScreenState extends State<TenantManagementScreen> {
                 ),
                 TextButton(onPressed: _leave, child: const Text('Leave')),
               ]),
+            ),
+          ),
+        if (_places.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: DropdownButtonFormField<String?>(
+              // A stale id (a state that has gone) reads as no pick: the
+              // dropdown requires its value to be one of the items.
+              initialValue: _places.any((j) => '${j['id']}' == jurisdictionId)
+                  ? jurisdictionId
+                  : null,
+              decoration: const InputDecoration(
+                labelText: 'Where to work',
+                helperText: 'Narrows every cross-tenant view to this place',
+              ),
+              items: [
+                const DropdownMenuItem<String?>(
+                    value: null, child: Text('All Nigeria')),
+                for (final j in _places)
+                  DropdownMenuItem<String?>(
+                    value: '${j['id']}',
+                    // A local government reads as one step under its state,
+                    // so it is indented rather than named a second way.
+                    child: Text(j['level'] == 'local'
+                        ? '    ${j['name']}'
+                        : '${j['name']}'),
+                  ),
+              ],
+              onChanged: _pickPlace,
             ),
           ),
         Padding(

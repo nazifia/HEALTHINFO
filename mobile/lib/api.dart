@@ -103,6 +103,7 @@ class Api {
     // to whoever used this device last, and the server resolves the user's own
     // organization (or the host's) instead.
     final h = tenant ? <String, String>{'X-Tenant-ID': tenantSlug} : <String, String>{};
+    if (tenant && jurisdictionId.isNotEmpty) h['X-Jurisdiction-ID'] = jurisdictionId;
     if (json) h['Content-Type'] = 'application/json';
     if (auth && _access != null) h['Authorization'] = 'Bearer $_access';
     return h;
@@ -142,6 +143,8 @@ class Api {
     // whoever used this device last, and they open one deliberately.
     final slug = (data['tenant'] as String?) ?? '';
     await setTenant(slug, name: (data['tenant_name'] as String?) ?? '');
+    // The picked state belongs to the session that picked it, not the device.
+    await setJurisdiction('');
   }
 
   /// GET /api/auth/register/organizations/ — public signup picker.

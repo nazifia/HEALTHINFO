@@ -459,6 +459,49 @@ function navHtml() {
   return html;
 }
 
+/* The state a platform admin is working in. Empty is the whole country; a
+   pick narrows every cross-tenant read — the rollups, the facility list they
+   open an organization from, the user list — down to that state and its local
+   governments. The server refuses to widen a health authority seat on it, so
+   only the platform owner is offered the control.
+   A state's local governments hang under it, indented, and pick the same way:
+   the header carries any jurisdiction id and the server narrows to that id's
+   subtree, so an LGA is one more step down the same drill. */
+let PLACES = null;
+
+async function placeOptions() {
+  if (!PLACES) {
+    try {
+      PLACES = await Api.public('/api/auth/onboarding/jurisdictions/');
+    } catch { PLACES = []; }
+  }
+  return PLACES;
+}
+
+async function paintStatePicker() {
+  const sel = $('#state-badge');
+  const show = ME?.role === 'super_admin' && !Api.tenant;
+  sel.hidden = !show;
+  if (!show) return;
+  const places = await placeOptions();
+  const states = places.filter((j) => j.level === 'state');
+  if (!states.length) return (sel.hidden = true);
+  sel.innerHTML = '<option value="">All Nigeria</option>' + states.map((st) =>
+    `<option value="${st.id}">${esc(st.name)}</option>` +
+    places.filter((j) => j.level === 'local' && j.parent === st.id)
+      .map((j) => `<option value="${j.id}">&nbsp;&nbsp;${esc(j.name)}</option>`)
+      .join('')).join('');
+  sel.value = Api.jurisdiction;
+  // A stale id (a state that has gone) reads as no pick; drop it rather than
+  // keep filtering every list by something the picker cannot show.
+  if (sel.value !== Api.jurisdiction) Api.jurisdiction = '';
+  sel.title = 'Where to work: a state, or one local government inside it';
+  sel.onchange = () => {
+    Api.jurisdiction = sel.value;
+    location.reload();
+  };
+}
+
 async function ensureChrome() {
   if (!ME) {
     try { ME = await Api.myself(); } catch { /* token dead */ }
@@ -481,6 +524,7 @@ async function ensureChrome() {
     location.hash = '#/platform';
     location.reload();
   } : null;
+  paintStatePicker();
   // Display name only: the sign-in number never reads out in the topbar.
   $('#user-badge').textContent = `${ME.username || 'me'} · ${ME.role}`;
   refreshBell();

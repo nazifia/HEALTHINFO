@@ -16,6 +16,10 @@ const Api = (() => {
   // The organization's display name, kept beside the slug so the chrome can
   // name it without another call. Empty until a sign-in or a switch names it.
   let tenantName = localStorage.getItem('tenant_name') || '';
+  // The state (or LGA) a platform admin is working in, sent as
+  // X-Jurisdiction-ID. Empty means the whole country. A health authority seat
+  // ignores it beyond its own patch — the server refuses to widen on it.
+  let jurisdiction = localStorage.getItem('jurisdiction_id') || '';
   let access = localStorage.getItem('access');
   let refresh = localStorage.getItem('refresh');
   let me = null; // cached /api/users/me/ for the session
@@ -46,6 +50,7 @@ const Api = (() => {
     // to whoever used this browser last, and the server resolves the user's
     // own organization (or the host's) instead.
     const h = withTenant ? { 'X-Tenant-ID': tenant } : {};
+    if (withTenant && jurisdiction) h['X-Jurisdiction-ID'] = jurisdiction;
     if (json) h['Content-Type'] = 'application/json';
     if (auth && access) h['Authorization'] = 'Bearer ' + access;
     return h;
@@ -115,6 +120,8 @@ const Api = (() => {
     set base(v) { base = v.replace(/\/+$/, '') || DEFAULT_BASE; localStorage.setItem('api_base', base); },
     get tenant() { return tenant; },
     set tenant(v) { tenant = v.trim(); localStorage.setItem('tenant_slug', tenant); },
+    get jurisdiction() { return jurisdiction; },
+    set jurisdiction(v) { jurisdiction = String(v || '').trim(); localStorage.setItem('jurisdiction_id', jurisdiction); },
     get tenantName() { return tenantName; },
     set tenantName(v) { tenantName = (v || '').trim(); localStorage.setItem('tenant_name', tenantName); },
     get isLoggedIn() { return !!access; },
@@ -188,6 +195,9 @@ const Api = (() => {
       localStorage.setItem('tenant_slug', tenant);
       tenantName = data.tenant_name || '';
       localStorage.setItem('tenant_name', tenantName);
+      // The picked state belongs to the session that picked it, not the browser.
+      jurisdiction = '';
+      localStorage.removeItem('jurisdiction_id');
       return data.role;
     },
 

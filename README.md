@@ -78,6 +78,13 @@ All dashboards accept `?from=YYYY-MM-DD&to=YYYY-MM-DD` to window the rollup.
   diseases/medications, search trend, content gaps. Tenant-scoped.
 - `GET /api/analytics/platform/` — super-admin: tenant/user/search totals,
   searches per tenant, search trend, ADR rollup.
+- **Working in one state** — send `X-Jurisdiction-ID: <jurisdiction id>` (or
+  `?jurisdiction=`) on any cross-tenant call. Every platform rollup,
+  `/api/tenants/` and `/api/users/` then narrow to that jurisdiction and
+  everything under it, so a platform admin can pick a state and drill from the
+  government rollup down to the facility they open and its patients. A health
+  authority seat may narrow inside its own patch with the same header and can
+  never be widened past it.
 - `GET /api/analytics/funnel/` — search→view→case counts + conversion ratios.
 - `GET /api/analytics/retention/` — distinct active users per day (30d).
 - `GET /api/analytics/benchmark/` — your case load vs anonymized platform median.

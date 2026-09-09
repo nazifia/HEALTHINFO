@@ -10,6 +10,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from config.responses import success
 
 from apps.tenants.models import Jurisdiction, Tenant
+from apps.tenants.scope import scope_to_selection
 
 from .models import Role, User
 from .permissions import PATIENT_ROLES, IsTenantMember
@@ -113,7 +114,9 @@ class UserViewSet(viewsets.ModelViewSet):
             # (no tenant on the request) is the platform-wide list theirs.
             tenant = getattr(self.request, "tenant", None)
             if tenant is None:
-                return User.objects.all()
+                # Outside an organization the list is platform-wide, or one
+                # state's when they have picked a state to work in.
+                return scope_to_selection(User.objects.all(), self.request)
             return User.objects.filter(tenant=tenant)
         # The patient seat is not staff: their own row and nobody else's, so
         # the list cannot be used to read the facility's staff directory.

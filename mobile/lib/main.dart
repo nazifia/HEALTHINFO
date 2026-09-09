@@ -22,6 +22,7 @@ final navigatorKey = GlobalKey<NavigatorState>();
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await loadTenant();
+  await loadJurisdiction();
   await api.loadTokens();
   // Arms the idle watcher from the tenant's setting. Not awaited: the app
   // opens on the last known window and tightens to the real one when the

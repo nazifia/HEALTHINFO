@@ -50,6 +50,29 @@ Future<void> loadTenant() async {
 /// who opens or leaves an organization gets the menu for where they now are.
 final ValueNotifier<int> tenantChanged = ValueNotifier<int>(0);
 
+// The state (or local government) a platform admin is working in, sent as
+// X-Jurisdiction-ID beside the tenant header. Empty is the whole country.
+// A health authority seat is never widened by it: the server keeps such a seat
+// inside its own patch whatever the header says (apps/tenants/scope.py).
+String jurisdictionId = '';
+
+const String _kJurisdiction = 'jurisdiction_id';
+
+Future<void> loadJurisdiction() async {
+  final p = await SharedPreferences.getInstance();
+  jurisdictionId = p.getString(_kJurisdiction) ?? '';
+}
+
+/// Pick the state to work in (empty clears it back to the whole country).
+Future<void> setJurisdiction(String id) async {
+  jurisdictionId = id.trim();
+  final p = await SharedPreferences.getInstance();
+  await p.setString(_kJurisdiction, jurisdictionId);
+  // Same notifier as the organization switch: every screen that redraws for
+  // one redraws for the other, because both change what its rows are of.
+  tenantChanged.value++;
+}
+
 Future<void> setTenant(String slug, {String name = ''}) async {
   tenantSlug = slug.trim();
   tenantName = name.trim();

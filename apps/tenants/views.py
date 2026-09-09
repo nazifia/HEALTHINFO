@@ -12,6 +12,7 @@ from apps.governance.serializers import AuditLogSerializer
 from config.responses import success
 
 from .models import MAX_IDLE_LOGOUT_MINUTES, Tenant
+from .scope import scope_to_selection
 from .serializers import TenantSerializer
 
 
@@ -34,7 +35,14 @@ class TenantViewSet(viewsets.ModelViewSet):
     filterset_fields = ("subscription_status", "status", "kind")
 
     def get_queryset(self):
-        return Tenant.objects.annotate(user_count=Count("users")).order_by("name")
+        """Every facility, narrowed to the picked state when there is one.
+
+        Picking a state is how a platform admin works one patch: the list they
+        open a facility from is that state's, so the drill from a government
+        rollup down to a patient record stays inside the state they picked.
+        """
+        qs = Tenant.objects.annotate(user_count=Count("users")).order_by("name")
+        return scope_to_selection(qs, self.request, field="jurisdiction")
 
     def _by_kind(self, request, kind):
         """Kind-scoped list. Same shape as /tenants/ so paging and filters hold."""
