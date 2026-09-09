@@ -332,6 +332,7 @@ const PLATFORM = [
   { key: 'appointments',  label: 'Appointment Stats',  path: '/api/analytics/platform/appointments/', dates: true },
   { key: 'consultations', label: 'Visit Stats',        path: '/api/analytics/platform/consultations/', dates: true },
   { key: 'prescriptions', label: 'Prescribing Stats', path: '/api/analytics/platform/prescriptions/', dates: true },
+  { key: 'sales',         label: 'State Sales',        path: '/api/analytics/platform/sales/', dates: true, csv: true },
 ];
 
 /* The trading reports (/api/reports/*). Kept out of ANALYTICS because the API
@@ -405,6 +406,7 @@ const SEAT_NAV = {
     ['#/platform/cases', 'chart', 'Case Stats'],
     ['#/platform/immunizations', 'chart', 'Immunization Stats'],
     ['#/platform/facility', 'chart', 'Facility Stats'],
+    ['#/platform/sales', 'chart', 'State Sales'],
     ['#/platform', 'chart', 'All Metrics'],
   ]],
 };
@@ -477,8 +479,8 @@ function navHtml() {
    open an organization from, the user list — down to that state and its local
    governments. The server refuses to widen a health authority seat on it, so
    only the platform owner is offered the control.
-   A state's local governments hang under it, indented, and pick the same way:
-   the header carries any jurisdiction id and the server narrows to that id's
+   A state's local governments sit in the same list and pick the same way: the
+   header carries any jurisdiction id and the server narrows to that id's
    subtree, so an LGA is one more step down the same drill. */
 let PLACES = null;
 
@@ -491,26 +493,239 @@ async function placeOptions() {
   return PLACES;
 }
 
+/* How one jurisdiction reads in a picker. Local government names repeat across
+   states — there is an Ifelodun in Kwara and another in Osun — so a local
+   carries its state, or two rows read identically and picking by name is a
+   coin toss. Exported for the self-check in places.test.js. */
+function placeLabel(j, all) {
+  if (j.level !== 'local') return `${j.name} · ${j.level}`;
+  const st = all.find((p) => p.id === j.parent);
+  return `${j.name} · ${st ? st.name : 'local'}`;
+}
+
+/* Label → id for every option of a <select> that carries one, in the order the
+   select lists them. The blank "nothing chosen" row is not a choice, so it is
+   left out; a label two rows share keeps the first, which is why every long
+   list built here labels its rows uniquely (see placeLabel). */
+function optionIndex(sel) {
+  const byLabel = new Map();
+  for (const o of sel.options) {
+    const label = String(o.textContent ?? '').trim();
+    if (o.value && label && !byLabel.has(label)) byLabel.set(label, String(o.value));
+  }
+  return byLabel;
+}
+
+/* True for anything that is not a letter or a digit, i.e. the character before
+   a new word: spaces, hyphens, slashes, commas, the middle dot a label joins on. */
+const isWordBoundary = (c) => !/[a-z0-9]/.test(c);
+
+/* True when every character of `q` shows up in `text` in order, gaps allowed. */
+function isSubsequence(text, q) {
+  let i = 0;
+  for (const c of text) {
+    if (i === q.length) break;
+    if (c === q[i]) i++;
+  }
+  return i === q.length;
+}
+
+/* How well `label` answers query `q`, lower being better; null means no match.
+   Exact beats prefix beats word start beats mid-word, and only then a fuzzy
+   subsequence ("ifkw" finding "Ifelodun · Kwara"), so a typo-tolerant match
+   never outranks a literal one. Same ranking the Flutter app's picker uses, so
+   typing the same letters finds the same row on either client. */
+function matchScore(label, q) {
+  const l = label.toLowerCase();
+  if (l === q) return 0;
+  if (l.startsWith(q)) return 1;
+  const at = l.indexOf(q);
+  if (at > 0) return isWordBoundary(l[at - 1]) ? 2 : 3;
+  return isSubsequence(l, q) ? 4 : null;
+}
+
+/* Labels matching `q`, best first; ties keep the caller's original order, which
+   is why the jurisdictions come out grouped by state. Empty query lists them
+   all. Split out so the ranking can be checked without driving the menu. */
+function rankMatches(labels, q) {
+  const query = q.trim().toLowerCase();
+  if (!query) return labels;
+  const scored = [];
+  labels.forEach((label, i) => {
+    const s = matchScore(label, query);
+    if (s !== null) scored.push([s, i, label]);
+  });
+  scored.sort((a, b) => (a[0] - b[0]) || (a[1] - b[1]));
+  return scored.map((s) => s[2]);
+}
+
+// ponytail: 50 rows is what a menu can show before it is a scroll hunt again,
+// and the only per-keystroke cost here is painting them. Raise it the day a
+// list needs more visible at once than a screenful.
+const MENU_ROWS = 50;
+
+let menuSeq = 0;
+
+/* Swap a long <select> for a search box: the user types, the menu below ranks
+   what is left, and a hidden field of the same name carries the chosen id — so
+   every caller and every FormData reads what it read before. 37 states and 774
+   local governments stop being a scroll hunt.
+   Text that matches no row leaves the id empty: a half-typed name is not a
+   pick. The hidden field fires `change` on every keystroke, so a caller can
+   tell "still typing" (box full, id empty) from "cleared" (both empty). */
+function makeSearchable(sel, { placeholder = 'Type to search…' } = {}) {
+  const byLabel = optionIndex(sel);
+  const labels = [...byLabel.keys()];
+
+  const wrap = document.createElement('span');
+  wrap.className = 'search-select';
+  const box = document.createElement('input');
+  box.type = 'text';
+  box.autocomplete = 'off';
+  box.placeholder = placeholder;
+  box.className = sel.className;
+  box.setAttribute('role', 'combobox');
+  box.setAttribute('aria-autocomplete', 'list');
+  box.setAttribute('aria-expanded', 'false');
+  if (sel.required) box.required = true;
+  // Not data-rel: that is the hook wireRelFields looks the select up by, and a
+  // box carrying it would be found again and read for options it has not got.
+  for (const a of ['aria-label', 'title']) {
+    if (sel.hasAttribute(a)) box.setAttribute(a, sel.getAttribute(a));
+  }
+  const menu = document.createElement('div');
+  menu.className = 'search-menu';
+  menu.id = `sm-${++menuSeq}`;
+  menu.setAttribute('role', 'listbox');
+  menu.hidden = true;
+  box.setAttribute('aria-controls', menu.id);
+
+  const hidden = document.createElement('input');
+  hidden.type = 'hidden';
+  hidden.name = sel.name;
+  hidden.value = sel.value || '';
+  for (const [label, id] of byLabel) if (id === hidden.value) box.value = label;
+
+  let shown = [];   // labels the menu is listing right now
+  let active = -1;  // the one the arrow keys are on, -1 for none
+
+  const close = () => {
+    menu.hidden = true;
+    active = -1;
+    box.setAttribute('aria-expanded', 'false');
+  };
+
+  const paint = () => {
+    const all = rankMatches(labels, box.value);
+    shown = all.slice(0, MENU_ROWS);
+    if (!shown.length) {
+      menu.innerHTML = '<div class="search-none">No match</div>';
+    } else {
+      menu.innerHTML = shown.map((l, i) =>
+        `<div class="search-opt${i === active ? ' active' : ''}" role="option"`
+        + ` aria-selected="${i === active}" data-i="${i}">${esc(l)}</div>`).join('')
+        + (all.length > shown.length
+          ? `<div class="search-none">${all.length - shown.length} more — keep typing</div>` : '');
+    }
+    menu.hidden = false;
+    box.setAttribute('aria-expanded', 'true');
+  };
+
+  const announce = () => hidden.dispatchEvent(new Event('change', { bubbles: true }));
+
+  const pick = (label) => {
+    if (label == null) return;
+    box.value = label;
+    hidden.value = byLabel.get(label) || '';
+    close();
+    announce();
+  };
+
+  box.oninput = () => {
+    // A label typed out in full counts even before the menu is clicked, so
+    // pasting one and tabbing away still resolves.
+    hidden.value = byLabel.get(box.value.trim()) || '';
+    active = -1;
+    paint();
+    announce();
+  };
+  box.onfocus = paint;
+  // mousedown on a row runs before this, and cancels the blur, so closing here
+  // never eats the click.
+  box.onblur = close;
+  box.onkeydown = (e) => {
+    if (e.key === 'Escape') return close();
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (menu.hidden) return paint();
+      if (!shown.length) return;
+      active += e.key === 'ArrowDown' ? 1 : -1;
+      if (active >= shown.length) active = 0;
+      if (active < 0) active = shown.length - 1;
+      return paint();
+    }
+    if (e.key === 'Enter') {
+      // Only when the menu is open with something under the cursor: otherwise
+      // Enter is the user submitting the form, not choosing a row.
+      if (menu.hidden || active < 0) return;
+      e.preventDefault();
+      pick(shown[active]);
+    }
+  };
+  menu.onmousedown = (e) => {
+    const opt = e.target.closest?.('[data-i]');
+    if (!opt) return;
+    e.preventDefault();
+    pick(shown[Number(opt.dataset.i)]);
+  };
+
+  // Anything that fills this field from elsewhere — carryPatientFields reading
+  // it off the patient's record — writes to the hidden input, because that is
+  // what form.elements still answers with. The box has to follow, or the value
+  // is set and invisible.
+  hidden.showPick = (value) => {
+    const want = String(value ?? '');
+    hidden.value = '';
+    box.value = '';
+    for (const [label, id] of byLabel) {
+      if (id === want) { hidden.value = id; box.value = label; break; }
+    }
+    close();
+  };
+
+  sel.replaceWith(wrap);
+  wrap.append(box, menu, hidden);
+  return { box, menu, hidden };
+}
+
 async function paintStatePicker() {
-  const sel = $('#state-badge');
+  const slot = $('#state-badge');
   const show = ME?.role === 'super_admin' && !Api.tenant;
-  sel.hidden = !show;
-  if (!show) return;
+  slot.hidden = !show;
+  // Built once. ensureChrome runs on every navigation, and the picker has
+  // replaced its own <select> by the time it is asked a second time.
+  const sel = slot.querySelector('select');
+  if (!show || !sel) return;
   const places = await placeOptions();
   const states = places.filter((j) => j.level === 'state');
-  if (!states.length) return (sel.hidden = true);
-  sel.innerHTML = '<option value="">All Nigeria</option>' + states.map((st) =>
+  if (!states.length) return (slot.hidden = true);
+  sel.innerHTML = states.map((st) =>
     `<option value="${st.id}">${esc(st.name)}</option>` +
     places.filter((j) => j.level === 'local' && j.parent === st.id)
-      .map((j) => `<option value="${j.id}">&nbsp;&nbsp;${esc(j.name)}</option>`)
+      .map((j) => `<option value="${j.id}">${esc(placeLabel(j, places))}</option>`)
       .join('')).join('');
   sel.value = Api.jurisdiction;
   // A stale id (a state that has gone) reads as no pick; drop it rather than
   // keep filtering every list by something the picker cannot show.
   if (sel.value !== Api.jurisdiction) Api.jurisdiction = '';
-  sel.title = 'Where to work: a state, or one local government inside it';
-  sel.onchange = () => {
-    Api.jurisdiction = sel.value;
+  sel.title = 'Where to work: type a state or a local government. Empty is all Nigeria';
+  const { box, hidden } = makeSearchable(sel, { placeholder: 'All Nigeria' });
+  hidden.onchange = () => {
+    // Half-typed text is not a decision: only a resolved pick, or a box wiped
+    // back to empty, is worth throwing the page away for.
+    if (!hidden.value && box.value.trim()) return;
+    if (hidden.value === Api.jurisdiction) return;
+    Api.jurisdiction = hidden.value;
     location.reload();
   };
 }
@@ -1002,7 +1217,7 @@ async function viewOnboarding() {
   let jurisdictions = [];
   try { jurisdictions = await Api.public('/api/auth/onboarding/jurisdictions/'); } catch { /* optional */ }
   const jOpts = jurisdictions.map((j) =>
-    `<option value="${j.id}">${esc(j.name)} (level ${esc(j.level)})</option>`).join('');
+    `<option value="${j.id}">${esc(placeLabel(j, jurisdictions))}</option>`).join('');
   render(authShell('Register your organization', 'Set up your workspace and admin account', `
     <form id="f">
       <label>Organization name<input name="org_name" required></label>
@@ -1010,7 +1225,7 @@ async function viewOnboarding() {
       <label>Organization type<select name="org_kind"><option value="pharmacy">Pharmacy</option><option value="hospital">Hospital</option></select></label>
       <label>Address<input name="org_address" required></label>
       <label>Contact<input name="org_contact" required></label>
-      ${jOpts ? `<label>Jurisdiction<select name="jurisdiction"><option value="">—</option>${jOpts}</select></label>` : ''}
+      ${jOpts ? `<label>Jurisdiction<select name="jurisdiction"><option value=""></option>${jOpts}</select></label>` : ''}
       <h3 class="auth-section">Admin account</h3>
       <label>Phone<input name="phone" placeholder="08031234567" required></label>
       <label>Email<input name="email" type="email" required></label>
@@ -1018,6 +1233,9 @@ async function viewOnboarding() {
       <button type="submit">Create organization</button>
     </form>`, `
     <p class="muted center"><a href="#/login">Back to sign in</a></p>`));
+  // 774 local governments: type-ahead, not a scroll hunt.
+  const jsel = $('#f').querySelector('select[name="jurisdiction"]');
+  if (jsel) makeSearchable(jsel, { placeholder: 'Type a state or local government' });
   $('#f').onsubmit = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -1555,6 +1773,7 @@ async function viewForm(slug, id, query) {
     wirePickerFields($('#f'));
     wireItemField($('#f'), current.item);
     wireRelFields($('#f'), current);
+    wireRegionField($('#f'), current);
     const drugRows = multiDrug ? wireExtraDrugs(fields) : null;
     $('#f').onsubmit = async (e) => {
       e.preventDefault();
@@ -1705,6 +1924,16 @@ function fieldHtml(name, f, value) {
   if (name === 'item') {
     return `<label data-field="item">${lbl}
       <select name="item"${req} data-items><option value="${esc(v)}">Loading…</option></select>
+      ${help}<em class="field-err"></em></label>`;
+  }
+  // Where the patient lives, held as "LGA, State". Free text spelled it a
+  // different way on every desk — Ikeja / IKEJA / Ikeja LGA — and the rollups
+  // group by this string, so it comes up as a closed list the app fills after
+  // render, same trick as `item`. The Flutter app has always picked it from a
+  // list; this is the web catching up.
+  if (!f.choices && name === 'region') {
+    return `<label data-field="region">${lbl}
+      <select name="region"${req} data-region><option value="${esc(v)}">Loading…</option></select>
       ${help}<em class="field-err"></em></label>`;
   }
   // A scheme and a jurisdiction are short closed lists, so they come up as a
@@ -1894,12 +2123,44 @@ async function wireItemField(form, value) {
       esc(i.name)}${i.unit_price == null ? '' : ` · ${money(i.unit_price)}`}</option>`).join('');
 }
 
+/* Fill the form's region picker, if it has one, from the jurisdiction tree the
+ * app already caches — no second copy of the 774 local governments to keep in
+ * step with the server's. Stored as "LGA, State", which is what the column has
+ * always held and what the analytics group by.
+ * A value already on the record that is not on the list (free text typed
+ * before this was a picker, or a place outside Nigeria) is offered as its own
+ * row, so opening an old record and saving it cannot quietly rewrite it. */
+async function wireRegionField(form, current) {
+  const sel = form.querySelector('[data-region]');
+  if (!sel) return;
+  const places = await placeOptions();
+  const states = new Map(places.filter((j) => j.level === 'state').map((j) => [j.id, j.name]));
+  const regions = places
+    .filter((j) => j.level === 'local' && states.has(j.parent))
+    .map((j) => `${j.name}, ${states.get(j.parent)}`)
+    .sort((a, b) => a.localeCompare(b));
+  const v = String(current.region ?? '').trim();
+  if (!regions.length) {
+    // No tree seeded: a text box beats a picker whose only row is the value
+    // the record already had.
+    sel.replaceWith(Object.assign(document.createElement('input'), {
+      type: 'text', name: 'region', value: v,
+    }));
+    return;
+  }
+  if (v && !regions.includes(v)) regions.unshift(v);
+  sel.innerHTML = '<option value=""></option>' + regions.map((r) =>
+    `<option value="${esc(r)}"${r === v ? ' selected' : ''}>${esc(r)}</option>`).join('');
+  sel.value = v;
+  makeSearchable(sel, { placeholder: 'Type a local government or state' });
+}
+
 /* Where each related picker gets its rows, and how one reads. The jurisdiction
  * list is the public one: a government seat belongs to no organization, so
  * there is no tenant-scoped list to ask. */
 const REL_FIELDS = {
   hmo: ['/api/pharmacy/hmos/', (r) => r.name],
-  jurisdiction: ['/api/auth/onboarding/jurisdictions/', (r) => `${r.name} · ${r.level}`],
+  jurisdiction: ['/api/auth/onboarding/jurisdictions/', placeLabel],
 };
 
 /* Fill the generated form's related selects, if it has any. */
@@ -1922,7 +2183,11 @@ async function wireRelFields(form, current) {
     // its own scheme, so the field is a formality it should not have to fill.
     const v = String(current[name] ?? (rows.length === 1 ? rows[0].id : ''));
     sel.innerHTML = (rows.length === 1 && v ? '' : '<option value=""></option>') + rows.map((r) =>
-      `<option value="${r.id}"${String(r.id) === v ? ' selected' : ''}>${esc(text(r))}</option>`).join('');
+      `<option value="${r.id}"${String(r.id) === v ? ' selected' : ''}>${esc(text(r, rows))}</option>`).join('');
+    // The scheme list is short enough to read; the jurisdictions are not.
+    if (name === 'jurisdiction') {
+      makeSearchable(sel, { placeholder: 'Type a state or local government' });
+    }
   }
 }
 
@@ -1937,6 +2202,9 @@ function carryPatientFields(form, patient) {
     elm.value = value;
     // A <select> ignores a value it has no option for; leave it blank then.
     if (elm.tagName === 'SELECT' && elm.value !== value) elm.value = '';
+    // A searchable picker keeps its value in a hidden input and shows the label
+    // in the box beside it, so both have to move together.
+    elm.showPick?.(value);
   }
 }
 

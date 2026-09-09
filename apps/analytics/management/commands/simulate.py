@@ -29,7 +29,8 @@ from apps.catalog.models import Disease, Medication, Symptom
 from apps.patients.models import Patient
 from apps.tenants.models import Tenant
 
-REGIONS = ["Ikeja, Lagos", "Kano Municipal, Kano", "Bwari, FCT",
+REGIONS = ["Ikeja, Lagos", "Kano Municipal, Kano",
+           "Bwari, Federal Capital Territory",
            "Port Harcourt, Rivers", "Nsukka, Enugu"]
 AGES = ["0-1", "0-5", "6-12", "13-18", "19-40", "41-60", "60+"]
 SEXES = ["M", "F"]

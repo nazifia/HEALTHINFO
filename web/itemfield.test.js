@@ -39,11 +39,28 @@ const Api = {
 // stub: staff read the stock list, an insurer reads names and shelf prices.
 let ME = { role: 'pharmacist' };
 const money = (v) => '₦' + Number(v || 0).toFixed(2);
-const load = () => new Function('Api', 'esc', 'ME', 'money',
-  `${src.slice(from, to)}; return { allItems, wireItemField, wireRelFields };`)(Api, esc, ME, money);
+// placeLabel and makeSearchable live above this slice; both are checked in
+// places.test.js. Here they only have to exist.
+const placeLabel = (j, all) => `${j.name} · ${j.level}`;
+let searchable = [];
+const makeSearchable = (sel) => { searchable.push(sel); };
+// The jurisdiction tree the region picker reads. Two states, three locals, and
+// one local whose state is missing — that last one must not become a region.
+let places = [
+  { id: 1, name: 'Lagos', level: 'state', parent: null },
+  { id: 2, name: 'Kwara', level: 'state', parent: null },
+  { id: 3, name: 'Ikeja', level: 'local', parent: 1 },
+  { id: 4, name: 'Apapa', level: 'local', parent: 1 },
+  { id: 5, name: 'Offa', level: 'local', parent: 2 },
+  { id: 6, name: 'Nowhere', level: 'local', parent: 99 },
+];
+const placeOptions = async () => places;
+global.document = { createElement: () => ({ tag: 'input' }) };
+const load = () => new Function('Api', 'esc', 'ME', 'money', 'placeLabel', 'makeSearchable', 'placeOptions', 'document',
+  `${src.slice(from, to)}; return { allItems, wireItemField, wireRelFields, wireRegionField };`)(Api, esc, ME, money, placeLabel, makeSearchable, placeOptions, global.document);
 
 (async () => {
-  let { allItems, wireItemField, wireRelFields } = load();
+  let { allItems, wireItemField, wireRelFields, wireRegionField } = load();
   const sel = { innerHTML: '' };
   const form = { querySelector: () => sel };
 
@@ -97,6 +114,47 @@ const load = () => new Function('Api', 'esc', 'ME', 'money',
   await wireRelFields(relForm, {});
   assert.ok(relSel.innerHTML.startsWith('<option value=""></option>'));
   assert.ok(!relSel.innerHTML.includes('selected'), 'a choice was made for the user');
+
+  /* ---- the region picker ---------------------------------------------- */
+
+  const regionForm = (sel) => ({ querySelector: (q) => (q === '[data-region]' ? sel : null) });
+  const region = async (current) => {
+    const sel = { innerHTML: '', value: '', replaceWith(n) { this.replaced = n; } };
+    searchable = [];
+    await wireRegionField(regionForm(sel), current);
+    return sel;
+  };
+
+  // Every local government reads as "LGA, State", sorted, with a blank to
+  // leave the field on.
+  let rsel = await region({});
+  assert.ok(rsel.innerHTML.startsWith('<option value=""></option>'));
+  assert.deepStrictEqual(rsel.innerHTML.match(/value="[^"]*"/g),
+    ['value=""', 'value="Apapa, Lagos"', 'value="Ikeja, Lagos"', 'value="Offa, Kwara"']);
+  // A local whose state is not in the tree is not a region anyone can pick.
+  assert.ok(!rsel.innerHTML.includes('Nowhere'), 'an orphan local was offered');
+  // The picker is handed the filled select, not the empty one.
+  assert.deepStrictEqual(searchable, [rsel], 'the region select was not made searchable');
+
+  // A value already on the record is selected, not re-offered.
+  rsel = await region({ region: 'Ikeja, Lagos' });
+  assert.ok(/<option value="Ikeja, Lagos" selected>/.test(rsel.innerHTML));
+  assert.strictEqual((rsel.innerHTML.match(/Ikeja, Lagos/g) || []).length, 2, 'the row was duplicated');
+
+  // Free text typed before this was a picker survives being opened and saved.
+  rsel = await region({ region: 'Ikeja LGA' });
+  assert.ok(/<option value="Ikeja LGA" selected>/.test(rsel.innerHTML),
+            'an off-list value was dropped from the record');
+  assert.ok(rsel.innerHTML.indexOf('Ikeja LGA') < rsel.innerHTML.indexOf('Apapa'),
+            'the record value was buried down the list');
+
+  // No tree seeded: a text box beats a picker with nothing in it.
+  places = [];
+  rsel = await region({ region: 'Somewhere' });
+  assert.strictEqual(rsel.replaced.name, 'region', 'the field lost its name');
+  assert.strictEqual(rsel.replaced.value, 'Somewhere');
+  assert.strictEqual(rsel.replaced.type, 'text');
+  assert.deepStrictEqual(searchable, [], 'an empty list was still made searchable');
 
   console.log('itemfield.test.js ok');
 })();

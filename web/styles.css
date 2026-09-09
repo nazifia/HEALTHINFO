@@ -97,7 +97,32 @@ a.badge:hover { background: rgba(255,255,255,.3); text-decoration: none; }
 .card.unread { border-left: 3px solid var(--danger, #c0392b); }
 .badge.clickable { cursor: pointer; }
 .badge.clickable:hover { background: rgba(255,255,255,.3); }
-/* the state picker is a real <select>, so undo the form-control skin */
+/* the state picker is a search box wearing the badge, so undo the form-control
+   skin — and keep the <select> rule for the moment before the swap */
+input.badge {
+  width: 18ch; appearance: none; cursor: text;
+  background: rgba(255,255,255,.16); font: inherit; font-size: 13px;
+}
+input.badge::placeholder { color: rgba(255,255,255,.75); }
+input.badge:focus { outline: 2px solid #fff; outline-offset: 2px; background: rgba(255,255,255,.28); }
+
+/* the type-ahead menu: the box anchors it, so it hangs over whatever is below
+   instead of pushing the form around as the user types */
+.search-select { position: relative; display: inline-block; width: 100%; }
+.search-select > input { width: 100%; }
+.topbar-actions .search-select { width: auto; }
+.search-menu {
+  position: absolute; z-index: 30; top: calc(100% + 4px); left: 0;
+  min-width: 100%; max-width: min(90vw, 34ch); max-height: 44vh; overflow-y: auto;
+  background: var(--card); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18);
+}
+.topbar-actions .search-menu { left: auto; right: 0; }
+.search-opt { padding: 7px 12px; cursor: pointer; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; font-size: 13px; }
+.search-opt:hover, .search-opt.active { background: var(--brand); color: #fff; }
+.search-none { padding: 7px 12px; font-size: 12px; color: var(--muted); }
 select.badge {
   width: auto; appearance: none; cursor: pointer;
   padding: 0 30px 0 12px;
@@ -410,6 +435,7 @@ details.tbl summary { cursor: pointer; color: var(--muted); font-size: 13px; }
   .topbar-actions { gap: 6px; }
   .badge { max-width: 11ch; font-size: 12px; padding: 0 10px; }
   select.badge { padding-right: 26px; background-position: right 11px center, right 6px center; }
+  input.badge { width: 11ch; }
   /* absolute inside #body: the drawer starts under the topbar whatever its height */
   #sidebar {
     position: absolute; top: 0; bottom: 0; left: 0; z-index: 5;

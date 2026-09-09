@@ -20,9 +20,11 @@ let lastPath = '';
 let reply = [];              // rows the next lookup answers with
 const esc = (v) => String(v ?? '');
 const Api = { list: async (path) => (listCalls++, lastPath = path, { rows: await reply }) };
-const load = new Function('esc', 'Api',
+// placeLabel lives above this slice; the real one is checked in places.test.js.
+const placeLabel = (j, all) => `${j.name} · ${j.level}`;
+const load = new Function('esc', 'Api', 'placeLabel',
   `${src.slice(from, to)}; return { picker, PICKERS, carryPatientFields, patientHitHtml, userHitHtml };`);
-const { picker, PICKERS, carryPatientFields, patientHitHtml, userHitHtml } = load(esc, Api);
+const { picker, PICKERS, carryPatientFields, patientHitHtml, userHitHtml } = load(esc, Api, placeLabel);
 
 const el = () => ({ value: '', textContent: '', innerHTML: '', querySelectorAll: () => [] });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

@@ -398,7 +398,8 @@ class Command(BaseCommand):
             Immunization, LabResult, StockReport, VitalEvent,
         )
         # Valid "LGA, State" regions so the by-state rollups have content.
-        regions = ["Ikeja, Lagos", "Kano Municipal, Kano", "Bwari, FCT",
+        regions = ["Ikeja, Lagos", "Kano Municipal, Kano",
+                   "Bwari, Federal Capital Territory",
                    "Port Harcourt, Rivers"]
         rapid_strep = LabTest.all_objects.filter(
             tenant=tenant, slug="rapid-strep-test"
