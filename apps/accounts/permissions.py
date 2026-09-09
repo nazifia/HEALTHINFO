@@ -12,8 +12,13 @@ WRITE_ROLES = {Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.DOCTOR, Role.PHARMACIST
 REPORT_ROLES = WRITE_ROLES | {Role.NURSE, Role.MIDWIFE, Role.CHEW}
 
 # The patient's own seat. They read their record through /api/portal/, which
-# answers for them and nobody else; the report registers are staff screens and
-# every row on one belongs to some other patient.
+# answers for them and nobody else. Everything else inside a tenant is a staff
+# screen: the report registers are other people's records, and the catalog —
+# diseases, drugs, interactions, lab tests, the reference articles — is the
+# clinicians' working reference, not a patient-facing encyclopedia. So the
+# tenant gate below is default-deny for them, the same way it is for an
+# insurer: a view has to say ``patient_ok = True`` before a patient reaches it,
+# and a new endpoint is closed to them until it does.
 PATIENT_ROLES = {Role.PUBLIC}
 
 # Seats sitting inside a tenant that are not its staff. An insurer reads the
@@ -52,6 +57,8 @@ class IsTenantMember(BasePermission):
         if user.is_super_admin:
             return True
         if user.role in INSURER_ROLES and not getattr(view, "insurer_ok", False):
+            return False
+        if user.role in PATIENT_ROLES and not getattr(view, "patient_ok", False):
             return False
         return request.tenant is not None and user.tenant_id == request.tenant.id
 

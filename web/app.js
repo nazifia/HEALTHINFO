@@ -426,12 +426,12 @@ function navHtml() {
     `<a href="#/notifiable" data-route="/notifiable">${ico('flag')}Notifiable Cases</a>`,
   ];
   let html = `<a href="#/" data-route="/" class="nav-home">${ico('home')}Home</a>`;
-  // A patient reads their own record and nothing else in here: their history,
-  // the lookup tools and the catalog. The report registers belong to staff.
+  // A patient reads their own record and nothing else in here. The catalog and
+  // the lookup tools built on it are the clinicians' reference, and the API
+  // refuses a patient every one of them (IsTenantMember, default-deny for the
+  // patient seat) — so this is the menu telling the truth, not the control.
   if (ME?.role === 'public') {
     return `<a href="#/portal" data-route="/portal" class="nav-home">${ico('activity')}My Health</a>`
-      + navGroup('Tools', tools.join(''))
-      + navGroup('Catalog', groups.Catalog.join(''))
       + navGroup('Account', `<a href="#/profile" data-route="/profile">${ico('users')}Profile</a>`);
   }
   html += navGroup('Tools', tools.join(''));

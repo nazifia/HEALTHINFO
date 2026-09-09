@@ -4,7 +4,8 @@ Regression guard: viewsets used to set `queryset = Model.objects.all()` at
 class-body level, which froze the tenant-scoped manager to an empty `.none()`
 at import time (no tenant bound yet). Lists came back empty for everyone.
 TenantQuerysetMixin re-runs the manager per request; these tests fail if that
-regresses, and also pin the public-role published-only filter (MRO ordering).
+regresses. The catalog is staff reference material, so they also pin that the
+patient seat is refused it outright.
 """
 import pytest
 from rest_framework.test import APIClient
@@ -41,13 +42,18 @@ def test_list_returns_tenant_rows(env):
     assert r.data["count"] == 2
 
 
-def test_public_sees_only_published(env):
-    t, _ = env
+def test_a_patient_is_refused_the_catalog(env):
+    """The catalog is the clinicians' reference, not a patient encyclopedia."""
+    t, disease = env
     public = User.objects.create(phone="+2348039990002", tenant=t, role=Role.PUBLIC)
     client = APIClient()
     client.force_authenticate(public)
 
-    r = _get(client, t.slug)
-    assert r.status_code == 200
-    names = {row["name"] for row in r.data["results"]}
-    assert names == {"Malaria"}  # draft "Cholera" hidden
+    assert _get(client, t.slug).status_code == 403
+    # Not merely the disease list: everything built on the catalog is shut,
+    # including the tools that read it under another path.
+    for path in ("/api/medications/", "/api/interactions/", "/api/lab-tests/",
+                 "/api/articles/", "/api/search/?q=malaria",
+                 "/api/interactions/check/", "/api/differential/",
+                 f"/api/graph/diseases/{disease.id}/"):
+        assert client.get(path, HTTP_X_TENANT_ID=t.slug).status_code == 403, path

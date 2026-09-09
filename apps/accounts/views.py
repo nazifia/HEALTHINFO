@@ -12,7 +12,7 @@ from config.responses import success
 from apps.tenants.models import Jurisdiction, Tenant
 
 from .models import Role, User
-from .permissions import IsTenantMember
+from .permissions import PATIENT_ROLES, IsTenantMember
 from .serializers import (
     LoginSerializer, OnboardingSerializer, PasswordResetConfirmSerializer,
     PasswordResetSerializer, RegisterSerializer, UserSerializer,
@@ -96,6 +96,10 @@ class OnboardingViewSet(viewsets.ViewSet):
 class UserViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated, IsTenantMember]
+    # A patient reaches this one to keep their own contact details current.
+    # The staff list itself is not theirs to read, so get_queryset narrows them
+    # to their own row and this stays the only tenant endpoint they open.
+    patient_ok = True
     # Staff link a patient record to its portal account by searching this list,
     # so it answers ?search= on the three things anyone would type. No password
     # or token field is searchable — only what the serializer already returns.
@@ -111,6 +115,10 @@ class UserViewSet(viewsets.ModelViewSet):
             if tenant is None:
                 return User.objects.all()
             return User.objects.filter(tenant=tenant)
+        # The patient seat is not staff: their own row and nobody else's, so
+        # the list cannot be used to read the facility's staff directory.
+        if user.role in PATIENT_ROLES:
+            return User.objects.filter(pk=user.pk)
         # Tenant-scoped: only see users of your own tenant.
         return User.objects.filter(tenant=user.tenant)
 

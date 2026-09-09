@@ -226,9 +226,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _Section('Staff commissions', Icons.percent_outlined, CommissionsScreen()),
   ]);
 
-  // A patient's own record — their home, not a section below one. Every
-  // clinical registry 403s for them, so the reference material and their own
-  // history is the whole app.
+  // A patient's own record — their home, and the whole app for them. Every
+  // other tenant screen 403s for the patient seat, the catalog and the lookup
+  // tools built on it included, so nothing else is worth a menu row.
   static const _myHealthHome =
       _Section('My health', Icons.favorite_outline, MyHealthScreen());
 
@@ -376,8 +376,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return;
     }
     if (role == 'public') {
-      _setGroups([_catalogGroup, _toolsGroup, _accountGroup],
-          home: _myHealthHome);
+      _setGroups([_accountGroup], home: _myHealthHome);
       return;
     }
     if (role == 'hmo') {
