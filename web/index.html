@@ -17,19 +17,26 @@
 <body>
   <div id="app">
     <header id="topbar" hidden>
-      <button id="nav-toggle" aria-label="Menu">&#9776;</button>
+      <button id="nav-toggle" aria-label="Menu" aria-controls="sidebar"
+              aria-expanded="false">&#9776;</button>
       <span class="brand">HEALTH INFO</span>
       <span class="spacer"></span>
-      <select id="state-badge" class="badge" hidden
-              aria-label="State to work in"></select>
-      <span id="tenant-badge" class="badge"></span>
-      <a href="#/notifications" id="bell" class="badge" hidden
-         aria-label="Notifications"></a>
-      <a href="#/profile" id="user-badge" class="badge"></a>
-      <button id="theme-toggle" class="badge" aria-label="Toggle dark mode"></button>
+      <div class="topbar-actions">
+        <select id="state-badge" class="badge" hidden
+                aria-label="State to work in"></select>
+        <span id="tenant-badge" class="badge"></span>
+        <a href="#/notifications" id="bell" class="badge badge-icon" hidden
+           aria-label="Notifications"></a>
+        <a href="#/profile" id="user-badge" class="badge"></a>
+        <button id="theme-toggle" class="badge badge-icon"
+                aria-label="Toggle dark mode"></button>
+      </div>
     </header>
     <div id="body">
       <nav id="sidebar" hidden></nav>
+      <!-- Sibling of the drawer so CSS alone shows it while the drawer is
+           open; the click handler only has to close. -->
+      <div id="nav-scrim"></div>
       <main id="main"></main>
     </div>
   </div>

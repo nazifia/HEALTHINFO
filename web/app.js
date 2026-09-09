@@ -116,7 +116,13 @@ const RESOURCES = {
   'procedures':        { title: 'Procedures',         group: 'Catalog', workflow: true,  search: true,  graph: 'procedures' },
   'lab-tests':         { title: 'Lab Tests',          group: 'Catalog', workflow: true,  search: true },
   'articles':          { title: 'Articles',           group: 'Catalog', workflow: true,  search: true },
-  'case-reports':      { title: 'Case Reports',       group: 'Reports', report: true },
+  // An epidemic-prone case is owed a notification up the IDSR tier within 24
+  // hours; sending it stamps the case and takes it off the worklist. The
+  // stamp is what hides the button — a second call would not move the clock
+  // back, but the case is no longer owed anything.
+  'case-reports':      { title: 'Case Reports',       group: 'Reports', report: true,
+                          actions: [{ name: 'notify', label: 'Mark notified up the IDSR tier',
+                                      hideWhen: 'notified_at' }] },
   'adverse-reactions': { title: 'Adverse Reactions',  group: 'Reports', report: true },
   'lab-results':       { title: 'Lab Results',        group: 'Reports', report: true },
   'immunizations':     { title: 'Immunizations',      group: 'Reports', report: true },
@@ -132,7 +138,14 @@ const RESOURCES = {
                           actions: [{ name: 'cancel', label: 'Cancel prescription', danger: true,
                                       when: ['prescribed', 'partially_dispensed'] }] },
   'pharmacy-items':         { title: 'Stock Items',     group: 'Pharmacy', path: 'pharmacy/items',           roles: 'admin', search: true },
-  'pharmacy-batches':       { title: 'Stock Batches',   group: 'Pharmacy', path: 'pharmacy/batches',         roles: 'staff', search: true, readOnly: true },
+  // A batch is read-only as a record — stock arrives through the item's
+  // receive and leaves through a sale — but the shelf can still be wrong.
+  // Correcting it and writing it off are the same endpoint; ``write_off``
+  // is what tells shrinkage from a miscount in the ledger.
+  'pharmacy-batches':       { title: 'Stock Batches',   group: 'Pharmacy', path: 'pharmacy/batches',         roles: 'staff', search: true, readOnly: true,
+                              actions: [{ name: 'adjust', label: 'Correct counted quantity', ask: 'quantity,reason', adminOnly: true },
+                                        { name: 'adjust', label: 'Write this batch off', ask: 'reason', danger: true, adminOnly: true,
+                                          body: { quantity: 0, write_off: true } }] },
   'pharmacy-movements':     { title: 'Stock Ledger',    group: 'Pharmacy', path: 'pharmacy/movements',       roles: 'staff', readOnly: true },
   'pharmacy-suppliers':     { title: 'Suppliers',       group: 'Pharmacy', path: 'pharmacy/suppliers',       roles: 'admin', search: true },
   'pharmacy-orders':        { title: 'Purchase Orders', group: 'Pharmacy', path: 'pharmacy/purchase-orders', roles: 'staff', search: true, extra: 'purchase',
@@ -546,10 +559,22 @@ function authChrome() {
   $('#sidebar').hidden = true;
 }
 
+/* The mobile drawer is one piece of state: the class that slides it in (the
+   scrim follows it in CSS) and the toggle's aria-expanded. ``refocus`` is for
+   a deliberate open or dismiss — keyboard and screen-reader users land on the
+   menu, then get sent back to the button — and stays off for the automatic
+   close on navigation, which must not steal focus from the new page. */
+function setNav(open, refocus) {
+  $('#sidebar').classList.toggle('open', open);
+  $('#nav-toggle').setAttribute('aria-expanded', String(open));
+  if (refocus) (open ? $('#sidebar').querySelector('a, summary') : $('#nav-toggle'))?.focus();
+}
+const navOpen = () => $('#sidebar').classList.contains('open');
+
 function render(html) {
   $('#main').innerHTML = html;
   $('#main').scrollTop = 0;
-  $('#sidebar').classList.remove('open');
+  setNav(false);
 }
 
 const spinner = () => render('<div class="loading">Loading…</div>');
@@ -750,13 +775,16 @@ document.addEventListener('pointermove', (e) => {
 /* --------------------------------------------------- generic JSON renderer */
 
 // Renders any stats payload: scalars -> tiles, object-arrays -> tables, nesting -> sections.
-function renderData(data, depth = 0) {
+/* ``linkFor`` is for the reports that are worklists rather than statistics:
+   a row that names a record links to it, so the reader can act on the row
+   instead of hunting the record down in its own list. */
+function renderData(data, depth = 0, linkFor = null) {
   if (data === null || typeof data !== 'object') return `<p class="big-val">${esc(fmtVal(data))}</p>`;
   if (Array.isArray(data)) {
     if (!data.length) return '<p class="muted">No data.</p>';
     if (typeof data[0] === 'object' && data[0] !== null) {
       const c = chartable(data);
-      return c ? chartHtml(data, c) : tableHtml(data);
+      return c ? chartHtml(data, c) : tableHtml(data, linkFor);
     }
     return `<ul>${data.map((v) => `<li>${esc(fmtVal(v))}</li>`).join('')}</ul>`;
   }
@@ -771,7 +799,7 @@ function renderData(data, depth = 0) {
       `<div class="tile"><span class="tile-label">${esc(label(k))}</span><span class="tile-val">${esc(fmtVal(v))}</span></div>`).join('')}</div>`;
   }
   for (const { k, v } of sections) {
-    html += `<section class="sub"><h${Math.min(3 + depth, 5)}>${esc(label(k))}</h${Math.min(3 + depth, 5)}>${renderData(v, depth + 1)}</section>`;
+    html += `<section class="sub"><h${Math.min(3 + depth, 5)}>${esc(label(k))}</h${Math.min(3 + depth, 5)}>${renderData(v, depth + 1, linkFor)}</section>`;
   }
   return html || '<p class="muted">No data.</p>';
 }
@@ -1171,6 +1199,16 @@ function reportSummaryHtml(slug, rows) {
    own claims) gets the record and none of the buttons the API would refuse. */
 const canActRes = (res) => res.group !== 'Pharmacy' || isPharmacyStaff();
 
+/* Module actions (dispensing, claims, notifications): each POSTs to its own
+   endpoint. Offer only the ones this record can actually take — the API
+   rejects the rest, so a button that always fails is a trap rather than a
+   feature. ``when`` is the states that allow it, ``hideWhen`` a field whose
+   presence means it has already been done. */
+const visibleActions = (res, obj) => (res.actions || []).filter((a) =>
+  canActRes(res) && (!a.adminOnly || isPharmacyAdmin())
+  && (!a.when || a.when.includes(obj.status))
+  && (!a.hideWhen || !obj[a.hideWhen]));
+
 // ``createOnly`` resources (the cash drawer) are made and then only acted on:
 // the list still offers "+ New", the detail page offers no edit or delete.
 function canWriteRes(slug, res) {
@@ -1335,15 +1373,10 @@ async function viewDetail(slug, id) {
           <button class="btn danger" data-ta="suspend">Suspend / Reactivate</button>
         </div><div id="open-log-out"></div></div>`;
     }
-    // Module actions (dispensing, claims, orders): each POSTs to its own
-    // endpoint; ``ask`` collects the one value the endpoint needs.
-    // Offer only the transitions this record's state actually allows — the API
-    // rejects the rest, so a button that always fails is just a trap.
-    const acts = (res.actions || []).filter((a) =>
-      canActRes(res) && (!a.adminOnly || isPharmacyAdmin())
-      && (!a.when || a.when.includes(obj.status)));
+    const acts = visibleActions(res, obj);
     const actsHtml = acts.map((a) =>
-      `<button class="btn${a.danger ? ' danger' : ''}" data-pa="${a.name}" data-ask="${a.ask || ''}" data-choose="${a.choose || ''}">${esc(a.label)}</button>`).join('');
+      `<button class="btn${a.danger ? ' danger' : ''}" data-pa="${a.name}" data-ask="${a.ask || ''}" data-choose="${a.choose || ''}"
+        data-body="${a.body ? esc(JSON.stringify(a.body)) : ''}">${esc(a.label)}</button>`).join('');
     if (res.receipt) actions += `<button id="receipt" class="btn ghost">Print receipt</button>`;
     // Filing a record against the one on screen. The links travel as query
     // params so the new-record form opens with them already filled in. A drug
@@ -1383,7 +1416,9 @@ async function viewDetail(slug, id) {
     }
     for (const b of document.querySelectorAll('[data-pa]')) {
       b.onclick = async () => {
-        const body = {};
+        // ``body`` is what the action always sends — the half of the call the
+        // label already states, so the user is not prompted for it.
+        const body = b.dataset.body ? JSON.parse(b.dataset.body) : {};
         // ``ask`` is one key, or several comma-separated — an optional one
         // left blank (a drawer's closing note) stays out of the body.
         for (const key of (b.dataset.ask || '').split(',').filter(Boolean)) {
@@ -2100,9 +2135,14 @@ async function viewAnalytics(registry, prefix, key) {
     for (const k of ['from', 'to', 'days', 'year', 'month']) if (fd.get(k)) q[k] = fd.get(k);
     return q;
   };
+  // The IDSR report carries the 24-hour worklist: one row per case still
+  // owed a notification. Those rows carry the case id — the daily summary
+  // rows beside them do not — so they open the case, where the button that
+  // records the notification lives.
+  const rowLink = key === 'idsr' ? (r) => (r.id ? `#/r/case-reports/${r.id}` : null) : null;
   const load = async () => {
     $('#out').innerHTML = '<div class="loading">Loading…</div>';
-    try { $('#out').innerHTML = renderData(await Api.get(m.path, params())); }
+    try { $('#out').innerHTML = renderData(await Api.get(m.path, params()), 0, rowLink); }
     catch (err) { $('#out').innerHTML = `<p class="err">${esc(err.message)}</p>`; }
   };
   $('#f').onsubmit = (e) => { e.preventDefault(); load(); };
@@ -2276,6 +2316,10 @@ async function viewPharmacy() {
       // dropped everyone square with us.
       Api.get('/api/customers/debtors/').catch(() => []),
     ]);
+    // Already past its expiry date, not merely close to it: expired stock is
+    // still counted as stock on hand until it is written off, which is what
+    // makes the valuation above it wrong.
+    const expired = expiring.filter((b) => b.expiry_date && b.expiry_date < today);
     const tile = (label, value) =>
       `<div class="tile"><span class="tile-label">${esc(label)}</span><span class="tile-val">${esc(value)}</span></div>`;
     render(`
@@ -2299,6 +2343,8 @@ async function viewPharmacy() {
         })), (r) => `#/r/pharmacy-items/${r.id}`) : '<p class="muted">Nothing to reorder.</p>'}
       </div>
       <div class="card"><h3>Expiring within 60 days (${expiring.length})</h3>
+        ${expired.length && isPharmacyAdmin() ? `<div class="actions">
+          <button id="write-off-expired" class="btn danger">Write off ${expired.length} expired batch(es)</button></div>` : ''}
         ${expiring.length ? tableHtml(expiring.map((b) => ({
           id: b.id, item: b.item_name, batch: b.batch_number,
           expiry_date: b.expiry_date, quantity: b.quantity,
@@ -2317,6 +2363,16 @@ async function viewPharmacy() {
           outstanding: money(h.outstanding),
         }))) : '<p class="muted">No claims yet.</p>'}
       </div>`);
+    if ($('#write-off-expired')) {
+      $('#write-off-expired').onclick = async () => {
+        if (!confirm(`Take ${expired.length} expired batch(es) off the shelf? Each is written off on its own, and none of it comes back.`)) return;
+        try {
+          const r = await Api.post('/api/pharmacy/batches/write-off-expired/');
+          toast(r?.message || 'Done.');
+          viewPharmacy();
+        } catch (e) { toast(e.message, true); }
+      };
+    }
   } catch (e) { errorBox(e); }
 }
 
@@ -3123,7 +3179,19 @@ function route() {
 }
 
 window.addEventListener('hashchange', () => { vizTip().hidden = true; route(); });
-$('#nav-toggle').onclick = () => $('#sidebar').classList.toggle('open');
+$('#nav-toggle').onclick = () => setNav(!navOpen(), true);
+// Tapping the page behind the drawer dismisses it; the scrim also swallows
+// that tap, so the control under it is not fired by the same press.
+$('#nav-scrim').onclick = () => setNav(false, true);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && navOpen()) setNav(false, true);
+});
+// Widened past the breakpoint the sidebar is static again: drop the open
+// state so aria-expanded doesn't claim a drawer that is no longer there.
+matchMedia('(max-width: 760px)').addEventListener('change', () => setNav(false));
+// Re-picking the page you are already on fires no hashchange, so nothing
+// re-renders and the drawer would stay over the page it just took you to.
+$('#sidebar').addEventListener('click', (e) => { if (e.target.closest('a')) setNav(false); });
 $('#sidebar').addEventListener('toggle', e => {
   const g = e.target.dataset?.group;
   if (!g) return;

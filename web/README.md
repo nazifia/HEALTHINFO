@@ -86,6 +86,14 @@ CORS_ALLOWED_ORIGINS=https://<your-project>.web.app,https://<your-project>.fireb
   column + 1–4 numeric columns → chart; anything wider stays a table). Hover
   tooltips everywhere; a "Table view" toggle under every chart keeps values
   reachable without color or hover.
+- IDSR: the 24-hour worklist rows open their case, where "Mark notified up the
+  IDSR tier" records the notification and takes the case off the list.
+- Stock batches: the pharmacy admin can correct a counted quantity or write a
+  batch off, and clear every already-expired batch from the counter in one go.
+  `node actions.test.js` self-checks which buttons a record is offered.
+- Mobile nav: under 760px the sidebar is a drawer — the topbar button opens it,
+  a scrim, Escape, picking a link, or widening the window closes it, and the
+  focus follows. `node nav.test.js` self-checks the state helper.
 - PWA: installable (manifest + icons), app shell cached by `sw.js` so the UI
   loads offline. API responses are never cached. **Bump `VERSION` in `sw.js`
   whenever you change shell files** so clients pick up the update.
