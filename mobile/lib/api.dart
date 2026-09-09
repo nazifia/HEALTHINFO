@@ -8,6 +8,14 @@ import 'config.dart';
 /// Handles JWT storage, the X-Tenant-ID header, and one transparent
 /// access-token refresh on 401.
 class Api {
+  // One client for every call. `http.get` and friends open a fresh connection
+  // each time and close it; on a phone that is a TCP + TLS handshake per
+  // request, which is most of the wait on a list screen firing several.
+  final http.Client _http;
+
+  /// [client] is only for tests, which hand in a MockClient.
+  Api({http.Client? client}) : _http = client ?? http.Client();
+
   String? _access;
   String? _refresh;
 
@@ -25,11 +33,21 @@ class Api {
   };
 
   Map<String, dynamic>? _me;
+  Future<Map<String, dynamic>?>? _meInFlight;
 
   /// Current user, fetched once from /api/users/me/ then cached.
   /// ponytail: cache lives for the session; cleared on logout.
-  Future<Map<String, dynamic>?> me() async {
-    if (_me != null) return _me;
+  ///
+  /// Start-up asks for the user from several places at once — main(), the
+  /// drawer's role lookup, whichever screen opens first — so the in-flight
+  /// request is shared. Without that they each fire their own GET and the
+  /// screen waits on the slowest.
+  Future<Map<String, dynamic>?> me() {
+    if (_me != null) return Future.value(_me);
+    return _meInFlight ??= _fetchMe().whenComplete(() => _meInFlight = null);
+  }
+
+  Future<Map<String, dynamic>?> _fetchMe() async {
     try {
       final r = await get('/api/users/me/');
       _me = (r as Map).cast<String, dynamic>();
@@ -44,7 +62,10 @@ class Api {
 
   /// Forget the cached user so the next [me] re-reads it — after a profile
   /// edit, or after the organization's idle timeout changes.
-  void forgetMe() => _me = null;
+  void forgetMe() {
+    _me = null;
+    _meInFlight = null;
+  }
 
   /// Current user's role — what the screens gate on.
   Future<String?> myRole() async => (await me())?['role']?.toString();
@@ -78,7 +99,7 @@ class Api {
     // replayed. Never let a failed/offline call block the local clear.
     if (_refresh != null) {
       try {
-        await http.post(
+        await _http.post(
           _uri('/api/auth/logout/'),
           headers: _headers(auth: false, json: true),
           body: jsonEncode({'refresh': _refresh}),
@@ -88,6 +109,7 @@ class Api {
     _access = null;
     _refresh = null;
     _me = null;
+    _meInFlight = null;
     idleMinutes.value = idleMinutesDefault;
     final p = await SharedPreferences.getInstance();
     await p.remove(_kAccess);
@@ -124,7 +146,7 @@ class Api {
     final field = _phonePattern.hasMatch(identifier.replaceAll(' ', ''))
         ? 'phone'
         : 'license_number';
-    final r = await http.post(
+    final r = await _http.post(
       _uri('/api/auth/token/'),
       headers: _headers(auth: false, json: true, tenant: false),
       body: jsonEncode({field: identifier, 'password': password}),
@@ -149,7 +171,7 @@ class Api {
   /// Someone without an account has no tenant to detect, so they choose one.
   /// Sent with no tenant header: the stored slug may be another user's.
   Future<List<Map<String, dynamic>>> organizations() async {
-    final r = await http.get(
+    final r = await _http.get(
       _uri('/api/auth/register/organizations/'),
       headers: _headers(auth: false, tenant: false),
     );
@@ -162,7 +184,7 @@ class Api {
   /// POST /api/auth/register/
   Future<void> register(String phone, String email, String password,
       {String username = ''}) async {
-    final r = await http.post(
+    final r = await _http.post(
       _uri('/api/auth/register/'),
       headers: _headers(auth: false, json: true),
       body: jsonEncode({
@@ -185,7 +207,7 @@ class Api {
   /// number is known — the endpoint never confirms an account exists, so this
   /// screen must not either.
   Future<String> passwordReset(String phone) async {
-    final r = await http.post(
+    final r = await _http.post(
       _uri('/api/auth/password-reset/'),
       headers: _headers(auth: false, json: true, tenant: false),
       body: jsonEncode({'phone': phone}),
@@ -200,7 +222,7 @@ class Api {
   /// and token carried by the mailed link.
   Future<String> passwordResetConfirm(
       String uid, String token, String password) async {
-    final r = await http.post(
+    final r = await _http.post(
       _uri('/api/auth/password-reset/confirm/'),
       headers: _headers(auth: false, json: true, tenant: false),
       body: jsonEncode({'uid': uid, 'token': token, 'password': password}),
@@ -230,7 +252,7 @@ class Api {
     required String password,
     int? jurisdictionId,
   }) async {
-    final r = await http.post(
+    final r = await _http.post(
       _uri('/api/auth/onboarding/'),
       headers: _headers(auth: false, json: true),
       body: jsonEncode({
@@ -253,7 +275,7 @@ class Api {
   /// GET /api/auth/onboarding/jurisdictions/ — public list for the signup
   /// picker. Returns rows of {id, name, level, parent}.
   Future<List<Map<String, dynamic>>> jurisdictions() async {
-    final r = await http.get(
+    final r = await _http.get(
       _uri('/api/auth/onboarding/jurisdictions/'),
       headers: _headers(auth: false),
     );
@@ -263,9 +285,17 @@ class Api {
     return (jsonDecode(r.body) as List).cast<Map<String, dynamic>>();
   }
 
-  Future<bool> _refreshAccess() async {
+  /// Parallel calls that all see 401 share one refresh. Separate refreshes
+  /// race token rotation and can blacklist each other, signing the user out
+  /// mid-screen.
+  Future<bool> _refreshAccess() =>
+      _refreshing ??= _doRefresh().whenComplete(() => _refreshing = null);
+
+  Future<bool>? _refreshing;
+
+  Future<bool> _doRefresh() async {
     if (_refresh == null) return false;
-    final r = await http.post(
+    final r = await _http.post(
       _uri('/api/auth/token/refresh/'),
       headers: _headers(auth: false, json: true),
       body: jsonEncode({'refresh': _refresh}),
@@ -278,9 +308,9 @@ class Api {
 
   /// Authenticated GET returning decoded JSON. Retries once after refresh on 401.
   Future<dynamic> get(String path, [Map<String, String>? query]) async {
-    var r = await http.get(_uri(path, query), headers: _headers());
+    var r = await _http.get(_uri(path, query), headers: _headers());
     if (r.statusCode == 401 && await _refreshAccess()) {
-      r = await http.get(_uri(path, query), headers: _headers());
+      r = await _http.get(_uri(path, query), headers: _headers());
     }
     if (r.statusCode != 200) {
       throw ApiException('GET $path failed (${r.statusCode})', r.body);
@@ -294,9 +324,9 @@ class Api {
   /// For the endpoints that answer a file rather than JSON — the CSV exports —
   /// so the bytes reach the share sheet without going through jsonDecode.
   Future<List<int>> getBytes(String path, [Map<String, String>? query]) async {
-    var r = await http.get(_uri(path, query), headers: _headers());
+    var r = await _http.get(_uri(path, query), headers: _headers());
     if (r.statusCode == 401 && await _refreshAccess()) {
-      r = await http.get(_uri(path, query), headers: _headers());
+      r = await _http.get(_uri(path, query), headers: _headers());
     }
     if (r.statusCode != 200) {
       throw ApiException('GET $path failed (${r.statusCode})', r.body);
@@ -311,9 +341,9 @@ class Api {
   Future<dynamic> post(String path, [Object? body]) async {
     final headers = _headers(json: true);
     final payload = jsonEncode(body ?? {});
-    var r = await http.post(_uri(path), headers: headers, body: payload);
+    var r = await _http.post(_uri(path), headers: headers, body: payload);
     if (r.statusCode == 401 && await _refreshAccess()) {
-      r = await http.post(_uri(path), headers: _headers(json: true), body: payload);
+      r = await _http.post(_uri(path), headers: _headers(json: true), body: payload);
     }
     if (r.statusCode < 200 || r.statusCode >= 300) {
       throw ApiException('POST $path failed (${r.statusCode})', r.body);
@@ -324,9 +354,9 @@ class Api {
   /// Authenticated PATCH returning decoded JSON. Retries once after refresh on 401.
   Future<dynamic> patch(String path, Map<String, dynamic> body) async {
     final payload = jsonEncode(body);
-    var r = await http.patch(_uri(path), headers: _headers(json: true), body: payload);
+    var r = await _http.patch(_uri(path), headers: _headers(json: true), body: payload);
     if (r.statusCode == 401 && await _refreshAccess()) {
-      r = await http.patch(_uri(path), headers: _headers(json: true), body: payload);
+      r = await _http.patch(_uri(path), headers: _headers(json: true), body: payload);
     }
     if (r.statusCode < 200 || r.statusCode >= 300) {
       throw ApiException('PATCH $path failed (${r.statusCode})', r.body);
@@ -339,9 +369,9 @@ class Api {
   /// The endpoints that take one answer 204 with an empty body, so nothing is
   /// decoded — a caller that still needs the row keeps its own copy.
   Future<void> delete(String path) async {
-    var r = await http.delete(_uri(path), headers: _headers());
+    var r = await _http.delete(_uri(path), headers: _headers());
     if (r.statusCode == 401 && await _refreshAccess()) {
-      r = await http.delete(_uri(path), headers: _headers());
+      r = await _http.delete(_uri(path), headers: _headers());
     }
     if (r.statusCode < 200 || r.statusCode >= 300) {
       throw ApiException('DELETE $path failed (${r.statusCode})', r.body);

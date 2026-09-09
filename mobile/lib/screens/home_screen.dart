@@ -173,6 +173,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   // Group labels the user collapsed, restored from disk on start.
   final Set<String> _closed = {};
 
+  // Section labels the user has actually opened. The IndexedStack below builds
+  // only these: it renders every child it is given, so handing it all ~50
+  // sections ran every screen's initState — and its API calls — the moment the
+  // drawer appeared. Labelled, not indexed, because the menu is rebuilt when
+  // the role or organization changes.
+  final Set<String> _visited = {};
+
   // Bumped by expand/collapse-all. It is part of every ExpansionTile key, so a
   // bump gives them fresh state that honours _closed again.
   int _navEpoch = 0;
@@ -641,9 +648,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   // ── kept below build() to stay near the appBar that uses it ──
   // Width-capped page area so lists/forms don't stretch across a wide monitor.
   Widget _content() {
+    _visited.add(_flat[_index].label);
     final body = IndexedStack(
       index: _index,
-      children: [for (final s in _flat) s.page],
+      children: [
+        for (final s in _flat)
+          if (_visited.contains(s.label)) s.page else const SizedBox.shrink(),
+      ],
     );
     return Center(
       child: ConstrainedBox(
