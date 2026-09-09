@@ -70,6 +70,7 @@ from .stats import (
     insurance_stats,
     lab_stats,
     platform_case_report_stats,
+    platform_sales_stats,
     platform_stats,
     prescription_stats,
     report_sources,
@@ -631,6 +632,35 @@ class PlatformAdrStatsView(APIView):
         return Response(adr_stats(
             *_range(request), platform=True, jurisdiction=_seat(request)
         ))
+
+
+class PlatformSalesStatsView(APIView):
+    """Takings per state, by day / month / year (platform admin or authority).
+
+    Money, not medicine, so it sits behind the same aggregate-only gate as the
+    rest: a state reads its own patch, a platform admin reads every state until
+    they pick one. ?format=csv downloads the same numbers as one sheet, all
+    three grains under a ``bucket`` column — a spreadsheet filters that in a
+    click, and splitting it into three downloads would only lose the other two.
+    """
+
+    permission_classes = [IsPlatformReader]
+
+    def get(self, request):
+        stats = platform_sales_stats(*_range(request), jurisdiction=_seat(request))
+        if request.query_params.get("format") != "csv":
+            return Response(stats)
+        level = stats["level"]
+        rows = (
+            [bucket, r[level], r["period"], r["revenue"], r["sales"]]
+            for bucket in ("daily", "monthly", "yearly")
+            for r in stats[bucket]
+        )
+        return csv_response(
+            "state_sales.csv",
+            ["bucket", level, "period", "revenue", "sales"],
+            rows,
+        )
 
 
 class ReportSourcesView(APIView):

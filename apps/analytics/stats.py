@@ -4,22 +4,25 @@ Every public function takes an optional (start, end) date window so the same
 rollup serves "last 30 days", "this quarter", or all-time without new code.
 """
 from datetime import timedelta
+from decimal import Decimal
 from statistics import median
 
 from django.db.models import (
     Avg,
     Count,
+    DateField,
     DurationField,
     ExpressionWrapper,
     F,
     Q,
     Sum,
 )
-from django.db.models.functions import TruncDay
+from django.db.models.functions import TruncDate, TruncDay, TruncMonth, TruncYear
 from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.catalog.models import Disease, Medication
+from apps.pos.models import ReturnRecord, Sale
 from apps.tenants.current import get_current_tenant
 from apps.tenants.models import Jurisdiction, Tenant
 from config.ranges import apply_range
@@ -43,6 +46,8 @@ from .models import (
 )
 
 _OBJECT_MODELS = {"disease": Disease, "medication": Medication}
+
+ZERO = Decimal("0.00")
 
 # An order that reached the patient. A partial fill counts: some of the drug
 # was handed over, so the prescription is not an unfilled one.
@@ -912,3 +917,81 @@ def prescription_stats(start=None, end=None, platform=False, jurisdiction=None):
     if platform:
         out["by_tenant"] = _grouped(rx, "tenant__name", 20)
     return out
+
+
+# Money buckets the state rollup publishes, with how many characters of the
+# ISO date label each one keeps: 2026-09-09 / 2026-09 / 2026.
+_SALES_PERIODS = (
+    ("daily", TruncDate, 10),
+    ("monthly", TruncMonth, 7),
+    ("yearly", TruncYear, 4),
+)
+
+
+def _money_by_tier(sales, returns, trunc, width, level, juris):
+    """Fold takings up to `level`, bucketed by period. One row per (area, period).
+
+    Same fold as _rollup_by_tier — group in SQL by the tenant's own
+    jurisdiction, walk each up to its ancestor in Python — with two streams
+    instead of one: sales add, refunds subtract. A refund lands in the period
+    it was recorded in, never the period of the sale it undoes, which is the
+    rule the tenant's own reports keep (see apps/reports/views.py).
+    """
+    totals = {}
+    for qs, sign, counts in ((sales, 1, True), (returns, -1, False)):
+        rows = (
+            qs.exclude(tenant__jurisdiction=None)
+            .annotate(period=trunc("created_at", output_field=DateField()))
+            .values("tenant__jurisdiction", "period")
+            .annotate(amount=Sum("total" if counts else "amount"), n=Count("id"))
+        )
+        for r in rows:
+            node = juris.get(r["tenant__jurisdiction"])
+            anc = node.ancestor(level) if node else None
+            if anc is None:
+                continue
+            key = (anc.name, str(r["period"])[:width])
+            bucket = totals.setdefault(key, {"revenue": ZERO, "sales": 0})
+            bucket["revenue"] += sign * (r["amount"] or ZERO)
+            if counts:
+                bucket["sales"] += r["n"]
+    return [
+        {level: area, "period": period, "revenue": v["revenue"], "sales": v["sales"]}
+        for (area, period), v in sorted(totals.items())
+    ]
+
+
+def platform_sales_stats(start=None, end=None, jurisdiction=None):
+    """What the counters took, per state, by day / month / year.
+
+    The cross-tenant money view a health authority reads: totals for the patch
+    it answers for, never a named patient or a single facility's takings.
+    Revenue is net of refunds recorded in the same period, and counts only the
+    statuses the tenant reports count (Sale.REVENUE_STATUSES) — a cancelled
+    sale never happened and a credit sale has not been paid for.
+
+    Folds to state, or to local government for a seat that answers for one:
+    a local's rows printed under its state's name would read as the state's
+    total (the same guard _tiers_for makes for the report rollups).
+    """
+    sales = apply_range(
+        _scope(
+            Sale.all_objects.filter(status__in=Sale.REVENUE_STATUSES), jurisdiction
+        ),
+        start, end,
+    )
+    returns = apply_range(
+        _scope(
+            ReturnRecord.all_objects.filter(sale__status__in=Sale.REVENUE_STATUSES),
+            jurisdiction,
+        ),
+        start, end,
+    )
+    level = _tiers_for(
+        jurisdiction, offered=[Jurisdiction.Level.LOCAL, Jurisdiction.Level.STATE]
+    )[-1]
+    juris = {j.id: j for j in Jurisdiction.objects.all()}
+    stats = {"level": level}
+    for key, trunc, width in _SALES_PERIODS:
+        stats[key] = _money_by_tier(sales, returns, trunc, width, level, juris)
+    return stats

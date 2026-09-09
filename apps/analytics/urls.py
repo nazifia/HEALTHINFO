@@ -36,6 +36,7 @@ from .views import (
     PlatformConsultationStatsView,
     PlatformDashboardView,
     PlatformReportSourcesView,
+    PlatformSalesStatsView,
     PlatformSpikesView,
     PlatformStockStatsView,
     PlatformVitalStatsView,
@@ -90,6 +91,11 @@ urlpatterns = router.urls + [
         "analytics/platform/cases/export/",
         PlatformCaseReportExportView.as_view(),
         name="platform-case-export",
+    ),
+    path(
+        "analytics/platform/sales/",
+        PlatformSalesStatsView.as_view(),
+        name="platform-sales-stats",
     ),
     path("analytics/sources/", ReportSourcesView.as_view(), name="report-sources"),
     path(
