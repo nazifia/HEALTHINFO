@@ -139,6 +139,12 @@ class User(AbstractUser):
         # number up already normalized (see normalize_license), so a row saved
         # with its separators still on it could never be signed in to.
         self.license_number = normalize_license(self.license_number)
+        # A Django superuser IS the platform admin (is_super_admin says so), but
+        # createsuperuser leaves the default role behind. The clients read the
+        # role, not the flag, so an unaligned row signs in with no platform
+        # chrome at all - no organization switch, no state picker.
+        if self.is_superuser:
+            self.role = Role.SUPER_ADMIN
         super().save(*args, **kwargs)
 
     @property

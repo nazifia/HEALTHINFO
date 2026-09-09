@@ -100,3 +100,10 @@ def test_a_bad_pick_is_ignored_not_obeyed(country, admin):
     c.force_authenticate(user=admin)
     c.credentials(HTTP_X_TENANT_ID="", HTTP_X_JURISDICTION_ID="not-a-number")
     assert c.get("/api/analytics/platform/cases/").json()["total"] == 3
+
+
+def test_a_django_superuser_carries_the_platform_role(db):
+    """The picker is offered on the role, so the flag alone would hide it."""
+    su = User.objects.create_superuser(phone="08030000605", password="x")
+    assert su.role == Role.SUPER_ADMIN
+    assert su.is_super_admin
