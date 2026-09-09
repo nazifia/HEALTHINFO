@@ -11,6 +11,7 @@ from rest_framework.test import APIClient
 from apps.accounts.models import Role, User
 from apps.analytics.models import CaseReport
 from apps.tenants.current import clear_current_tenant
+from apps.governance.models import RuntimeConfig
 from apps.tenants.models import Jurisdiction, Tenant
 
 
@@ -107,3 +108,22 @@ def test_a_django_superuser_carries_the_platform_role(db):
     su = User.objects.create_superuser(phone="08030000605", password="x")
     assert su.role == Role.SUPER_ADMIN
     assert su.is_super_admin
+
+
+def test_the_pick_header_survives_a_cors_preflight(client, db):
+    """A header off the allowlist fails preflight, and the client reads a
+    failed call as a dead session — so the pick would sign the user out."""
+    # Dev mode is what reflects a localhost origin back; prod answers a
+    # preflight from one with no CORS headers at all.
+    cfg = RuntimeConfig.objects.first() or RuntimeConfig()
+    cfg.mode = RuntimeConfig.Mode.DEV
+    cfg.save()
+    res = client.options(
+        "/api/analytics/platform/cases/",
+        HTTP_ORIGIN="http://localhost:5173",
+        HTTP_ACCESS_CONTROL_REQUEST_METHOD="GET",
+        HTTP_ACCESS_CONTROL_REQUEST_HEADERS="authorization,x-tenant-id,x-jurisdiction-id",
+    )
+    allowed = res.headers["access-control-allow-headers"].lower()
+    assert "x-jurisdiction-id" in allowed
+    assert "x-tenant-id" in allowed

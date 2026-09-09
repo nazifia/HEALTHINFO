@@ -94,8 +94,12 @@ WSGI_APPLICATION = "config.wsgi.application"
 CORS_ALLOWED_ORIGINS = [
     o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()
 ]
-# Custom tenant header the mobile/web client sends.
-CORS_ALLOW_HEADERS = list(default_cors_headers) + ["x-tenant-id"]
+# Custom headers the mobile/web client sends. Both scope a read, so a header
+# missing here fails the preflight and the client reads the dead call as a dead
+# session: it signs the user out rather than showing them one state.
+CORS_ALLOW_HEADERS = list(default_cors_headers) + [
+    "x-tenant-id", "x-jurisdiction-id",
+]
 
 TEMPLATES = [
     {
