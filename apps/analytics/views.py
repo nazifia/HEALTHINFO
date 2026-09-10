@@ -401,6 +401,10 @@ class PrescriptionViewSet(_ReportViewSet):
 
     model = Prescription
     serializer_class = PrescriptionSerializer
+    # An independent prescriber writes here, under the facility they picked in
+    # their own state (IsTenantMember). The order is that facility's row —
+    # tenant scoping stamps it — and carries them as its reporter.
+    independent_ok = True
     filterset_fields = ("status", "medication", "case_report", "region", "patient",
                         "group")
     # Digits only: apps.prescriptions hangs hospitals/, prescribers/ and the

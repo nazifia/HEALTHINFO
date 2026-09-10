@@ -84,6 +84,20 @@ class Api {
         : roles.where((r) => r != 'tenant_admin').toList();
   }
 
+  /// True when this seat holds a licence and staffs no facility: private
+  /// practice. Their licence is state-wide but a prescription is not, so they
+  /// pick a facility inside their state and write under it — the pick is the
+  /// X-Tenant-ID header, and the server re-checks the state on every write
+  /// (accounts.permissions.may_prescribe_under).
+  static bool isIndependent(Map<String, dynamic>? u) =>
+      u?['is_independent'] == true;
+
+  /// GET /api/tenants/prescribing/ — the facilities an independent prescriber
+  /// may write under: the live ones inside the state on their row. Anyone
+  /// else is answered an empty list; they already have their organization.
+  Future<List<dynamic>> prescribingFacilities() =>
+      getList('/api/tenants/prescribing/');
+
   /// True when this seat runs its own portal's user list (is_module_admin).
   static bool canManageUsers(Map<String, dynamic>? u) =>
       u?['role'] == 'super_admin' || grantsOf(u).contains('manage_users');
@@ -114,10 +128,16 @@ class Api {
   /// failed call must not strand them inside the organization.
   Future<void> leaveTenant() async {
     if (tenantSlug.isEmpty) return;
-    try {
-      await post('/api/tenants/leave/');
-    } catch (_) {
-      // ponytail: the trail loses one row; the way out still works.
+    // The trail row records a platform admin's visit to an organization. An
+    // independent prescriber's pick is not one — they never had the run of the
+    // facility, every script they wrote names them, and the endpoint refuses
+    // them anyway — so only the admin's step out is posted.
+    if (_me?['role'] == 'super_admin') {
+      try {
+        await post('/api/tenants/leave/');
+      } catch (_) {
+        // ponytail: the trail loses one row; the way out still works.
+      }
     }
     await setTenant('');
     // The seat's own idle timeout and grants came from the tenant just left.

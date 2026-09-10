@@ -47,6 +47,7 @@ import 'notifications_screen.dart';
 import 'dispensing_log_screen.dart';
 import 'chw_reports_screen.dart';
 import 'facility_metrics_screen.dart';
+import 'facility_picker_screen.dart';
 import 'shifts_screen.dart';
 import 'insurance_claims_screen.dart';
 import 'appointments_screen.dart';
@@ -178,6 +179,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   // the tenant they signed into.
   String? _role;
 
+  // True when the seat signed in holds a licence and staffs no facility. Their
+  // app-bar chip is the way to write under a different one.
+  bool _independent = false;
+
   // The organization the menu was last built for. Stepping out of one is a
   // move to the platform view, so it lands on the platform home instead of
   // whatever index the tenant's own menu left behind.
@@ -293,6 +298,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ReportSourcesScreen()),
   ]);
 
+  // An independent prescriber's facility. Their home until they have picked
+  // one — every tenant-scoped screen answers 403 before that, so the picker is
+  // the whole app — and a row in their Account group afterwards, because the
+  // facility they write under is a choice, not where they work.
+  static const _facilityHome = _Section(
+      'Where you prescribe', Icons.apartment_outlined, FacilityPickerScreen());
+
+  static const _facilitySection = _Section(
+      'Change facility', Icons.apartment_outlined, FacilityPickerScreen());
+
+  static const _facilityAccountGroup = _Group('Account', [
+    _facilitySection,
+    _Section('Profile', Icons.person_outline, ProfileScreen()),
+  ]);
+
   // The organization switcher. A super-admin keeps it inside an organization
   // too — it is the way back out to the platform views.
   static const _tenantsSection =
@@ -392,7 +412,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final role = me?['role']?.toString();
     final manages = Api.canManageUsers(me);
     if (!mounted) return;
-    setState(() => _role = role);
+    setState(() {
+      _role = role;
+      _independent = Api.isIndependent(me);
+    });
     final leftTenant = _menuSlug.isNotEmpty && tenantSlug.isEmpty;
     _menuSlug = tenantSlug;
     if (leftTenant) _index = 0;
@@ -416,6 +439,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ..._baseGroups,
                 ],
           home: tenantSlug.isEmpty ? _platformHome : null);
+      return;
+    }
+    if (Api.isIndependent(me)) {
+      if (tenantSlug.isEmpty) {
+        _setGroups([_accountGroup], home: _facilityHome);
+        return;
+      }
+      // Picked one: the clinical menu, read as that facility. They are a
+      // licensed cadre, so the API narrows every register to their own
+      // caseload exactly as it does the facility's own doctors.
+      _setGroups([..._baseGroups.where((g) => g != _accountGroup),
+        _facilityAccountGroup,
+      ], home: _Section('Ward', Icons.local_hospital_outlined,
+          WardScreen(onOpen: _openSection)));
       return;
     }
     if (role == 'public') {
@@ -492,7 +529,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             constraints: const BoxConstraints(maxWidth: 120),
             child: Text(tenantLabel, overflow: TextOverflow.ellipsis),
           ),
-          tooltip: 'Leave $tenantLabel',
+          tooltip: _independent
+              ? 'Write under another facility'
+              : 'Leave $tenantLabel',
           onPressed: _leaveTenant,
         ),
       );
@@ -682,7 +721,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         automaticallyImplyLeading: !wide,
         title: Text(section.label),
         actions: [
-          if (_role == 'super_admin' && tenantSlug.isNotEmpty)
+          if ((_role == 'super_admin' || _independent) && tenantSlug.isNotEmpty)
             _leaveTenantChip(),
           IconButton(
             icon: const Icon(Icons.search),

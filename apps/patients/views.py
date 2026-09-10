@@ -92,6 +92,11 @@ class PatientViewSet(viewsets.ModelViewSet):
 
     serializer_class = PatientSerializer
     permission_classes = [IsTenantMember, IsClinicalStaff]
+    # An independent prescriber reaches this one: you cannot prescribe to a
+    # patient you cannot register or find. They are a clinician, so
+    # visible_patients narrows them to their own caseload the same way it
+    # narrows the facility's own doctors, and every read is still logged.
+    independent_ok = True
     filterset_fields = ("sex", "status", "region", "blood_group", "genotype",
                         "patient_type")
     # next_of_kin_phone is searchable too: a relative's number is often the

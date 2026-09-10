@@ -107,6 +107,21 @@ window.addEventListener('online', () => Outbox.flush());
 /* -------------------------------------------------------------- registries */
 
 // Every DRF-routed resource. workflow => transition/history actions exist.
+/* The three organizations a user can be registered under: a facility, a
+   scheme, a health authority's patch. They narrow the user list for the admin
+   whose list spans more than one — the platform's. Everyone else's list is
+   already pinned to their own portal by the API, so the pickers would be three
+   selects with one answer (``when``). Wrapped in arrows: the registry is built
+   before isPlatformScope exists. */
+const ORG_FILTERS = [
+  { param: 'tenant', label: 'Organization', path: '/api/tenants/', text: (r) => r.name },
+  { param: 'hmo', label: 'Scheme', path: '/api/pharmacy/hmos/', text: (r) => r.name },
+  // The same parameter the platform's state pick uses (apps.tenants.scope):
+  // it narrows to that state's subtree — the facilities in it, and the health
+  // authority seats sitting on it, who staff no facility at all.
+  { param: 'jurisdiction', label: 'Jurisdiction', path: '/api/auth/onboarding/jurisdictions/', text: placeLabel },
+].map((f) => ({ ...f, when: () => isPlatformScope() }));
+
 const RESOURCES = {
   'diseases':          { title: 'Diseases',           group: 'Catalog', workflow: true,  search: true,  graph: 'diseases' },
   'medications':       { title: 'Medications',        group: 'Catalog', workflow: true,  search: true,  graph: 'medications' },
@@ -156,6 +171,8 @@ const RESOURCES = {
   // page (extra: 'statement') — the two ledgers are settled from there.
   'pharmacy-prescribers':   { title: 'Prescribers',    group: 'Pharmacy', path: 'prescriptions/prescribers', roles: 'admin', search: true, extra: 'statement' },
   'pharmacy-hmos':          { title: 'Schemes',         group: 'Pharmacy', hmo: true, path: 'pharmacy/hmos',            roles: 'admin', search: true },
+  'scheme-users':           { title: 'Scheme Users',    group: 'Pharmacy', hmo: true, path: 'users', superOnly: true,
+                              search: true, query: { role: 'hmo' }, filters: ORG_FILTERS },
   'pharmacy-enrollments':   { title: 'Scheme Members',  group: 'Pharmacy', hmo: true, path: 'pharmacy/enrollments',     roles: 'staff', search: true },
   // A scheme's price list: what it pays for one drug, and the most it pays
   // for a unit of it. 0 cover is the exclusion; no row means the scheme's own
@@ -239,7 +256,14 @@ const RESOURCES = {
                                       choose: 'severity:mild,moderate,severe,critical', when: ['open'] },
                                     { name: 'close', label: 'Close visit', ask: 'follow_up_on,notes',
                                       choose: 'disposition:home,follow_up,admitted,referred,deceased', when: ['open'] }] },
-  'users':             { title: 'Users',              group: 'Admin', adminOnly: true },
+  'users':             { title: 'Users',              group: 'Admin', adminOnly: true, search: true,
+                          filters: ORG_FILTERS },
+  // The same list, narrowed to one kind of seat and sitting in that kind's own
+  // section: an insurer's people with the insurance screens, a health
+  // authority's with the rollups they read. ``query`` is what narrows it, and
+  // the API narrows it again to what the reader may see.
+  'authority-users':   { title: 'Authority Users',    group: 'Analytics', path: 'users', superOnly: true,
+                          search: true, query: { role: 'government' }, filters: ORG_FILTERS },
   // The roster. Everyone in the tenant reads it — a nurse needs to know who
   // else is on — but only the tenant admin sets it, same as the API.
   'shifts':            { title: 'Staff Roster',       group: 'Admin', roles: 'tenant_admin',
@@ -390,6 +414,16 @@ const NAV_CLOSED = new Set(JSON.parse(localStorage.getItem('navClosed') || '[]')
    until they leave it, and the API refuses them meanwhile. */
 const isPlatformScope = () => ME?.role === 'super_admin' && !Api.tenant;
 
+/* An independent prescriber holds a licence and staffs no facility: the row
+   carries a state instead of an organization. Their licence is state-wide but
+   a prescription is not, so they pick a facility inside that state and write
+   under it — the pick is the X-Tenant-ID header, and the server re-checks the
+   state on every write (accounts.permissions.may_prescribe_under). */
+const isIndependent = () => !!ME?.is_independent;
+/* Until they have picked one, every tenant-scoped call answers 403 — so the
+   picker is the only screen there is. */
+const needsFacility = () => isIndependent() && !Api.tenant;
+
 /* Named grants a seat can hold on top of its role, and where each one means
    something. Mirrors accounts.permissions.MODULE_PRIVILEGES — a grant outside
    the seat's own module counts for nothing, here and on the server. */
@@ -482,7 +516,11 @@ function navHtml() {
       + navGroup(group, own.map(seatLink).join(''))
       + navGroup('Account', `<a href="#/profile" data-route="/profile">${ico('users')}Profile</a>`);
   }
-  const iconFor = (slug, r) => slug === 'users' || slug === 'patients' ? 'users'
+  if (needsFacility()) {
+    return `<a href="#/facility" data-route="/facility" class="nav-home">${ico('shield')}Choose Facility</a>`
+      + navGroup('Account', `<a href="#/profile" data-route="/profile">${ico('users')}Profile</a>`);
+  }
+  const iconFor = (slug, r) => slug.endsWith('users') || slug === 'patients' ? 'users'
     : r.hmo ? 'shield'
     : r.group === 'Clinical' ? 'activity' : slug.startsWith('tenants') ? 'shield'
     : r.group === 'Reports' ? 'file' : r.group === 'Pharmacy' ? 'pill' : 'book';
@@ -540,12 +578,17 @@ function navHtml() {
     + (groups.Clinical || []).join('');
   if (clinical) html += navGroup('Clinical', clinical);
   let analytics = `<a href="#/analytics" data-route="/analytics">${ico('chart')}Tenant Analytics</a>`;
-  if (isPlatformScope()) analytics += `<a href="#/platform" data-route="/platform">${ico('chart')}Platform Analytics</a>`;
+  if (isPlatformScope()) {
+    analytics += `<a href="#/platform" data-route="/platform">${ico('chart')}Platform Analytics</a>`
+      + (groups.Analytics || []).join('');
+  }
   html += navGroup('Analytics', analytics);
   if (groups.Admin?.length) html += navGroup('Admin', groups.Admin.join(''));
   // The only route the sidebar did not reach: the topbar badge opens it, which
   // is not obvious on a phone where the badge is a username and nothing else.
   html += navGroup('Account', `<a href="#/profile" data-route="/profile">${ico('users')}Profile</a>`
+    + (isIndependent()
+      ? `<a href="#/facility" data-route="/facility">${ico('shield')}Change Facility</a>` : '')
     + (PHARMACY_STAFF_ROLES.has(ME?.role)
       ? `<a href="#/notifications" data-route="/notifications">${ico('flag')}Notifications</a>` : ''));
   return html;
@@ -812,26 +855,44 @@ async function ensureChrome() {
     try { ME = await Api.myself(); } catch { /* token dead */ }
     if (!ME) { await Api.logout(); location.hash = '#/login'; return false; }
   }
+  // An independent prescriber writes under a facility they pick. Until they
+  // have, the picker is the only screen the API will answer — send them there
+  // rather than to a page of 403s. Their own profile stays reachable: it is
+  // where the state on their row reads out.
+  const here = location.hash.slice(1) || '/';
+  if (needsFacility() && !/^\/(facility|profile)/.test(here)) {
+    location.hash = '#/facility';
+    return false;
+  }
   armIdleLogout();
   $('#topbar').hidden = false;
   $('#sidebar').hidden = false;
   const badge = $('#tenant-badge');
   // Name where there is one; the slug is the fallback for a session that
   // switched organizations before the name was known.
-  badge.textContent = Api.tenantName || Api.tenant || 'no organization';
+  badge.textContent = Api.tenantName || Api.tenant
+    || (isIndependent() ? 'choose a facility' : 'no organization');
   // A super-admin hops between organizations, so their badge is the way back
-  // out of the one they opened. Everyone else is stuck to their own tenant.
-  const canLeave = ME?.role === 'super_admin' && !!Api.tenant;
+  // out of the one they opened. An independent prescriber's badge is the same
+  // control for the same reason: the facility they write under is a choice,
+  // not where they work. Everyone else is stuck to their own tenant.
+  const canLeave = (ME?.role === 'super_admin' || isIndependent()) && !!Api.tenant;
   badge.classList.toggle('clickable', canLeave);
-  badge.title = canLeave ? 'Leave this organization' : '';
+  badge.title = canLeave
+    ? (isIndependent() ? 'Write under another facility' : 'Leave this organization') : '';
   badge.onclick = canLeave ? async () => {
     // Close the visit on the server before dropping the header, same as
     // opening records it: a trail that only ever says who went in is half a
     // trail. A failure here must not strand them inside the organization.
-    try { await Api.post('/api/tenants/leave/'); } catch { /* leave anyway */ }
+    // Only the platform admin's visit is trailed that way — a prescriber never
+    // had the run of the facility, and every script they wrote names them.
+    if (ME?.role === 'super_admin') {
+      try { await Api.post('/api/tenants/leave/'); } catch { /* leave anyway */ }
+    }
+    const back = isIndependent() ? '#/facility' : '#/platform';
     Api.tenant = '';
     Api.tenantName = '';
-    location.hash = '#/platform';
+    location.hash = back;
     location.reload();
   } : null;
   paintStatePicker();
@@ -1522,7 +1583,7 @@ function canWriteRes(slug, res) {
   // Patients: the same cadres that may read them may register and edit them.
   if (res.roles === 'clinical') return Api.roleCanReport(ME.role);
   // Users: the facility's admin, or a seat flagged as its own portal's admin.
-  if (slug === 'users') return ['super_admin', 'tenant_admin'].includes(ME.role)
+  if (isUserRes(slug)) return ['super_admin', 'tenant_admin'].includes(ME.role)
     || !!ME.is_admin || hasPriv('manage_users');
   return res.report ? Api.roleCanReport(ME.role) : Api.roleCanWrite(ME.role);
 }
@@ -1551,11 +1612,11 @@ async function viewList(slug) {
   if (!wasTyping) spinner();  // typing keeps the rows on screen until the new ones land
   const canWrite = canWriteRes(slug, res);
   try {
-    const query = { page: st.page };
+    const query = { page: st.page, ...res.query };
     if (st.search) query.search = st.search;
     for (const [k, v] of Object.entries(st.filters)) if (v) query[k] = v;
     const seq = ++st.seq;
-    const filters = res.filters || [];
+    const filters = (res.filters || []).filter((f) => !f.when || f.when());
     const [{ rows, count }, ...options] = await Promise.all([
       Api.list(rpath(slug), query), ...filters.map(filterOptions),
     ]);
@@ -1563,7 +1624,7 @@ async function viewList(slug) {
     const pages = count != null ? Math.max(1, Math.ceil(count / 25)) : 1;
     render(`
       <div class="page-head"><h2>${esc(res.title)}</h2>
-        ${(canWrite || res.createOnly) && !slug.startsWith('tenants') ? `<a class="btn" href="#/r/${slug}/new">+ New</a>` : ''}
+        ${(canWrite || res.createOnly) && !slug.startsWith('tenants') ? `<a class="btn" href="#/r/${slug}/new${res.query ? '?' + new URLSearchParams(res.query) : ''}">+ New</a>` : ''}
       </div>
       <form id="search-form" class="toolbar">
         <input name="q" autocomplete="off"
@@ -1571,7 +1632,7 @@ async function viewList(slug) {
         ${filters.map((f, i) => `<label>${esc(f.label)}
           <select name="${f.param}">
             <option value="">All</option>
-            ${options[i].map((r) => `<option value="${r.id}"${String(st.filters[f.param] || '') === String(r.id) ? ' selected' : ''}>${esc(f.text(r) ?? r.id)}</option>`).join('')}
+            ${options[i].map((r) => `<option value="${r.id}"${String(st.filters[f.param] || '') === String(r.id) ? ' selected' : ''}>${esc(f.text(r, options[i]) ?? r.id)}</option>`).join('')}
           </select></label>`).join('')}
         <button>Search</button>
       </form>
@@ -1836,7 +1897,7 @@ async function viewForm(slug, id, query) {
     ]);
     const fields = meta?.actions?.PUT || meta?.actions?.POST;
     if (!fields) return errorBox(new Error('You do not have permission to edit this resource.'));
-    if (slug === 'users') narrowUserFields(fields);
+    if (isUserRes(slug)) narrowUserFields(fields);
     const inputs = Object.entries(fields)
       .filter(([, f]) => !f.read_only)
       .map(([name, f]) => fieldHtml(name, f, current[name])).join('');
@@ -1891,6 +1952,10 @@ async function viewForm(slug, id, query) {
  * module a user lands in are pinned from the writer server-side
  * (accounts.serializers.apply_admin_scope), so they come off the form rather
  * than being offered and then ignored. */
+/* True for every registry entry that is the user list — the platform's
+   sections each hold one, narrowed to the seats that section is about. */
+const isUserRes = (slug) => slug === 'users' || RESOURCES[slug]?.path === 'users';
+
 function narrowUserFields(fields) {
   const module = myModule();
   const roles = myManageableRoles();
@@ -2700,6 +2765,50 @@ async function viewGov() {
     <h3>Go to</h3>
     <div class="tiles">${SEAT_NAV.government[2].map(([href, icon, title]) =>
       `<a class="tile linktile" href="${href}"><span class="tile-label">${ico(icon)}${esc(title)}</span></a>`).join('')}</div>`);
+}
+
+/* ------------------------------------------- independent prescriber */
+
+/* Which facility an independent prescriber is writing under.
+ *
+ * Their licence covers a state; a prescription belongs to one facility inside
+ * it. The list is the server's (/api/tenants/prescribing/) and so is the
+ * fence: picking here only sets the header every later call carries, and the
+ * write is checked against the state on their row all over again.
+ */
+async function viewFacility() {
+  if (!await ensureChrome()) return;
+  if (!isIndependent()) {
+    return errorBox(new Error('Independent prescribers only.'));
+  }
+  spinner();
+  let rows;
+  try {
+    rows = await Api.get('/api/tenants/prescribing/');
+  } catch (e) { return errorBox(e); }
+  const tile = (r) =>
+    `<button type="button" class="tile linktile" data-slug="${esc(r.slug)}" data-name="${esc(r.name)}">
+      <span class="tile-label">${ico(r.kind === 'pharmacy' ? 'pill' : 'shield')}${esc(r.name)}</span>
+      <span class="muted">${esc(r.kind)}</span></button>`;
+  render(`<div class="page-head"><h2>Where are you prescribing?</h2></div>
+    <p class="muted">Your licence covers the whole state, but a prescription belongs
+      to one facility. Pick the one you are working in — you can change it at any
+      time from the badge in the top bar.</p>
+    ${Api.tenant ? `<p class="muted">Currently writing under <b>${esc(Api.tenantName || Api.tenant)}</b>.</p>` : ''}
+    ${rows.length ? `<div class="tiles">${rows.map(tile).join('')}</div>`
+      : `<p class="muted">No facility in your state is open to you yet. Ask the
+         platform admin to check the state on your account, and that the facility
+         you work with has been approved.</p>`}`);
+  for (const b of document.querySelectorAll('[data-slug]')) {
+    b.onclick = () => {
+      Api.tenant = b.dataset.slug;
+      Api.tenantName = b.dataset.name;
+      // Reload rather than route: every cached list on the page was read in
+      // the scope that just changed.
+      location.hash = '#/clinical';
+      location.reload();
+    };
+  }
 }
 
 /* ------------------------------------------------------------- pharmacy */
@@ -3643,6 +3752,7 @@ const routes = [
   [/^\/notifications$/, viewNotifications],
   [/^\/graph\/([a-z]+)\/(\d+)$/, (m) => viewGraph(m[1], m[2])],
   [/^\/clinical$/, viewClinical],
+  [/^\/facility$/, viewFacility],
   [/^\/portal$/, viewPortal],
   [/^\/insurer$/, viewInsurer],
   [/^\/gov$/, viewGov],

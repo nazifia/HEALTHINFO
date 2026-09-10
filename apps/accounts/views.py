@@ -1,3 +1,4 @@
+from django.db.models import Q
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
@@ -10,7 +11,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from config.responses import success
 
 from apps.tenants.models import Jurisdiction, Tenant
-from apps.tenants.scope import scope_to_selection
+from apps.tenants.scope import selected_jurisdiction
 
 from .models import Role, User
 from .permissions import (
@@ -113,6 +114,11 @@ class UserViewSet(viewsets.ModelViewSet):
     # so it answers ?search= on the three things anyone would type. No password
     # or token field is searchable — only what the serializer already returns.
     search_fields = ("username", "phone", "email", "license_number")
+    # Platform-wide the list is everyone. These narrow it to one organization's
+    # people — a facility, a scheme, a health authority's patch — for the admin
+    # whose list is that wide. Each one only ever narrows what get_queryset
+    # already allowed, so a scoped seat gains nothing by passing them.
+    filterset_fields = ("role", "is_active", "tenant", "hmo")
 
     def get_queryset(self):
         user = self.request.user
@@ -123,8 +129,18 @@ class UserViewSet(viewsets.ModelViewSet):
             tenant = getattr(self.request, "tenant", None)
             if tenant is None:
                 # Outside an organization the list is platform-wide, or one
-                # state's when they have picked a state to work in.
-                return scope_to_selection(User.objects.all(), self.request)
+                # state's when they have picked a state to work in. A seat
+                # belongs to that state either through the facility it staffs
+                # or, for a health authority's own people, through the patch on
+                # its row — they staff no facility, and the state's list would
+                # otherwise be the one list they never appear in.
+                picked = selected_jurisdiction(self.request)
+                if picked is None:
+                    return User.objects.all()
+                tree = picked.subtree()
+                return User.objects.filter(
+                    Q(tenant__jurisdiction__in=tree) | Q(jurisdiction__in=tree)
+                )
             return User.objects.filter(tenant=tenant)
         if user.role in INSURER_ROLES:
             # An insurer runs its own scheme's claims desk: the seats on that

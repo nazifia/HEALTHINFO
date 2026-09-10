@@ -100,6 +100,30 @@ class TenantViewSet(viewsets.ModelViewSet):
             return success("Settings saved.", TenantSerializer(tenant).data)
         return Response(TenantSerializer(tenant).data)
 
+    @action(detail=False, methods=["get"], url_path="prescribing",
+            permission_classes=[IsAuthenticated])
+    def prescribing(self, request):
+        """Facilities an independent prescriber may write under.
+
+        Their licence is state-wide; a prescription is not. They pick one of
+        these and send its slug as X-Tenant-ID, and the same state fence that
+        chose this list is re-checked on the write itself
+        (accounts.permissions.may_prescribe_under) — the picker is a
+        convenience, never the permission.
+
+        Anyone else gets an empty list: they already have the one organization
+        they belong to.
+        """
+        user = request.user
+        if not (user.is_independent and user.jurisdiction_id):
+            return Response([])
+        rows = Tenant.objects.filter(
+            status=Tenant.Status.ACTIVE,
+            subscription_status=Tenant.SubscriptionStatus.APPROVED,
+            jurisdiction__in=user.jurisdiction.subtree(),
+        ).values("id", "slug", "name", "kind").order_by("name")
+        return Response(list(rows))
+
     @action(detail=True, methods=["post"], url_path="open")
     def open_as(self, request, pk=None):
         """Record that this super-admin is about to work inside this tenant.

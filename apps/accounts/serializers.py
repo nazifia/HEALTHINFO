@@ -215,8 +215,9 @@ class UserSerializer(serializers.ModelSerializer):
         fields = (
             "id", "username", "phone", "email", "role", "tenant", "tenant_name",
             "is_active", "password", "license_number", "idle_logout_minutes",
-            "hmo", "jurisdiction", "is_admin", "privileges",
+            "hmo", "jurisdiction", "is_admin", "privileges", "is_independent",
         )
+        read_only_fields = ("is_independent",)
 
     def get_idle_logout_minutes(self, obj):
         if obj.tenant_id is None:
@@ -245,6 +246,25 @@ class UserSerializer(serializers.ModelSerializer):
                         f"A license number is required for the {role} role.",
                 })
         tenant = attrs.get("tenant", getattr(self.instance, "tenant", None))
+        if role in LICENSED_ROLES and tenant is None:
+            # An independent prescriber: no employer, so the state on their
+            # licence is what says where they may write. Without one they
+            # could pick no facility at all (may_prescribe_under fails closed),
+            # so refuse the account here rather than mint a dead seat.
+            jurisdiction = attrs.get(
+                "jurisdiction", getattr(self.instance, "jurisdiction", None)
+            )
+            if not jurisdiction:
+                raise serializers.ValidationError({
+                    "jurisdiction": "An independent prescriber writes under the "
+                                    "facilities of one state — choose it, or "
+                                    "choose the organization they work for.",
+                })
+            if jurisdiction.level != Jurisdiction.Level.STATE:
+                raise serializers.ValidationError({
+                    "jurisdiction": "Choose a state: a licence is registered "
+                                    "state-wide, not per local government.",
+                })
         # A government seat reads the cross-tenant rollups, and those are
         # refused inside an organization (IsPlatformReader). One bound to a
         # tenant would be signed in to a platform that answers it nothing.

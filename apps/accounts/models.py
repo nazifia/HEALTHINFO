@@ -166,3 +166,15 @@ class User(AbstractUser):
     @property
     def is_super_admin(self):
         return self.role == Role.SUPER_ADMIN or self.is_superuser
+
+    @property
+    def is_independent(self):
+        """True for a licensed clinician who staffs no facility.
+
+        Private practice: the licence is theirs, not a hospital's, so the row
+        carries a state (``jurisdiction``) instead of a tenant and they write
+        under a facility they pick inside it. Derived rather than flagged —
+        "licensed, and no employer" is exactly what independent means, and a
+        second field would only be a way for the two to disagree.
+        """
+        return self.tenant_id is None and self.role in LICENSED_ROLES

@@ -148,6 +148,28 @@ def sees_whole_tenant(user):
     return not (user.is_authenticated and user.role in LICENSED_ROLES)
 
 
+def may_prescribe_under(user, tenant):
+    """True when an independent prescriber may work under this facility.
+
+    Their licence is state-wide but a prescription belongs somewhere, so they
+    pick a facility and write under it. The pick is fenced to the state on
+    their row: a licence registered in one state is not a licence to write in
+    the next one, and the facility's own jurisdiction (usually its local gov)
+    is what places it inside that state.
+
+    Fail-closed, like every other scoped seat here: a prescriber with no state
+    on their row, or a facility with no jurisdiction on its own, has no match
+    to make and is refused rather than admitted everywhere.
+    """
+    if not (user.is_authenticated and user.is_independent):
+        return False
+    if user.jurisdiction_id is None or tenant is None:
+        return False
+    if tenant.jurisdiction_id is None:
+        return False
+    return user.jurisdiction.subtree().filter(pk=tenant.jurisdiction_id).exists()
+
+
 class IsTenantMember(BasePermission):
     """User must belong to the request's tenant (or be super-admin)."""
 
@@ -166,6 +188,14 @@ class IsTenantMember(BasePermission):
             # view lets them in explicitly, the way it does an insurer, and
             # then answers them their own patch and nothing tenant-scoped.
             return getattr(view, "oversight_ok", False)
+        if user.is_independent:
+            # Staffs no facility, so the membership check below could never
+            # pass. They reach the screens prescribing actually needs — a view
+            # says ``independent_ok = True`` the way it does for the other
+            # seats that sit outside a facility's staff — and only inside a
+            # facility in their own state.
+            return (getattr(view, "independent_ok", False)
+                    and may_prescribe_under(user, request.tenant))
         return request.tenant is not None and user.tenant_id == request.tenant.id
 
 

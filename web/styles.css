@@ -307,6 +307,7 @@ tr.rowlink:hover { background: var(--brand-soft); }
   color: var(--accent, var(--brand)); background: var(--accent-soft, var(--brand-soft));
   box-sizing: content-box; padding: 5px; border-radius: 8px; width: 16px; height: 16px;
 }
+button.linktile { font: inherit; text-align: left; cursor: pointer; }
 .home-tiles .tile { min-height: 72px; }
 /* Money and quantity columns line up on the decimal (pharmacy tables). */
 th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
