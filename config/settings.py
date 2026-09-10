@@ -203,6 +203,9 @@ REST_FRAMEWORK = {
     # themselves to switch JSON/CSV (otherwise ?format=csv 404s, no csv renderer).
     "URL_FORMAT_OVERRIDE": None,
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    # OPTIONS lists the rows a foreign key can point at, so a generated
+    # form offers a picker instead of a box for a raw id.
+    "DEFAULT_METADATA_CLASS": "config.metadata.RelatedChoicesMetadata",
     "EXCEPTION_HANDLER": "config.responses.envelope_exception_handler",
     "DEFAULT_THROTTLE_CLASSES": (
         "rest_framework.throttling.ScopedRateThrottle",

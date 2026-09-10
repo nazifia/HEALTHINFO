@@ -2043,6 +2043,7 @@ async function viewForm(slug, id, query) {
     wireItemField($('#f'), current.item);
     wireRelFields($('#f'), current);
     wireRegionField($('#f'), current);
+    wireChoiceFields($('#f'));
     const drugRows = multiDrug ? wireExtraDrugs(fields) : null;
     $('#f').onsubmit = async (e) => {
       e.preventDefault();
@@ -2200,6 +2201,21 @@ function drugLabel(drug) {
   ].filter((v) => v != null && String(v).trim() !== '').join(' ');
 }
 
+/* Whether a field takes several values. OPTIONS says so for a relation (see
+ * config/metadata.py); M2M_FIELDS still names the ones an older backend can't,
+ * and privileges is a list of strings, not of ids. */
+function isMultiField(name, f) {
+  return !!f.multiple || M2M_FIELDS.has(name) || STR_LIST_FIELDS.has(name);
+}
+
+/* A closed list long enough to scroll becomes a type-ahead. The selects the
+ * app fills after render carry their own hook and wire themselves. */
+function wireChoiceFields(form) {
+  for (const sel of form.querySelectorAll('select[data-choice]:not([multiple])')) {
+    if (sel.options.length > 12) makeSearchable(sel, { placeholder: 'Type to search…' });
+  }
+}
+
 function fieldHtml(name, f, value) {
   const req = f.required ? ' required' : '';
   const lbl = esc(f.label || label(name)) + (f.required ? ' *' : '');
@@ -2246,11 +2262,11 @@ function fieldHtml(name, f, value) {
   // A ListField puts its options on the child, not on the field itself.
   if (!f.choices && f.child?.choices) f = { ...f, choices: f.child.choices };
   if (f.choices) {
-    const isMulti = M2M_FIELDS.has(name) || STR_LIST_FIELDS.has(name);
+    const isMulti = isMultiField(name, f);
     const sel = new Set(Array.isArray(v) ? v.map(String) : [String(v)]);
     const opts = f.choices.map((c) =>
       `<option value="${esc(c.value)}" ${sel.has(String(c.value)) ? 'selected' : ''}>${esc(c.display_name)}</option>`).join('');
-    control = `<select name="${name}" ${isMulti ? 'multiple size="6"' : ''}${req}>${isMulti ? '' : '<option value=""></option>'}${opts}</select>`;
+    control = `<select name="${name}" ${isMulti ? 'multiple size="6"' : ''}${req} data-choice>${isMulti ? '' : '<option value=""></option>'}${opts}</select>`;
   } else if (f.type === 'boolean') {
     control = `<input type="checkbox" name="${name}" ${v ? 'checked' : ''}>`;
   } else if (f.type === 'integer' || f.type === 'decimal' || f.type === 'float') {
@@ -2259,9 +2275,12 @@ function fieldHtml(name, f, value) {
     control = `<input type="date" name="${name}" value="${esc(String(v).slice(0, 10))}"${req}>`;
   } else if (f.type === 'datetime') {
     control = `<input type="datetime-local" name="${name}" value="${esc(String(v).slice(0, 16))}"${req}>`;
-  } else if (M2M_FIELDS.has(name) || Array.isArray(v)) {
+  } else if (isMultiField(name, f) || Array.isArray(v)) {
     control = `<input name="${name}" value="${esc(Array.isArray(v) ? v.join(',') : v)}" placeholder="ids, comma-separated">`;
   } else if (f.type === 'field') {
+    // Only reached when the relation is too long for OPTIONS to list (see
+    // config/metadata.py) and has no picker of its own. ponytail: give the
+    // field a PICKERS entry the day one of them turns up.
     control = `<input type="number" name="${name}" value="${esc(v)}"${req} placeholder="related id">`;
   } else if (!f.max_length || f.max_length > 255) {
     control = `<textarea name="${name}" rows="4"${req}>${esc(v)}</textarea>`;
@@ -2285,7 +2304,7 @@ function collectForm(form, fields) {
     }
     const raw = elm.value.trim();
     if (raw === '') { if (!f.required) continue; body[name] = null; continue; }
-    if (M2M_FIELDS.has(name) && !(elm instanceof HTMLSelectElement)) {
+    if (isMultiField(name, f) && !(elm instanceof HTMLSelectElement)) {
       body[name] = raw.split(',').map((s) => Number(s.trim())).filter((n) => !Number.isNaN(n));
     } else if (f.type === 'integer' || f.type === 'field') {
       body[name] = Number(raw);
@@ -2422,6 +2441,8 @@ async function wireItemField(form, value) {
   sel.innerHTML = '<option value=""></option>' + rows.map((i) =>
     `<option value="${i.id}"${String(i.id) === String(value ?? '') ? ' selected' : ''}>${
       esc(i.name)}${i.unit_price == null ? '' : ` · ${money(i.unit_price)}`}</option>`).join('');
+  // A full catalogue is a scroll hunt; typing a few letters of the name is not.
+  if (rows.length > 12) makeSearchable(sel, { placeholder: 'Type an item name…' });
 }
 
 /* Fill the form's region picker, if it has one, from the jurisdiction tree the

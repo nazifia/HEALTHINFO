@@ -44,7 +44,7 @@ class _InteractionCheckScreenState extends State<InteractionCheckScreen>
 
   Future<void> _loadMeds() async {
     try {
-      final rows = await api.getList('/api/medications/');
+      final rows = await api.getAll('/api/medications/');
       setState(() => _meds = rows.cast<Map<String, dynamic>>());
     } catch (e) {
       setState(() => _error = e is ApiException ? e.friendly : e.toString());

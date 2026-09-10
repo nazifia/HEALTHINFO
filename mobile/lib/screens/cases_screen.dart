@@ -300,7 +300,7 @@ class _ReportFormState extends State<_ReportForm> {
   Future<void> _load(
       String path, void Function(List<Map<String, dynamic>>) assign) async {
     try {
-      final rows = await api.getList(path);
+      final rows = await api.getAll(path);
       setState(() => assign(rows.cast<Map<String, dynamic>>()));
     } catch (_) {
       // All links are optional on a report; an empty list just hides the picker.

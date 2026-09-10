@@ -340,7 +340,7 @@ class _ReceiveFormState extends State<_ReceiveForm> {
   Future<void> _loadSuppliers() async {
     try {
       final rows =
-          await api.getList('/api/pharmacy/suppliers/', {'is_active': 'true'});
+          await api.getAll('/api/pharmacy/suppliers/', {'is_active': 'true'});
       if (mounted) {
         setState(() => _suppliers = rows.cast<Map<String, dynamic>>());
       }

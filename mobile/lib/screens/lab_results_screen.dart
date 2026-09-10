@@ -236,8 +236,8 @@ class _FormState extends State<_Form> {
 
   Future<void> _loadPickers() async {
     try {
-      final tests = await api.getList('/api/lab-tests/');
-      final diseases = await api.getList('/api/diseases/');
+      final tests = await api.getAll('/api/lab-tests/');
+      final diseases = await api.getAll('/api/diseases/');
       setState(() {
         _labTests = tests.cast<Map<String, dynamic>>();
         _diseases = diseases.cast<Map<String, dynamic>>();

@@ -721,7 +721,7 @@ class _FormState extends State<_Form> {
 
   Future<void> _loadDiseases() async {
     try {
-      final rows = await api.getList('/api/diseases/');
+      final rows = await api.getAll('/api/diseases/');
       if (mounted) {
         setState(() => _diseases = rows.cast<Map<String, dynamic>>());
       }
@@ -1005,7 +1005,7 @@ class _LinkedRowPickerState extends State<_LinkedRowPicker> {
   void initState() {
     super.initState();
     _id = widget.initialId;
-    _future = api.getList(widget.path, widget.query);
+    _future = api.getAll(widget.path, widget.query);
   }
 
   @override

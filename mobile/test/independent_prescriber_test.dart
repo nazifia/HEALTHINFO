@@ -42,7 +42,9 @@ void main() {
   });
 
   test('the picker reads the server list and nothing wider', () {
-    expect(apiSrc, contains("getList('/api/tenants/prescribing/')"));
+    // getAll, not getList: a state with more than one page of facilities
+    // would otherwise hide the rest of them from the picker.
+    expect(apiSrc, contains("getAll('/api/tenants/prescribing/')"));
     expect(picker, contains('api.prescribingFacilities()'));
     // Picking is a scope change: the cached seat carried the last facility's
     // tenant and idle timeout.

@@ -286,7 +286,7 @@ class _AdrFormState extends State<_AdrForm> {
 
   Future<void> _loadMeds() async {
     try {
-      final rows = await api.getList('/api/medications/');
+      final rows = await api.getAll('/api/medications/');
       setState(() => _medications = rows.cast<Map<String, dynamic>>());
     } catch (_) {
       // Leave the picker empty; submit guard below blocks a medication-less POST.

@@ -96,7 +96,7 @@ class Api {
   /// may write under: the live ones inside the state on their row. Anyone
   /// else is answered an empty list; they already have their organization.
   Future<List<dynamic>> prescribingFacilities() =>
-      getList('/api/tenants/prescribing/');
+      getAll('/api/tenants/prescribing/');
 
   /// True when this seat runs its own portal's user list (is_module_admin).
   static bool canManageUsers(Map<String, dynamic>? u) =>
@@ -464,6 +464,32 @@ class Api {
       return data['results'] as List<dynamic>;
     }
     return data as List<dynamic>;
+  }
+
+  /// Every row of a list endpoint, for the pickers that hold the whole list.
+  ///
+  /// [getList] answers one page, so a picker fed by it offers the first 25
+  /// rows and nothing else — the 200th disease or the 40th supplier cannot be
+  /// chosen at all, and the field it fills is a foreign key nobody can type
+  /// around. Use this wherever a list becomes options; keep [getList] for the
+  /// browse screens, which page themselves.
+  ///
+  /// ponytail: 10 pages of 100 (the API's max page size), so up to 1000 rows.
+  /// Past that a picker wants a server-side search box — `pickRow` in
+  /// screens/pharmacy_kit.dart already is one.
+  Future<List<dynamic>> getAll(String path, [Map<String, String>? query]) async {
+    final rows = <dynamic>[];
+    for (var page = 1; page <= 10; page++) {
+      final data =
+          await get(path, {...?query, 'page': '$page', 'page_size': '100'});
+      // An endpoint that doesn't paginate answers the rows themselves.
+      if (data is! Map || !data.containsKey('results')) {
+        return data as List<dynamic>;
+      }
+      rows.addAll(data['results'] as List<dynamic>);
+      if (data['next'] == null) break;
+    }
+    return rows;
   }
 
   // --- patient portal ---------------------------------------------------

@@ -495,7 +495,7 @@ class _OrderFormState extends State<_OrderForm> {
   Future<void> _load() async {
     try {
       final suppliers =
-          await api.getList('/api/pharmacy/suppliers/', {'is_active': 'true'});
+          await api.getAll('/api/pharmacy/suppliers/', {'is_active': 'true'});
       final items = await loadStockItems();
       if (mounted) {
         setState(() {

@@ -81,7 +81,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     if (Api.moduleOf(_me) == null) {
       try {
         tenants =
-            (await api.getList('/api/tenants/')).cast<Map<String, dynamic>>();
+            (await api.getAll('/api/tenants/')).cast<Map<String, dynamic>>();
       } catch (e) {
         if (mounted) showError(context, '$e');
         return;
@@ -295,7 +295,7 @@ class _UserFormState extends State<_UserForm> {
   Future<void> _loadHmos() async {
     if (_hmos.isNotEmpty) return;
     try {
-      final rows = await api.getList('/api/pharmacy/hmos/');
+      final rows = await api.getAll('/api/pharmacy/hmos/');
       if (mounted) setState(() => _hmos = rows.cast<Map<String, dynamic>>());
     } catch (_) {
       // Outside an organization there is no scheme list to offer. The API

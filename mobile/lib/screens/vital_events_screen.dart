@@ -209,7 +209,7 @@ class _FormState extends State<_Form> {
 
   Future<void> _loadDiseases() async {
     try {
-      final rows = await api.getList('/api/diseases/');
+      final rows = await api.getAll('/api/diseases/');
       setState(() => _diseases = rows.cast<Map<String, dynamic>>());
     } catch (_) {}
   }

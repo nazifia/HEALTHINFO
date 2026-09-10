@@ -355,7 +355,7 @@ class _BatchFormState extends State<_BatchForm> {
 
   Future<void> _loadHmos() async {
     try {
-      final rows = await api.getList('/api/pharmacy/hmos/', {'is_active': 'true'});
+      final rows = await api.getAll('/api/pharmacy/hmos/', {'is_active': 'true'});
       if (mounted) setState(() => _hmos = rows.cast<Map<String, dynamic>>());
     } catch (_) {
       // The submit still validates; an empty picker just says pick an insurer.
