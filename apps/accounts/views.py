@@ -119,6 +119,10 @@ class UserViewSet(viewsets.ModelViewSet):
     # whose list is that wide. Each one only ever narrows what get_queryset
     # already allowed, so a scoped seat gains nothing by passing them.
     filterset_fields = ("role", "is_active", "tenant", "hmo")
+    # Paging an unordered list is what drops or repeats rows between pages,
+    # so the newest seat first, with the id to break a tie on the same moment.
+    ordering = ("-date_joined", "-id")
+    ordering_fields = ("date_joined", "username", "phone", "role")
 
     def get_queryset(self):
         user = self.request.user
