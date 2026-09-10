@@ -5,11 +5,11 @@ import '../main.dart';
 import '../pharmacy.dart' show money, units;
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/breakdown_card.dart';
-import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/empty_state.dart';
-import '../shared/controlled_stats.dart';
+import '../shared/widgets/stats_kit.dart';
 import '../shared/sales_headline.dart';
 import '../shared/stats_rows.dart';
+import 'controlled_drugs_screen.dart' show controlledCards;
 
 /// Public-health analytics: the analysis side of the four collection feeds —
 /// AMR, immunization coverage, vital-stats mortality and pharmacy shortages.
@@ -100,7 +100,7 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
             children: [
               // ── Antimicrobial resistance ──
               _SectionTitle('Antimicrobial resistance', Icons.biotech_outlined),
-              _Metric(
+              MetricCard(
                 value: _pct(lab['amr_rate']),
                 label: 'Overall resistance rate',
                 sub: '${lab['resistant'] ?? 0} of ${lab['isolates_tested'] ?? 0} isolates resistant',
@@ -124,7 +124,7 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
 
               // ── Immunization coverage ──
               _SectionTitle('Immunization coverage', Icons.vaccines_outlined),
-              _Metric(value: '${imm['total_doses'] ?? 0}', label: 'Doses administered'),
+              MetricCard(value: '${imm['total_doses'] ?? 0}', label: 'Doses administered'),
               BreakdownCard(
                 heading: 'By vaccine',
                 icon: Icons.medical_services_outlined,
@@ -140,7 +140,7 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
 
               // ── Mortality ──
               _SectionTitle('Vital statistics & mortality', Icons.monitor_heart_outlined),
-              _Metric(
+              MetricCard(
                 value: '${vital['births'] ?? 0} / ${vital['deaths'] ?? 0}',
                 label: 'Births / deaths',
                 sub: 'MMR ${_num(vital['maternal_mortality_ratio'])} per 100k · '
@@ -155,7 +155,7 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
 
               // ── Pharmacy shortages ──
               _SectionTitle('Pharmacy stock', Icons.inventory_2_outlined),
-              _Metric(
+              MetricCard(
                 value: '${stock['shortage_count'] ?? 0}',
                 label: 'Active shortages',
                 sub: '${stock['total_reports'] ?? 0} stock reports',
@@ -172,9 +172,9 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
               // ── What the counters took ──
               _SectionTitle('Pharmacy sales', Icons.point_of_sale_outlined),
               if (takings.isEmpty)
-                const _Metric(value: '—', label: 'No sales recorded yet'),
+                const MetricCard(value: '—', label: 'No sales recorded yet'),
               for (final p in takings)
-                _Metric(
+                MetricCard(
                   value: money(p.revenue),
                   label: '${_title(p.bucket)} sales — ${p.period}',
                   sub: '${units(p.sales)} sale(s), every pharmacy in the patch',
@@ -189,36 +189,11 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
 
               // ── Controlled drugs ──
               _SectionTitle('Controlled drugs', Icons.gpp_maybe_outlined),
-              _Metric(
-                value: units(controlledTotal(poison, 'prescribed_units')),
-                label: 'Controlled units prescribed',
-                sub: '${units(controlledTotal(poison, 'prescribed'))} script line(s) '
-                    'across the patch',
-              ),
-              _Metric(
-                value: units(controlledTotal(poison, 'dispensed_units')),
-                label: 'Controlled units dispensed',
-                sub: '${units(controlledTotal(poison, 'dispensed'))} line(s) handed '
-                    'over — the rest was written for and never collected',
-              ),
-              BreakdownCard(
-                heading: 'Dispensed by area',
-                icon: Icons.map_outlined,
-                rows: controlledByArea(poison, 'dispensed_units'),
-                labelKey: 'area',
-                valueKey: 'value',
-              ),
-              BreakdownCard(
-                heading: 'Most dispensed controlled drugs',
-                icon: Icons.medication_outlined,
-                rows: (poison['by_drug'] as List?) ?? [],
-                labelKey: 'drug',
-                valueKey: 'dispensed_units',
-              ),
+              ...controlledCards(poison),
 
               // ── Community health workers ──
               _SectionTitle('Community health workers', Icons.groups_outlined),
-              _Metric(
+              MetricCard(
                 value: '${chw['total'] ?? 0}',
                 label: 'Field reports',
                 sub: '${chw['danger_signs'] ?? 0} danger signs · '
@@ -233,7 +208,7 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
 
               // ── Health-service KPIs ──
               _SectionTitle('Health-service performance', Icons.local_hospital_outlined),
-              _Metric(
+              MetricCard(
                 value: _pct(facility['occupancy_rate']),
                 label: 'Bed occupancy',
                 sub: 'avg wait ${_num(facility['avg_wait_minutes'])} min · '
@@ -242,7 +217,7 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
 
               // ── Insurance ──
               _SectionTitle('Insurance claims', Icons.receipt_long_outlined),
-              _Metric(
+              MetricCard(
                 value: '${insurance['total'] ?? 0}',
                 label: 'Claims',
                 sub: '₦${_num(insurance['total_amount'])} total · '
@@ -263,7 +238,7 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
 
               // ── Appointments / telemedicine ──
               _SectionTitle('Appointments & telemedicine', Icons.event_outlined),
-              _Metric(
+              MetricCard(
                 value: '${appt['total'] ?? 0}',
                 label: 'Appointments',
                 sub: '${appt['telemedicine'] ?? 0} telemedicine · '
@@ -284,7 +259,7 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
 
               // ── Clinic load ──
               _SectionTitle('Clinic load', Icons.medical_information_outlined),
-              _Metric(
+              MetricCard(
                 value: '${visit['total'] ?? 0}',
                 label: 'Consultations',
                 sub: '${visit['open'] ?? 0} still open · '
@@ -305,7 +280,7 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
 
               // ── Prescribing & dispensing ──
               _SectionTitle('Prescribing & dispensing', Icons.description_outlined),
-              _Metric(
+              MetricCard(
                 value: _pct(rx['dispense_rate']),
                 label: 'Orders actually dispensed',
                 sub: '${rx['dispensed'] ?? 0} of ${rx['total'] ?? 0} prescriptions'
@@ -314,7 +289,7 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
               // Says how much of the prescribing the two breakdowns below
               // actually cover. Reading them as the whole picture when most
               // orders carry no diagnosis is the way this section misleads.
-              _Metric(
+              MetricCard(
                 value: _pct(rx['linked_rate']),
                 label: 'Orders with a diagnosis recorded',
                 sub: '${rx['linked'] ?? 0} of ${rx['total'] ?? 0} orders link '
@@ -376,40 +351,6 @@ class _SectionTitle extends StatelessWidget {
               fontSize: 18,
             )),
       ]),
-    );
-  }
-}
-
-class _Metric extends StatelessWidget {
-  final String value;
-  final String label;
-  final String? sub;
-  final bool danger;
-  const _Metric({required this.value, required this.label, this.sub, this.danger = false});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: GlassCard(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(value,
-                style: GoogleFonts.outfit(
-                  color: danger ? EnhancedTheme.errorRed : context.labelColor,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 28,
-                )),
-            Text(label, style: TextStyle(color: context.hintColor, fontSize: 12)),
-            if (sub != null) ...[
-              const SizedBox(height: 4),
-              Text(sub!, style: TextStyle(color: context.hintColor, fontSize: 12)),
-            ],
-          ],
-        ),
-      ),
     );
   }
 }

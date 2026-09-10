@@ -9,6 +9,12 @@ const _payload = {
     {'state': 'Kano', 'prescribed': 1, 'prescribed_units': 4,
      'dispensed': 1, 'dispensed_units': 4},
   ],
+  'by_drug': [
+    // Ordered by lines written plus lines sold, the way the API sends them.
+    {'drug': 'Codeine syrup', 'dispensed_units': 6, 'otc_units': 1},
+    {'drug': 'Tramadol 100mg', 'dispensed_units': 10, 'otc_units': 0},
+    {'drug': 'Pethidine 50mg', 'dispensed_units': 0, 'otc_units': 8},
+  ],
 };
 
 void main() {
@@ -37,5 +43,18 @@ void main() {
       }, 'dispensed_units'),
       [{'area': 'Ikeja', 'value': 12}],
     );
+  });
+
+  test('drug rows are ranked by the column the card names', () {
+    expect(controlledByDrug(_payload, 'dispensed_units'), [
+      {'drug': 'Tramadol 100mg', 'value': 10},
+      {'drug': 'Codeine syrup', 'value': 6},
+    ]);
+    // A drug that only ever goes over the counter tops the till card.
+    expect(controlledByDrug(_payload, 'otc_units'), [
+      {'drug': 'Pethidine 50mg', 'value': 8},
+      {'drug': 'Codeine syrup', 'value': 1},
+    ]);
+    expect(controlledByDrug(null, 'otc_units'), isEmpty);
   });
 }

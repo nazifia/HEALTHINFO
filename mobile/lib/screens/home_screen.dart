@@ -52,6 +52,7 @@ import 'insurance_claims_screen.dart';
 import 'appointments_screen.dart';
 import 'consultations_screen.dart';
 import 'public_health_screen.dart';
+import 'controlled_drugs_screen.dart';
 import 'collated_reports_screen.dart';
 import 'report_sources_screen.dart';
 import 'platform_adr_screen.dart';
@@ -171,6 +172,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   // bar title and the IndexedStack all index into this.
   List<_Section> _flat = _flatten(_baseGroups, _dashboard);
 
+  // The signed-in role, kept so the app bar knows whether this seat may step
+  // out of an organization. Only a super-admin can: everyone else belongs to
+  // the tenant they signed into.
+  String? _role;
+
+  // The organization the menu was last built for. Stepping out of one is a
+  // move to the platform view, so it lands on the platform home instead of
+  // whatever index the tenant's own menu left behind.
+  String _menuSlug = tenantSlug;
+
   // Group labels the user collapsed, restored from disk on start.
   final Set<String> _closed = {};
 
@@ -259,6 +270,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   static const _oversightGroup = _Group('Public health', [
     _Section('Surveillance', Icons.notifications_active_outlined,
         SurveillanceScreen()),
+    _Section('Controlled drugs', Icons.gpp_maybe_outlined,
+        ControlledDrugsScreen()),
     _Section('IDSR report', Icons.assignment_outlined, IdsrScreen()),
     _Section('Collated reports', Icons.bar_chart_outlined,
         CollatedReportsScreen()),
@@ -295,6 +308,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         CollatedReportsScreen()),
     _Section('ADR collation', Icons.vaccines_outlined, PlatformAdrScreen()),
     _Section('Public health', Icons.public_outlined, PublicHealthScreen()),
+    _Section('Controlled drugs', Icons.gpp_maybe_outlined,
+        ControlledDrugsScreen()),
     _Section('Report sources', Icons.inventory_2_outlined,
         ReportSourcesScreen()),
     _Section('Surveillance', Icons.notifications_active_outlined,
@@ -364,6 +379,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final role = me?['role']?.toString();
     final manages = Api.canManageUsers(me);
     if (!mounted) return;
+    setState(() => _role = role);
+    final leftTenant = _menuSlug.isNotEmpty && tenantSlug.isEmpty;
+    _menuSlug = tenantSlug;
+    if (leftTenant) _index = 0;
     final pharmacy = isPharmacyStaff(role) ? [_pharmacyGroup] : <_Group>[];
     if (role == 'super_admin') {
       // Inside a clinic or a pharmacy a super-admin works as that
@@ -438,6 +457,34 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void _openSection(String label) {
     final i = _flat.indexWhere((s) => s.label == label);
     if (i >= 0) setState(() => _index = i);
+  }
+
+  /// The way out of an opened organization, on every screen rather than only
+  /// the tenant list: a super-admin who drilled into a patient record should
+  /// not have to find their way back to that list to get out.
+  Widget _leaveTenantChip() => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: ActionChip(
+          avatar: const Icon(Icons.logout, size: 16),
+          // A long organization name must not push the app bar's own buttons
+          // off a phone screen.
+          label: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 120),
+            child: Text(tenantLabel, overflow: TextOverflow.ellipsis),
+          ),
+          tooltip: 'Leave $tenantLabel',
+          onPressed: _leaveTenant,
+        ),
+      );
+
+  Future<void> _leaveTenant() async {
+    final name = tenantLabel;
+    await api.leaveTenant();
+    if (!mounted) return;
+    // No menu work here: setTenant fires tenantChanged, and the _loadRole
+    // listener rebuilds the platform menu and lands on its home.
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('Left $name.')));
   }
 
   Future<void> _logout() async {
@@ -615,6 +662,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         automaticallyImplyLeading: !wide,
         title: Text(section.label),
         actions: [
+          if (_role == 'super_admin' && tenantSlug.isNotEmpty)
+            _leaveTenantChip(),
           IconButton(
             icon: const Icon(Icons.search),
             onPressed: () => Navigator.of(context).push(
@@ -662,6 +711,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   // Width-capped page area so lists/forms don't stretch across a wide monitor.
   Widget _content() {
     final body = IndexedStack(
+      // Every page in the stack holds rows read in one scope. Leaving an
+      // organization for the platform view (or opening another one) must throw
+      // those away, not leave the last tenant's data sitting on screen.
+      key: ValueKey(tenantSlug),
       index: _index,
       children: [for (final s in _flat) s.page],
     );

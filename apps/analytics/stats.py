@@ -22,7 +22,7 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.catalog.models import Disease, Medication
-from apps.pos.models import ReturnRecord, Sale
+from apps.pos.models import ReturnRecord, Sale, SaleItem
 from apps.prescriptions.models import PrescriptionItem
 from apps.tenants.current import get_current_tenant
 from apps.tenants.models import Jurisdiction, Tenant
@@ -999,23 +999,51 @@ def platform_sales_stats(start=None, end=None, jurisdiction=None):
 
 
 def platform_controlled_stats(start=None, end=None, jurisdiction=None):
-    """Controlled (poison) drugs prescribed and dispensed, folded up to the state.
+    """Controlled (poison) drugs prescribed, dispensed and sold, up to the state.
 
     The regulator's question about the poison register: how much of the
-    controlled list was written for in this patch, and how much of it actually
-    went over the counter. Prescribed is every line on a script for an item
-    flagged ``is_controlled``; dispensed is the subset ticked off as handed
-    over. Both counted in lines and in units, because "50 scripts" and "5,000
-    tablets" are different alarms.
+    controlled list was written for in this patch, how much of it was actually
+    handed over against a script, and how much went over the counter with no
+    script behind it at all. Everything counted in lines and in units, because
+    "50 scripts" and "5,000 tablets" are different alarms.
 
-    ponytail: a line typed in free text (``item`` blank) carries no flag and so
-    is not counted — link the script line to the shelf item to have it counted.
-    A controlled item sold at the till with no script behind it is not in here
-    either; that is a separate question, add it when someone asks it.
+    Prescribed is every script line for an item flagged ``is_controlled``;
+    dispensed is the subset ticked off as handed over. ``otc`` is the till
+    side: sale lines for a flagged item on a sale that names no prescription.
+    Its units are net of returns, and a cancelled or fully returned sale is not
+    counted at all — the register wants what left the shelf and stayed gone.
+
+    ponytail: a script line typed in free text (``item`` blank) carries no flag
+    and so is not counted — link the line to the shelf item to have it counted.
     """
+    rx_counts = {
+        "prescribed": Count("id"),
+        "prescribed_units": Sum("quantity"),
+        "dispensed": Count("id", filter=Q(is_dispensed=True)),
+        "dispensed_units": Sum("quantity", filter=Q(is_dispensed=True)),
+    }
+    otc_counts = {
+        "otc": Count("id"),
+        "otc_units": Sum(F("quantity") - F("return_quantity")),
+    }
+    fields = (*rx_counts, *otc_counts)
     lines = apply_range(
         _scope(
             PrescriptionItem.all_objects.filter(item__is_controlled=True),
+            jurisdiction,
+        ),
+        start, end,
+    )
+    # No script behind it: neither the dispensing prescription nor the older
+    # analytics one. Either link means the sale is already on the script side.
+    tills = apply_range(
+        _scope(
+            SaleItem.all_objects.filter(
+                item__is_controlled=True,
+                sale__status__in=Sale.REVENUE_STATUSES,
+                sale__rx=None,
+                sale__prescription=None,
+            ),
             jurisdiction,
         ),
         start, end,
@@ -1024,35 +1052,42 @@ def platform_controlled_stats(start=None, end=None, jurisdiction=None):
         jurisdiction, offered=[Jurisdiction.Level.LOCAL, Jurisdiction.Level.STATE]
     )[-1]
     juris = {j.id: j for j in Jurisdiction.objects.all()}
-    dispensed = Q(is_dispensed=True)
-    counts = {
-        "prescribed": Count("id"),
-        "prescribed_units": Sum("quantity"),
-        "dispensed": Count("id", filter=dispensed),
-        "dispensed_units": Sum("quantity", filter=dispensed),
-    }
-    rows = (
-        lines.exclude(tenant__jurisdiction=None)
-        .values("tenant__jurisdiction")
-        .annotate(**counts)
-    )
-    totals = {}
-    for r in rows:
-        node = juris.get(r["tenant__jurisdiction"])
-        anc = node.ancestor(level) if node else None
-        if anc is None:
-            continue
-        bucket = totals.setdefault(anc.name, dict.fromkeys(counts, 0))
-        for field in counts:
-            bucket[field] += r[field] or 0
-    by_area = [
-        {level: area, **v}
-        for area, v in sorted(totals.items(), key=lambda kv: -kv[1]["prescribed"])
-    ]
+
+    def areas(qs, counts):
+        rows = (
+            qs.exclude(tenant__jurisdiction=None)
+            .values("tenant__jurisdiction")
+            .annotate(**counts)
+        )
+        for r in rows:
+            node = juris.get(r["tenant__jurisdiction"])
+            anc = node.ancestor(level) if node else None
+            if anc is not None:
+                yield anc.name, r
+
+    def drugs(qs, counts):
+        # Group both sides on the shelf item's name, not the line's copied one,
+        # or a renamed item would land in two buckets.
+        for r in qs.values(drug=F("item__name")).annotate(**counts):
+            yield r["drug"], r
+
+    def rollup(group):
+        """One bucket per name, script columns and till columns side by side."""
+        totals = {}
+        for qs, counts in ((lines, rx_counts), (tills, otc_counts)):
+            for name, row in group(qs, counts):
+                bucket = totals.setdefault(name, dict.fromkeys(fields, 0))
+                for field in counts:
+                    bucket[field] += row[field] or 0
+        return totals
+
+    def busiest(totals):
+        # Lines written plus lines sold: a drug that only ever goes over the
+        # counter still belongs at the top of the list.
+        return sorted(totals.items(), key=lambda kv: -(kv[1]["prescribed"]
+                                                       + kv[1]["otc"]))
+
+    by_area = [{level: area, **v} for area, v in busiest(rollup(areas))]
     # Which drugs, not just how many: a state acts on the molecule, not the total.
-    by_drug = list(
-        lines.values(drug=F("item__name"))
-        .annotate(**counts)
-        .order_by("-prescribed")[:50]
-    )
+    by_drug = [{"drug": d, **v} for d, v in busiest(rollup(drugs))[:50]]
     return {"level": level, "by_area": by_area, "by_drug": by_drug}

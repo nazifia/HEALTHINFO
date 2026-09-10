@@ -1,7 +1,8 @@
-"""Controlled (poison) drugs prescribed and dispensed, folded up to the state.
+"""Controlled (poison) drugs prescribed, dispensed and sold, up to the state.
 
-Two things the regulator's number has to get right: only flagged items count,
-and "dispensed" is the subset actually handed over — never the whole script.
+Three things the regulator's number has to get right: only flagged items
+count, "dispensed" is the subset actually handed over — never the whole
+script — and the till side counts only what went out with no script behind it.
 """
 import pytest
 from decimal import Decimal
@@ -10,6 +11,7 @@ from rest_framework.test import APIClient
 from apps.accounts.models import Role, User
 from apps.analytics.stats import platform_controlled_stats
 from apps.inventory.models import StockItem
+from apps.pos.models import Sale, SaleItem
 from apps.prescriptions.models import Prescription, PrescriptionItem
 from apps.tenants.current import clear_current_tenant
 from apps.tenants.models import Jurisdiction, Tenant
@@ -48,6 +50,22 @@ def scripts(db):
     line(lag, tramadol, 10, True)
     line(lag, para, 100, True)       # not controlled: not in the register
     line(kan, kano_codeine, 4, True)
+
+    def sold(tenant, stock, qty, returned=0, status=Sale.Status.PAID, rx=None):
+        sale = Sale.all_objects.create(tenant=tenant, status=status, rx=rx)
+        return SaleItem.all_objects.create(
+            tenant=tenant, sale=sale, item=stock, name=stock.name,
+            quantity=qty, return_quantity=returned,
+            unit_price=stock.unit_price, cost_price=stock.cost_price,
+        )
+
+    sold(lag, codeine, 6)
+    sold(lag, tramadol, 5, returned=2)                    # 3 units stayed gone
+    sold(lag, codeine, 9, status=Sale.Status.CANCELLED)   # never happened
+    sold(lag, para, 20)                                   # not controlled
+    sold(lag, tramadol, 7, rx=Prescription.all_objects.create(
+        tenant=lag, customer_name="Walk-in"))             # a script, not OTC
+    sold(kan, kano_codeine, 1)
     yield {"lagos": lagos, "kano": kano, "ikeja": ikeja}
     clear_current_tenant()
 
@@ -68,6 +86,32 @@ def test_only_controlled_lines_count_and_dispensed_is_the_handed_over_subset(scr
     assert areas["Lagos"]["dispensed_units"] == 12
     assert areas["Kano"]["prescribed"] == 1
     assert areas["Kano"]["dispensed_units"] == 4
+
+
+def test_the_till_side_is_only_what_left_with_no_script_behind_it(scripts):
+    areas = _areas(platform_controlled_stats())
+    # Codeine 6 + tramadol (5 sold, 2 back) = 9 units on 2 lines. The cancelled
+    # sale, the paracetamol and the sale filled against a script are all out.
+    assert areas["Lagos"]["otc"] == 2
+    assert areas["Lagos"]["otc_units"] == 9
+    assert areas["Kano"]["otc_units"] == 1
+    # The till never moves the script columns.
+    assert areas["Lagos"]["prescribed"] == 3
+    assert areas["Lagos"]["dispensed_units"] == 12
+
+
+def test_a_drug_only_ever_sold_over_the_counter_still_shows(scripts):
+    tenant = Tenant.objects.get(slug="ikeja-c")
+    pethidine = StockItem.all_objects.create(
+        tenant=tenant, name="Pethidine 50mg", unit="ampoule", is_controlled=True,
+        cost_price=Decimal("10.00"), unit_price=Decimal("50.00"),
+    )
+    sale = Sale.all_objects.create(tenant=tenant, status=Sale.Status.PAID)
+    SaleItem.all_objects.create(tenant=tenant, sale=sale, item=pethidine,
+                                name=pethidine.name, quantity=8)
+    row = {r["drug"]: r for r in platform_controlled_stats()["by_drug"]}
+    assert row["Pethidine 50mg"]["otc_units"] == 8
+    assert row["Pethidine 50mg"]["prescribed"] == 0
 
 
 def test_by_drug_names_the_molecule(scripts):
@@ -127,6 +171,6 @@ def test_csv_carries_areas_and_drugs(scripts, db):
     assert res["Content-Type"] == "text/csv"
     lines = res.content.decode().splitlines()
     assert lines[0] == ("bucket,name,prescribed,prescribed_units,dispensed,"
-                        "dispensed_units")
-    assert lines[1] == "area,Lagos,3,15,2,12"
+                        "dispensed_units,otc,otc_units")
+    assert lines[1] == "area,Lagos,3,15,2,12,2,9"
     assert [line.split(",")[0] for line in lines[2:]] == ["drug", "drug"]

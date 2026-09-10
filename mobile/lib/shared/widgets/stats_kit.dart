@@ -673,3 +673,41 @@ int countTrue(List<Map<String, dynamic>> items, String key) =>
 /// Count rows whose [key] string equals [value].
 int countEq(List<Map<String, dynamic>> items, String key, String value) =>
     items.where((r) => '${r[key] ?? ''}'.trim() == value).length;
+
+/// Headline number card: big value, label, optional one-line note. The
+/// public-health screen and the controlled-drug screen share it so a metric
+/// reads the same wherever it is shown.
+class MetricCard extends StatelessWidget {
+  final String value;
+  final String label;
+  final String? sub;
+  final bool danger;
+  const MetricCard(
+      {super.key, required this.value, required this.label, this.sub, this.danger = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: GlassCard(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(value,
+                style: GoogleFonts.outfit(
+                  color: danger ? EnhancedTheme.errorRed : context.labelColor,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 28,
+                )),
+            Text(label, style: TextStyle(color: context.hintColor, fontSize: 12)),
+            if (sub != null) ...[
+              const SizedBox(height: 4),
+              Text(sub!, style: TextStyle(color: context.hintColor, fontSize: 12)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}

@@ -20,3 +20,18 @@ List<Map<String, dynamic>> controlledByArea(Map? data, String key) {
       {'area': '${r[level] ?? '—'}', 'value': r[key] ?? 0}
   ];
 }
+
+/// The drug rows ranked by one column, biggest first, zeros dropped.
+///
+/// The payload orders by lines written plus lines sold, so a card that names
+/// one column has to rank by that column — otherwise the tallest bar is not
+/// the top row. A drug with nothing in the column is not on the card at all.
+List<Map<String, dynamic>> controlledByDrug(Map? data, String key) {
+  final rows = [
+    for (final r in ((data?['by_drug'] as List?) ?? []).cast<Map>())
+      if ((r[key] as num? ?? 0) > 0)
+        {'drug': '${r['drug'] ?? '—'}', 'value': r[key] as num}
+  ];
+  rows.sort((a, b) => (b['value'] as num).compareTo(a['value'] as num));
+  return rows;
+}

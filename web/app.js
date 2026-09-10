@@ -799,9 +799,14 @@ async function ensureChrome() {
   badge.textContent = Api.tenantName || Api.tenant || 'no organization';
   // A super-admin hops between organizations, so their badge is the way back
   // out of the one they opened. Everyone else is stuck to their own tenant.
-  badge.classList.toggle('clickable', ME?.role === 'super_admin');
-  badge.title = ME?.role === 'super_admin' ? 'Leave this organization' : '';
-  badge.onclick = ME?.role === 'super_admin' ? () => {
+  const canLeave = ME?.role === 'super_admin' && !!Api.tenant;
+  badge.classList.toggle('clickable', canLeave);
+  badge.title = canLeave ? 'Leave this organization' : '';
+  badge.onclick = canLeave ? async () => {
+    // Close the visit on the server before dropping the header, same as
+    // opening records it: a trail that only ever says who went in is half a
+    // trail. A failure here must not strand them inside the organization.
+    try { await Api.post('/api/tenants/leave/'); } catch { /* leave anyway */ }
     Api.tenant = '';
     Api.tenantName = '';
     location.hash = '#/platform';
@@ -1747,7 +1752,7 @@ async function viewDetail(slug, id) {
         try {
           const rows = await Api.get(`/api/tenants/${id}/access-log/`);
           $('#open-log-out').innerHTML = rows.length
-            ? tableHtml(rows.map((r) => ({ who: r.user_phone || `#${r.user}`, when: r.created_at })))
+            ? tableHtml(rows.map((r) => ({ who: r.user_phone || `#${r.user}`, what: r.to_status, when: r.created_at })))
             : '<p class="muted">Nobody has opened this organization yet.</p>';
         } catch (e) { toast(e.message, true); }
       };
@@ -2469,6 +2474,26 @@ function salesHeadline(data) {
   return tiles.length ? `<div class="tiles">${tiles.join('')}</div>` : '';
 }
 
+/* The headline from /analytics/platform/controlled/: what the patch wrote for,
+   what it handed over, and what went over the counter with no script behind it.
+   by_area rows are one per area, so the patch's total is the sum of its rows.
+   Lines and units both, because "50 scripts" and "5,000 tablets" are different
+   alarms. */
+function controlledHeadline(data) {
+  const rows = Array.isArray(data?.by_area) ? data.by_area : [];
+  if (!rows.length) return '';
+  const sum = (k) => rows.reduce((t, r) => t + Number(r[k] || 0), 0);
+  const tiles = [
+    ['Prescribed', 'prescribed_units', 'prescribed', 'script line(s)'],
+    ['Dispensed', 'dispensed_units', 'dispensed', 'line(s) handed over'],
+    ['Sold, no script', 'otc_units', 'otc', 'till line(s), net of returns'],
+  ].map(([head, units, lines, note]) => `<div class="tile kpi-tile">
+      <span class="tile-label">${esc(head)} (units)</span>
+      <span class="tile-val">${esc(fmtVal(sum(units)))}</span>
+      <span class="tile-label">${esc(fmtVal(sum(lines)))} ${esc(note)}</span></div>`);
+  return `<div class="tiles">${tiles.join('')}</div>`;
+}
+
 function statIndex(title, registry, prefix) {
   return `<h2>${esc(title)}</h2><div class="tiles home-tiles">` +
     registry.map((m) => `<a class="tile linktile" href="#${prefix}/${m.key}"><span class="tile-label">${ico('chart')}${esc(m.label)}</span></a>`).join('') +
@@ -2521,7 +2546,9 @@ async function viewAnalytics(registry, prefix, key) {
     try {
       const data = await Api.get(m.path, params());
       // The money report leads with its totals; the tables under it are the grain.
-      $('#out').innerHTML = (key === 'sales' ? salesHeadline(data) : '')
+      const headline = key === 'sales' ? salesHeadline
+        : key === 'controlled' ? controlledHeadline : null;
+      $('#out').innerHTML = (headline ? headline(data) : '')
         + renderData(data, 0, rowLink);
     }
     catch (err) { $('#out').innerHTML = `<p class="err">${esc(err.message)}</p>`; }

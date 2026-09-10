@@ -665,7 +665,7 @@ class PlatformSalesStatsView(APIView):
 
 
 class PlatformControlledStatsView(APIView):
-    """Controlled (poison) drugs prescribed vs dispensed per state.
+    """Controlled (poison) drugs prescribed, dispensed and sold per state.
 
     Same aggregate-only gate as the other platform reads: a health authority
     sees its own patch, a platform admin sees every state until they pick one.
@@ -683,7 +683,8 @@ class PlatformControlledStatsView(APIView):
         if request.query_params.get("format") != "csv":
             return Response(stats)
         level = stats["level"]
-        counts = ("prescribed", "prescribed_units", "dispensed", "dispensed_units")
+        counts = ("prescribed", "prescribed_units", "dispensed",
+                  "dispensed_units", "otc", "otc_units")
         rows = (
             [bucket, r.get(level) or r.get("drug") or "—", *(r[c] for c in counts)]
             for bucket, key in (("area", "by_area"), ("drug", "by_drug"))
