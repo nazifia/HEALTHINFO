@@ -262,6 +262,10 @@ const rpath = (slug, suffix = '') => `/api/${RESOURCES[slug]?.path || slug}/${su
 const rdetail = (slug, suffix) => slug.startsWith('tenants-')
   ? `/api/tenants/${suffix}` : rpath(slug, suffix);
 
+// List-of-choices fields whose values are names, not row ids: a user's grants.
+// Rendered as the same multi-select as the M2M fields, collected as strings.
+const STR_LIST_FIELDS = new Set(['privileges']);
+
 // M2M PK-list fields (catalog serializers). OPTIONS metadata can't tell
 // many-related from single-related, so name them.
 // ponytail: hardcoded set; derive from /api/schema/ if the model graph grows.
@@ -275,6 +279,8 @@ const FIELD_HINTS = {
   annual_limit: "Most this member's plan pays out in a calendar year. Blank is uncapped.",
   preauth_threshold: 'Insured amount above which this HMO clears a sale before it happens. 0 asks for no authorisation.',
   tariff: "Most the scheme pays for one unit, whatever the pharmacy charges. Blank covers the shelf price.",
+  privileges: 'Extra screens this person gets on top of their role. You can only pass on what you hold yourself.',
+  is_admin: "Lets this seat run its own portal's user list. Meant for an insurer or health authority seat.",
 };
 
 // The drug fields of a clinical drug order. Everything else on that form —
@@ -383,6 +389,48 @@ const NAV_CLOSED = new Set(JSON.parse(localStorage.getItem('navClosed') || '[]')
    until they leave it, and the API refuses them meanwhile. */
 const isPlatformScope = () => ME?.role === 'super_admin' && !Api.tenant;
 
+/* Named grants a seat can hold on top of its role, and where each one means
+   something. Mirrors accounts.permissions.MODULE_PRIVILEGES — a grant outside
+   the seat's own module counts for nothing, here and on the server. */
+const MODULE_PRIVILEGES = {
+  facility: ['manage_users', 'pharmacy_admin'],
+  scheme: ['manage_users'],
+  oversight: ['manage_users'],
+};
+
+/* Which roles each module's admin may mint (accounts.permissions.MANAGEABLE_ROLES). */
+const MODULE_ROLES = {
+  facility: ['tenant_admin', 'doctor', 'pharmacist', 'nurse', 'midwife', 'chew', 'hmo', 'public'],
+  scheme: ['hmo'],
+  oversight: ['government'],
+};
+
+const myModule = () => (ME?.role === 'hmo' ? 'scheme'
+  : ME?.role === 'government' ? 'oversight'
+  : ME?.tenant != null ? 'facility' : null);
+
+/* The grants this seat actually holds: its module's whole catalog when it is
+   that module's admin, else what its own row carries, narrowed to the module. */
+function myGrants() {
+  const module = myModule();
+  if (!module) return ME?.role === 'super_admin' ? MODULE_PRIVILEGES.facility : [];
+  const catalog = MODULE_PRIVILEGES[module];
+  if (['super_admin', 'tenant_admin'].includes(ME?.role) || ME?.is_admin) return catalog;
+  return catalog.filter((p) => (ME?.privileges || []).includes(p));
+}
+
+const hasPriv = (name) => myGrants().includes(name);
+
+/* Roles this seat may assign, or null for the platform admin who may assign
+   any. A grant is not the role: someone trusted with the user list cannot
+   mint the admin who could take that trust back. */
+function myManageableRoles() {
+  const module = myModule();
+  if (!module) return null;
+  const roles = MODULE_ROLES[module];
+  return ME?.role === 'tenant_admin' ? roles : roles.filter((r) => r !== 'tenant_admin');
+}
+
 const navGroup = (name, links) =>
   `<details class="nav-group"${NAV_CLOSED.has(name) ? '' : ' open'} data-group="${name}">` +
   `<summary>${esc(name)}</summary>${links}</details>`;
@@ -418,8 +466,12 @@ function navHtml() {
   const seat = SEAT_NAV[ME?.role];
   if (seat) {
     const [home, group, links] = seat;
+    // A seat flagged as its portal's admin also staffs it: same list screen,
+    // narrowed by the API to that scheme's desk or that authority's patch.
+    const own = (ME?.is_admin || hasPriv('manage_users'))
+      ? links.concat([[`#/r/users`, 'users', 'Portal Users']]) : links;
     return `<a href="${home}" data-route="${home.slice(1)}" class="nav-home">${ico('home')}Dashboard</a>`
-      + navGroup(group, links.map(seatLink).join(''))
+      + navGroup(group, own.map(seatLink).join(''))
       + navGroup('Account', `<a href="#/profile" data-route="/profile">${ico('users')}Profile</a>`);
   }
   const iconFor = (slug, r) => slug === 'users' || slug === 'patients' ? 'users'
@@ -428,7 +480,8 @@ function navHtml() {
   const groups = {};
   for (const [slug, r] of Object.entries(RESOURCES)) {
     if (r.superOnly && ME?.role !== 'super_admin') continue;
-    if (r.adminOnly && !['super_admin', 'tenant_admin'].includes(ME?.role)) continue;
+    if (r.adminOnly && !['super_admin', 'tenant_admin'].includes(ME?.role)
+        && !(slug === 'users' && hasPriv('manage_users'))) continue;
     if (r.group === 'Pharmacy' && !PHARMACY_STAFF_ROLES.has(ME?.role)) continue;
     // Patient data is clinical-staff only (apps.accounts.permissions.IsClinicalStaff).
     if (r.group === 'Clinical' && !Api.roleCanReport(ME?.role)) continue;
@@ -1439,7 +1492,9 @@ function canWriteRes(slug, res) {
   if (res.roles === 'tenant_admin') return ['super_admin', 'tenant_admin'].includes(ME.role);
   // Patients: the same cadres that may read them may register and edit them.
   if (res.roles === 'clinical') return Api.roleCanReport(ME.role);
-  if (slug === 'users') return ['super_admin', 'tenant_admin'].includes(ME.role);
+  // Users: the facility's admin, or a seat flagged as its own portal's admin.
+  if (slug === 'users') return ['super_admin', 'tenant_admin'].includes(ME.role)
+    || !!ME.is_admin || hasPriv('manage_users');
   return res.report ? Api.roleCanReport(ME.role) : Api.roleCanWrite(ME.role);
 }
 
@@ -1752,6 +1807,7 @@ async function viewForm(slug, id, query) {
     ]);
     const fields = meta?.actions?.PUT || meta?.actions?.POST;
     if (!fields) return errorBox(new Error('You do not have permission to edit this resource.'));
+    if (slug === 'users') narrowUserFields(fields);
     const inputs = Object.entries(fields)
       .filter(([, f]) => !f.read_only)
       .map(([name, f]) => fieldHtml(name, f, current[name])).join('');
@@ -1799,6 +1855,31 @@ async function viewForm(slug, id, query) {
       }
     };
   } catch (e) { errorBox(e); }
+}
+
+/* A user form shows a seat only what it may hand out: the roles its own module
+ * lets it assign, and the grants it holds itself. The fields that say which
+ * module a user lands in are pinned from the writer server-side
+ * (accounts.serializers.apply_admin_scope), so they come off the form rather
+ * than being offered and then ignored. */
+function narrowUserFields(fields) {
+  const module = myModule();
+  const roles = myManageableRoles();
+  if (!roles) return;                       // the platform admin assigns any
+  if (fields.role?.choices) {
+    fields.role.choices = fields.role.choices.filter((c) => roles.includes(c.value));
+  }
+  const grants = myGrants();
+  const offered = (fields.privileges?.child?.choices || [])
+    .filter((c) => grants.includes(c.value));
+  if (fields.privileges) {
+    if (offered.length) fields.privileges.child.choices = offered;
+    else delete fields.privileges;          // nothing of theirs to pass on
+  }
+  delete fields.tenant;                     // pinned to the writer's own
+  if (module === 'scheme') { delete fields.hmo; delete fields.jurisdiction; }
+  if (module === 'oversight') delete fields.hmo;
+  if (module === 'facility') delete fields.jurisdiction;
 }
 
 /* Repeat the drug fields on demand, so one visit's drugs are prescribed in one
@@ -1945,8 +2026,10 @@ function fieldHtml(name, f, value) {
       ${help}<em class="field-err"></em></label>`;
   }
   let control;
+  // A ListField puts its options on the child, not on the field itself.
+  if (!f.choices && f.child?.choices) f = { ...f, choices: f.child.choices };
   if (f.choices) {
-    const isMulti = M2M_FIELDS.has(name);
+    const isMulti = M2M_FIELDS.has(name) || STR_LIST_FIELDS.has(name);
     const sel = new Set(Array.isArray(v) ? v.map(String) : [String(v)]);
     const opts = f.choices.map((c) =>
       `<option value="${esc(c.value)}" ${sel.has(String(c.value)) ? 'selected' : ''}>${esc(c.display_name)}</option>`).join('');
@@ -1979,7 +2062,8 @@ function collectForm(form, fields) {
     if (!elm) continue;
     if (f.type === 'boolean') { body[name] = elm.checked; continue; }
     if (elm instanceof HTMLSelectElement && elm.multiple) {
-      body[name] = [...elm.selectedOptions].map((o) => Number(o.value));
+      body[name] = [...elm.selectedOptions].map(
+        (o) => (STR_LIST_FIELDS.has(name) ? o.value : Number(o.value)));
       continue;
     }
     const raw = elm.value.trim();
@@ -2571,7 +2655,9 @@ async function viewGov() {
 
 const PHARMACY_ADMIN_ROLES = new Set(['super_admin', 'tenant_admin']);
 const PHARMACY_STAFF_ROLES = new Set([...PHARMACY_ADMIN_ROLES, 'pharmacist']);
-const isPharmacyAdmin = () => PHARMACY_ADMIN_ROLES.has(ME?.role);
+// A grant on the row counts the same as the admin role here, mirroring
+// accounts.permissions.is_pharmacy_admin — the staff gate still runs first.
+const isPharmacyAdmin = () => PHARMACY_ADMIN_ROLES.has(ME?.role) || hasPriv('pharmacy_admin');
 const isPharmacyStaff = () => PHARMACY_STAFF_ROLES.has(ME?.role);
 
 // Naira, two decimals. Prefixed, because a bare "14,115.00" on a till screen

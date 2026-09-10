@@ -123,6 +123,17 @@ class User(AbstractUser):
         related_name="seats",
     )
 
+    # Runs their own portal's user list: an insurer seat that adds colleagues
+    # to its scheme's claims desk, a health authority seat that adds analysts
+    # to its patch. Meaningless on a tenant admin (that role already is the
+    # facility's admin) and on a super admin (platform-wide anyway).
+    is_admin = models.BooleanField(default=False)
+    # Grants on top of the role, inside the seat's own module: a pharmacist
+    # trusted with the admin screens, a claims clerk who staffs the desk. Names
+    # come from accounts.permissions.MODULE_PRIVILEGES — one held outside the
+    # seat's module counts for nothing, so a stale grant can't widen anyone.
+    privileges = models.JSONField(default=list, blank=True)
+
     USERNAME_FIELD = "phone"
     REQUIRED_FIELDS = []
 

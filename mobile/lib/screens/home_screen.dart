@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../main.dart';
+import '../api.dart';
 import '../config.dart';
 import '../pharmacy.dart';
 import '../resources.dart';
@@ -351,8 +352,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     });
   }
 
+  // A seat that runs its own portal's user list gets the staff screen inside
+  // its own group. The API narrows that list to the portal — an insurer sees
+  // its scheme's desk, a health authority its patch (see UserViewSet).
+  static _Group _withUsers(_Group group, bool manages) => manages
+      ? _Group(group.label, [...group.sections, _usersSection])
+      : group;
+
   Future<void> _loadRole() async {
-    final role = await api.myRole();
+    final me = await api.me();
+    final role = me?['role']?.toString();
+    final manages = Api.canManageUsers(me);
     if (!mounted) return;
     final pharmacy = isPharmacyStaff(role) ? [_pharmacyGroup] : <_Group>[];
     if (role == 'super_admin') {
@@ -380,23 +390,34 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return;
     }
     if (role == 'hmo') {
-      _setGroups([_insurerGroup, _accountGroup], home: _insurerHome);
+      _setGroups([_withUsers(_insurerGroup, manages), _accountGroup],
+          home: _insurerHome);
       return;
     }
     if (role == 'government') {
-      _setGroups([_oversightGroup, _accountGroup], home: _oversightHome);
+      _setGroups([_withUsers(_oversightGroup, manages), _accountGroup],
+          home: _oversightHome);
       return;
     }
     if (role == 'tenant_admin') {
       _setGroups([
-        const _Group('Administration', [_accessLogSection]),
+        const _Group('Administration', [_usersSection, _accessLogSection]),
         ...pharmacy,
         ..._baseGroups,
       ]);
       return;
     }
+    // Staff carrying the manage_users grant: the user list is the one admin
+    // screen they get, and it is their own organization's.
+    final granted = manages
+        ? [const _Group('Administration', [_usersSection])]
+        : <_Group>[];
     if (pharmacy.isNotEmpty) {
-      _setGroups([...pharmacy, ..._baseGroups]);
+      _setGroups([...granted, ...pharmacy, ..._baseGroups]);
+      return;
+    }
+    if (granted.isNotEmpty) {
+      _setGroups([...granted, ..._baseGroups]);
       return;
     }
     // A clinical cadre opens on their own workload, not the tenant KPIs — the

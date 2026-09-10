@@ -11,7 +11,15 @@ import 'package:intl/intl.dart';
 const pharmacyAdminRoles = {'super_admin', 'tenant_admin'};
 const pharmacyStaffRoles = {...pharmacyAdminRoles, 'pharmacist'};
 
-bool isPharmacyAdmin(String? role) => pharmacyAdminRoles.contains(role);
+/// Grants the signed-in seat holds, set from /api/users/me/ (see Api.me).
+/// The helpers below take a role and nothing else, so the grants live here
+/// rather than being threaded through every call site.
+Set<String> myGrants = const {};
+
+/// The admin role, or a pharmacist the admin trusted with the money screens.
+/// The staff check still runs alongside this, so a grant admits no outsider.
+bool isPharmacyAdmin(String? role) =>
+    pharmacyAdminRoles.contains(role) || myGrants.contains('pharmacy_admin');
 bool isPharmacyStaff(String? role) => pharmacyStaffRoles.contains(role);
 
 /// Who keeps a scheme's price list (mirrors IsSchemePriceListEditor).

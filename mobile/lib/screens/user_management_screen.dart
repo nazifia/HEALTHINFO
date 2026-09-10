@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../main.dart';
+import '../api.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/glass_card.dart';
@@ -11,6 +12,18 @@ import '../shared/widgets/snack.dart';
 // Cadres that sign in with a practising licence instead of a phone number
 // (mirrors LICENSED_ROLES on the backend).
 const _licensedRoles = {'doctor', 'nurse', 'midwife', 'chew'};
+
+// What each grant is called on screen, and what it opens. The names are the
+// API's (accounts.permissions.MODULE_PRIVILEGES); these are for people.
+const _grantLabels = {
+  'manage_users': 'User list',
+  'pharmacy_admin': 'Pharmacy admin screens',
+};
+
+const _grantHints = {
+  'manage_users': 'Add and edit the people in this portal',
+  'pharmacy_admin': 'Prices, stock corrections and claim settlement',
+};
 
 const _roles = [
   'super_admin',
@@ -37,11 +50,17 @@ class UserManagementScreen extends StatefulWidget {
 
 class _UserManagementScreenState extends State<UserManagementScreen> {
   late Future<List<dynamic>> _future;
+  // The signed-in seat. Which roles and grants the form offers come off it —
+  // an insurer's admin staffs its own desk, a facility's admin its facility.
+  Map<String, dynamic>? _me;
 
   @override
   void initState() {
     super.initState();
     _future = api.getList('/api/users/');
+    api.me().then((m) {
+      if (mounted) setState(() => _me = m);
+    });
   }
 
   void _reload() => setState(() { _future = api.getList('/api/users/'); });
@@ -49,23 +68,29 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   Future<void> _edit(Map<String, dynamic> u) async {
     final saved = await showDialog<bool>(
       context: context,
-      builder: (_) => _UserForm(user: u),
+      builder: (_) => _UserForm(user: u, me: _me),
     );
     if (saved == true) _reload();
   }
 
   Future<void> _create() async {
-    List<Map<String, dynamic>> tenants;
-    try {
-      tenants = (await api.getList('/api/tenants/')).cast<Map<String, dynamic>>();
-    } catch (e) {
-      if (mounted) showError(context, '$e');
-      return;
+    // Only the platform admin picks the organization. Every other admin mints
+    // into their own module, which the API pins from them
+    // (accounts.serializers.apply_admin_scope), so there is nothing to ask.
+    List<Map<String, dynamic>> tenants = const [];
+    if (Api.moduleOf(_me) == null) {
+      try {
+        tenants =
+            (await api.getList('/api/tenants/')).cast<Map<String, dynamic>>();
+      } catch (e) {
+        if (mounted) showError(context, '$e');
+        return;
+      }
     }
     if (!mounted) return;
     final saved = await showDialog<bool>(
       context: context,
-      builder: (_) => _UserForm(tenants: tenants),
+      builder: (_) => _UserForm(tenants: tenants, me: _me),
     );
     if (saved == true) _reload();
   }
@@ -192,7 +217,10 @@ class _UserCard extends StatelessWidget {
 class _UserForm extends StatefulWidget {
   final Map<String, dynamic>? user;
   final List<Map<String, dynamic>>? tenants;
-  const _UserForm({this.user, this.tenants});
+  /// The seat filling the form in. What it may hand out — which roles, which
+  /// grants — is read off it, so the form never offers what the API refuses.
+  final Map<String, dynamic>? me;
+  const _UserForm({this.user, this.tenants, this.me});
 
   @override
   State<_UserForm> createState() => _UserFormState();
@@ -219,9 +247,32 @@ class _UserFormState extends State<_UserForm> {
   // nothing.
   late int? _jurisdictionId = widget.user?['jurisdiction'] as int?;
   List<Map<String, dynamic>> _jurisdictions = const [];
+  // Runs its own portal's user list. Only means anything on the seats that sit
+  // outside a facility — an insurer's desk, a health authority's office.
+  late bool _isAdmin = widget.user?['is_admin'] == true;
+  // Grants on top of the role, offered from what the writer holds themselves.
+  late final Set<String> _privileges = {
+    ...?(widget.user?['privileges'] as List?)?.map((p) => '$p'),
+  };
   bool _busy = false;
 
   bool get _isEdit => widget.user != null;
+
+  /// Which module the writer works in, and so which fields this form needs.
+  /// Null is the platform admin: no module, every role, every field.
+  String? get _module => Api.moduleOf(widget.me);
+
+  /// Roles on offer — theirs to assign, and never wider than the API allows.
+  List<String> get _roleChoices => Api.manageableRoles(widget.me) ?? _roles;
+
+  /// Grants on offer: what the writer holds, so nobody passes on more than
+  /// they have (mirrors apply_admin_scope).
+  List<String> get _grantChoices {
+    final held = Api.grantsOf(widget.me);
+    return (Api.modulePrivileges[_module ?? 'facility'] ?? const <String>{})
+        .where(held.contains)
+        .toList();
+  }
 
   @override
   void initState() {
@@ -265,6 +316,8 @@ class _UserFormState extends State<_UserForm> {
           'license_number': _license.text.trim(),
           if (_role == 'hmo') 'hmo': _hmoId,
           if (_role == 'government') 'jurisdiction': _jurisdictionId,
+          if (_seatsOutsideFacility) 'is_admin': _isAdmin,
+          if (_grantChoices.isNotEmpty) 'privileges': _privileges.toList(),
         });
       } else {
         await api.post('/api/users/', {
@@ -277,6 +330,8 @@ class _UserFormState extends State<_UserForm> {
           'license_number': _license.text.trim(),
           if (_role == 'hmo') 'hmo': _hmoId,
           if (_role == 'government') 'jurisdiction': _jurisdictionId,
+          if (_seatsOutsideFacility) 'is_admin': _isAdmin,
+          if (_grantChoices.isNotEmpty) 'privileges': _privileges.toList(),
         });
       }
       if (!mounted) return;
@@ -289,6 +344,10 @@ class _UserFormState extends State<_UserForm> {
       }
     }
   }
+
+  /// The seats that sit outside a facility carry the admin flag; a facility's
+  /// own staff are admins by role or by grant instead.
+  bool get _seatsOutsideFacility => _role == 'hmo' || _role == 'government';
 
   @override
   void dispose() {
@@ -329,7 +388,7 @@ class _UserFormState extends State<_UserForm> {
                   validator: (v) =>
                       (v == null || v.length < 8) ? 'Min 8 characters' : null,
                 ),
-                SearchableDropdown<int>(
+                if (_module == null) SearchableDropdown<int>(
                   initialValue: _tenantId,
                   decoration: const InputDecoration(labelText: 'Tenant'),
                   items: [
@@ -343,10 +402,12 @@ class _UserFormState extends State<_UserForm> {
                 ),
               ],
               SearchableDropdown<String>(
-                initialValue: _roles.contains(_role) ? _role : 'public',
+                initialValue: _roleChoices.contains(_role)
+                    ? _role
+                    : _roleChoices.first,
                 decoration: const InputDecoration(labelText: 'Role'),
                 items: [
-                  for (final r in _roles)
+                  for (final r in _roleChoices)
                     DropdownMenuItem(value: r, child: Text(r)),
                 ],
                 onChanged: (v) {
@@ -355,7 +416,7 @@ class _UserFormState extends State<_UserForm> {
                   if (_role == 'government') _loadJurisdictions();
                 },
               ),
-              if (_role == 'hmo')
+              if (_role == 'hmo' && _module != 'scheme')
                 SearchableDropdown<int>(
                   initialValue: _hmos.any((h) => h['id'] == _hmoId) ? _hmoId : null,
                   decoration: const InputDecoration(
@@ -398,6 +459,41 @@ class _UserFormState extends State<_UserForm> {
                       ? 'Required for this role'
                       : null,
                 ),
+              if (_seatsOutsideFacility)
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Portal admin'),
+                  subtitle: const Text('Runs this portal’s own user list'),
+                  value: _isAdmin,
+                  onChanged: (v) => setState(() => _isAdmin = v),
+                ),
+              if (_grantChoices.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Extra screens',
+                      style: TextStyle(
+                          color: context.hintColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700)),
+                ),
+                for (final grant in _grantChoices)
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: Text(_grantLabels[grant] ?? grant),
+                    subtitle: Text(_grantHints[grant] ?? '',
+                        style: TextStyle(color: context.hintColor, fontSize: 11)),
+                    value: _privileges.contains(grant),
+                    onChanged: (on) => setState(() {
+                      if (on == true) {
+                        _privileges.add(grant);
+                      } else {
+                        _privileges.remove(grant);
+                      }
+                    }),
+                  ),
+              ],
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Active'),

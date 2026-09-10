@@ -32,6 +32,107 @@ INSURER_ROLES = {Role.HMO}
 OVERSIGHT_ROLES = {Role.GOVERNMENT}
 
 
+# Which seats each module's admin may mint and manage. A module admin runs the
+# user list of their own portal and nothing else: the facility's admin staffs
+# the facility, an insurer's admin staffs its scheme's claims desk, a health
+# authority's admin staffs its patch. Nobody here can mint a super admin.
+# ponytail: fixed map; move to a table when a module needs custom roles.
+MANAGEABLE_ROLES = {
+    Role.TENANT_ADMIN: {
+        Role.TENANT_ADMIN, Role.DOCTOR, Role.PHARMACIST, Role.NURSE,
+        Role.MIDWIFE, Role.CHEW, Role.HMO, Role.PUBLIC,
+    },
+    Role.HMO: {Role.HMO},
+    Role.GOVERNMENT: {Role.GOVERNMENT},
+}
+
+
+# Named grants a seat can hold on top of its role. Each one opens a gate that
+# already exists — nothing here is decoration — and each only ever adds: a seat
+# without the grant keeps exactly what its role gave it.
+MANAGE_USERS = "manage_users"       # run your own portal's user list
+PHARMACY_ADMIN = "pharmacy_admin"   # the facility's money screens: prices,
+                                    # stock corrections, claim settlement
+
+# Which grants mean anything in which portal. A scheme's desk and a health
+# authority's office have no money screens of their own, so the only grant
+# worth holding there is the user list.
+MODULE_PRIVILEGES = {
+    "facility": frozenset({MANAGE_USERS, PHARMACY_ADMIN}),
+    "scheme": frozenset({MANAGE_USERS}),
+    "oversight": frozenset({MANAGE_USERS}),
+}
+ALL_PRIVILEGES = frozenset().union(*MODULE_PRIVILEGES.values())
+
+
+def module_of(user):
+    """Which portal this seat works in, or None for a seat in no module."""
+    if user.role in INSURER_ROLES:
+        return "scheme"
+    if user.role in OVERSIGHT_ROLES:
+        return "oversight"
+    return "facility" if user.tenant_id is not None else None
+
+
+def granted(user):
+    """The grants this seat actually holds.
+
+    A module's admin holds its whole catalog implicitly — being the admin is
+    what the grants add up to — and everyone else holds what was written on
+    their row, narrowed to their own module's catalog.
+    """
+    if not user.is_authenticated:
+        return frozenset()
+    module = module_of(user)
+    if module is None:
+        return ALL_PRIVILEGES if user.is_super_admin else frozenset()
+    catalog = MODULE_PRIVILEGES[module]
+    if user.is_super_admin or user.role == Role.TENANT_ADMIN or user.is_admin:
+        return catalog
+    return frozenset(user.privileges or []) & catalog
+
+
+def has_privilege(user, name):
+    return name in granted(user)
+
+
+def manageable_roles(user):
+    """Which roles this admin may mint and assign."""
+    if user.role in INSURER_ROLES:
+        return MANAGEABLE_ROLES[Role.HMO]
+    if user.role in OVERSIGHT_ROLES:
+        return MANAGEABLE_ROLES[Role.GOVERNMENT]
+    roles = MANAGEABLE_ROLES[Role.TENANT_ADMIN]
+    if user.role != Role.TENANT_ADMIN:
+        # A grant is not the role. Someone trusted with the user list must not
+        # be able to mint the admin who could take that trust back.
+        roles = roles - {Role.TENANT_ADMIN}
+    return roles
+
+
+def is_module_admin(user):
+    """True when this seat administers its own module's users.
+
+    The tenant admin is one by role — that role *is* the facility's admin. The
+    seats that sit outside a facility carry the ``is_admin`` flag instead, and
+    only count while the thing they answer for is set: an insurer admin with no
+    scheme, or an authority admin with no patch, has no module to admit anyone
+    to (the same fail-closed rule their read views use).
+    """
+    if not user.is_authenticated or user.is_super_admin:
+        return False
+    if user.role == Role.TENANT_ADMIN:
+        return True
+    if not (user.is_admin or MANAGE_USERS in (user.privileges or [])):
+        return False
+    if user.role == Role.HMO:
+        return user.hmo_id is not None and user.tenant_id is not None
+    if user.role == Role.GOVERNMENT:
+        return user.jurisdiction_id is not None
+    # Facility staff carrying the grant: the tenant is the module they staff.
+    return user.tenant_id is not None and user.role not in PATIENT_ROLES
+
+
 def sees_whole_tenant(user):
     """True when this user reads their tenant's records in full.
 
@@ -60,7 +161,27 @@ class IsTenantMember(BasePermission):
             return False
         if user.role in PATIENT_ROLES and not getattr(view, "patient_ok", False):
             return False
+        if user.role in OVERSIGHT_ROLES:
+            # They belong to no tenant, so the check below could never pass. A
+            # view lets them in explicitly, the way it does an insurer, and
+            # then answers them their own patch and nothing tenant-scoped.
+            return getattr(view, "oversight_ok", False)
         return request.tenant is not None and user.tenant_id == request.tenant.id
+
+
+class IsSelfOrModuleAdmin(BasePermission):
+    """Everyone edits their own row; other people's rows are an admin's.
+
+    Reads are settled by the queryset (each seat is narrowed to the users its
+    module lets it see), so this only guards writes: without it any member of a
+    tenant could reset a colleague's password through /api/users/.
+    """
+
+    def has_object_permission(self, request, view, obj):
+        user = request.user
+        if request.method in SAFE_METHODS or obj.pk == user.pk:
+            return True
+        return user.is_super_admin or is_module_admin(user)
 
 
 class IsSuperAdmin(BasePermission):
@@ -201,6 +322,9 @@ PHARMACY_STAFF_ROLES = PHARMACY_ADMIN_ROLES | {Role.PHARMACIST}
 def is_pharmacy_admin(user):
     return bool(user.is_authenticated) and (
         user.is_super_admin or user.role in PHARMACY_ADMIN_ROLES
+        # A pharmacist the admin trusts with the money screens. The staff gate
+        # still runs alongside this one, so a grant never admits an outsider.
+        or has_privilege(user, PHARMACY_ADMIN)
     )
 
 

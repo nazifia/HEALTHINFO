@@ -13,7 +13,10 @@ from apps.tenants.models import Jurisdiction, Tenant
 from apps.tenants.scope import scope_to_selection
 
 from .models import Role, User
-from .permissions import PATIENT_ROLES, IsTenantMember
+from .permissions import (
+    INSURER_ROLES, OVERSIGHT_ROLES, PATIENT_ROLES, IsSelfOrModuleAdmin,
+    IsTenantMember, is_module_admin,
+)
 from .serializers import (
     LoginSerializer, OnboardingSerializer, PasswordResetConfirmSerializer,
     PasswordResetSerializer, RegisterSerializer, UserSerializer,
@@ -96,7 +99,12 @@ class OnboardingViewSet(viewsets.ViewSet):
 
 class UserViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer
-    permission_classes = [IsAuthenticated, IsTenantMember]
+    permission_classes = [IsAuthenticated, IsTenantMember, IsSelfOrModuleAdmin]
+    # The seats that are not a facility's staff reach this one to run their own
+    # portal's user list — narrowed to that portal's seats in get_queryset, and
+    # writable only by the seat flagged is_admin (IsSelfOrModuleAdmin).
+    insurer_ok = True
+    oversight_ok = True
     # A patient reaches this one to keep their own contact details current.
     # The staff list itself is not theirs to read, so get_queryset narrows them
     # to their own row and this stays the only tenant endpoint they open.
@@ -118,6 +126,22 @@ class UserViewSet(viewsets.ModelViewSet):
                 # state's when they have picked a state to work in.
                 return scope_to_selection(User.objects.all(), self.request)
             return User.objects.filter(tenant=tenant)
+        if user.role in INSURER_ROLES:
+            # An insurer runs its own scheme's claims desk: the seats on that
+            # scheme and nobody else in the pharmacy — the facility's staff
+            # directory is not theirs to read.
+            return User.objects.filter(
+                tenant_id=user.tenant_id, role=Role.HMO, hmo_id=user.hmo_id
+            )
+        if user.role in OVERSIGHT_ROLES:
+            # A health authority runs the seats inside its own patch. No patch
+            # set means no module to run, the same fail-closed rule its
+            # rollups use (IsPlatformReader).
+            if user.jurisdiction_id is None:
+                return User.objects.none()
+            return User.objects.filter(
+                role=Role.GOVERNMENT, jurisdiction__in=user.jurisdiction.subtree()
+            )
         # The patient seat is not staff: their own row and nobody else's, so
         # the list cannot be used to read the facility's staff directory.
         if user.role in PATIENT_ROLES:
@@ -126,20 +150,13 @@ class UserViewSet(viewsets.ModelViewSet):
         return User.objects.filter(tenant=user.tenant)
 
     def create(self, request, *args, **kwargs):
-        # Minting a user into an arbitrary tenant is a platform action; self-serve
-        # signup (register/onboarding) covers everyone else.
-        if not request.user.is_super_admin:
-            raise PermissionDenied("Only super-admins create users here.")
+        # Minting a user into an arbitrary tenant is a platform action. A
+        # module admin mints into their own module only — the serializer pins
+        # the tenant, scheme or jurisdiction from them (apply_admin_scope) —
+        # and self-serve signup (register/onboarding) covers everyone else.
+        if not (request.user.is_super_admin or is_module_admin(request.user)):
+            raise PermissionDenied("You cannot create users here.")
         return super().create(request, *args, **kwargs)
-
-    def perform_update(self, serializer):
-        # Non-super-admins can edit users in their own tenant but never move one
-        # to a different tenant, and never change role (self-escalation to
-        # super_admin otherwise). Role assignment is a super-admin action.
-        if not self.request.user.is_super_admin:
-            serializer.validated_data.pop("tenant", None)
-            serializer.validated_data.pop("role", None)
-        serializer.save()
 
     def get_permissions(self):
         # Everyone reads their own row, including the seats that belong to no

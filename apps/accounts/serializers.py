@@ -18,6 +18,9 @@ from apps.tenants.models import Jurisdiction, Tenant
 from .models import (
     LICENSED_ROLES, Role, User, normalize_license, normalize_phone,
 )
+from .permissions import (
+    ALL_PRIVILEGES, granted, is_module_admin, manageable_roles,
+)
 
 
 def visible_users(tenant):
@@ -33,6 +36,64 @@ def visible_users(tenant):
     if tenant is None:
         return qs
     return qs.filter(Q(tenant=tenant) | Q(tenant__isnull=True))
+
+
+def apply_admin_scope(actor, attrs, instance=None):
+    """Pin a write to /api/users/ inside the writer's own module.
+
+    A super admin writes anything. A module admin — the facility's tenant
+    admin, a flagged insurer seat, a flagged health authority seat — mints and
+    edits seats of their own module only, so the fields that decide *which*
+    module a user belongs to are taken from the admin, never from the body: an
+    insurer admin cannot mint a pharmacist, and an authority admin cannot mint
+    a seat reading the next state's rollups.
+
+    Everyone else may still edit their own contact details, but the fields that
+    carry privilege are dropped rather than refused — a member patching their
+    own row shouldn't 400 because the client echoed their role back.
+    """
+    if actor.is_super_admin:
+        return
+    if not is_module_admin(actor):
+        for field in ("tenant", "role", "is_admin", "hmo", "jurisdiction",
+                      "privileges"):
+            attrs.pop(field, None)
+        return
+    if "privileges" in attrs:
+        # You grant what you hold and nothing more: a pharmacist trusted with
+        # the user list cannot hand themselves the money screens too.
+        wanted = set(attrs["privileges"] or [])
+        beyond = wanted - granted(actor)
+        if beyond:
+            raise serializers.ValidationError({
+                "privileges": "You cannot grant: " + ", ".join(sorted(beyond)),
+            })
+        attrs["privileges"] = sorted(wanted)
+    role = attrs.get("role") or getattr(instance, "role", None) or (
+        Role.PUBLIC if actor.role == Role.TENANT_ADMIN else actor.role
+    )
+    if role not in manageable_roles(actor):
+        raise serializers.ValidationError(
+            {"role": f"You cannot assign the {role} role."}
+        )
+    attrs["role"] = role
+    if actor.role == Role.GOVERNMENT:
+        # An authority seat belongs to no organization, and reads the patch its
+        # admin answers for or a smaller one inside it — never a sibling's.
+        attrs["tenant"] = None
+        patch = attrs.get("jurisdiction") or actor.jurisdiction
+        if not actor.jurisdiction.subtree().filter(pk=patch.pk).exists():
+            raise serializers.ValidationError(
+                {"jurisdiction": "That jurisdiction is outside your patch."}
+            )
+        attrs["jurisdiction"] = patch
+        return
+    attrs["jurisdiction"] = None
+    attrs["tenant"] = actor.tenant
+    if actor.role == Role.HMO:
+        attrs["hmo"] = actor.hmo
+    elif role != Role.HMO:
+        attrs["hmo"] = None
 
 
 class TenantUserField(serializers.PrimaryKeyRelatedField):
@@ -142,13 +203,19 @@ class UserSerializer(serializers.ModelSerializer):
     license_number = serializers.CharField(
         required=False, allow_blank=True, allow_null=True
     )
+    # Named grants, checked against the catalog so a typo is a 400 rather than
+    # a row carrying a privilege no gate will ever read.
+    privileges = serializers.ListField(
+        child=serializers.ChoiceField(choices=sorted(ALL_PRIVILEGES)),
+        required=False,
+    )
 
     class Meta:
         model = User
         fields = (
             "id", "username", "phone", "email", "role", "tenant", "tenant_name",
             "is_active", "password", "license_number", "idle_logout_minutes",
-            "hmo", "jurisdiction",
+            "hmo", "jurisdiction", "is_admin", "privileges",
         )
 
     def get_idle_logout_minutes(self, obj):
@@ -160,6 +227,11 @@ class UserSerializer(serializers.ModelSerializer):
         return normalize_license(value)
 
     def validate(self, attrs):
+        # Who is writing decides which module the row may land in, before any
+        # of the per-role checks below read tenant, scheme or jurisdiction.
+        request = self.context.get("request")
+        if request is not None and request.user.is_authenticated:
+            apply_admin_scope(request.user, attrs, self.instance)
         # A licensed cadre with no licence number could never sign in, so the
         # licence is required whenever the role is one of theirs.
         role = attrs.get("role", getattr(self.instance, "role", None))

@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'config.dart';
+import 'pharmacy.dart' show myGrants;
 
 /// Thin REST client for the HEALTH INFO Django API.
 /// Handles JWT storage, the X-Tenant-ID header, and one transparent
@@ -26,6 +27,67 @@ class Api {
 
   Map<String, dynamic>? _me;
 
+  // Named grants a seat can hold on top of its role, and where each means
+  // something (mirrors accounts.permissions.MODULE_PRIVILEGES). A grant held
+  // outside the seat's own module counts for nothing, here and on the server.
+  static const modulePrivileges = {
+    'facility': {'manage_users', 'pharmacy_admin'},
+    'scheme': {'manage_users'},
+    'oversight': {'manage_users'},
+  };
+
+  // Which roles each module's admin may mint (MANAGEABLE_ROLES on the server).
+  static const moduleRoles = {
+    'facility': [
+      'tenant_admin', 'doctor', 'pharmacist', 'nurse', 'midwife', 'chew',
+      'hmo', 'public',
+    ],
+    'scheme': ['hmo'],
+    'oversight': ['government'],
+  };
+
+  /// Which portal a seat works in, or null for one in no module.
+  static String? moduleOf(Map<String, dynamic>? u) {
+    final role = u?['role'];
+    if (role == 'hmo') return 'scheme';
+    if (role == 'government') return 'oversight';
+    return u?['tenant'] != null ? 'facility' : null;
+  }
+
+  /// The grants a seat actually holds: its module's whole catalog when it is
+  /// that module's admin, else what its own row carries, narrowed to the
+  /// module (mirrors accounts.permissions.granted).
+  static Set<String> grantsOf(Map<String, dynamic>? u) {
+    final module = moduleOf(u);
+    if (module == null) {
+      return u?['role'] == 'super_admin' ? modulePrivileges['facility']! : {};
+    }
+    final catalog = modulePrivileges[module]!;
+    if (u?['role'] == 'super_admin' ||
+        u?['role'] == 'tenant_admin' ||
+        u?['is_admin'] == true) {
+      return catalog;
+    }
+    final held = (u?['privileges'] as List?)?.map((p) => '$p').toSet() ?? {};
+    return held.intersection(catalog);
+  }
+
+  /// Roles this seat may assign, or null for the platform admin who may assign
+  /// any. A grant is not the role: someone trusted with the user list cannot
+  /// mint the admin who could take that trust back.
+  static List<String>? manageableRoles(Map<String, dynamic>? u) {
+    final module = moduleOf(u);
+    if (module == null) return null;
+    final roles = moduleRoles[module]!;
+    return u?['role'] == 'tenant_admin'
+        ? roles
+        : roles.where((r) => r != 'tenant_admin').toList();
+  }
+
+  /// True when this seat runs its own portal's user list (is_module_admin).
+  static bool canManageUsers(Map<String, dynamic>? u) =>
+      u?['role'] == 'super_admin' || grantsOf(u).contains('manage_users');
+
   /// Current user, fetched once from /api/users/me/ then cached.
   /// ponytail: cache lives for the session; cleared on logout.
   Future<Map<String, dynamic>?> me() async {
@@ -38,13 +100,19 @@ class Api {
       // every caller remember to.
       final mins = _me?['idle_logout_minutes'];
       if (mins is int) idleMinutes.value = mins;
+      // The role helpers in pharmacy.dart take a role string and nothing else,
+      // so the grants ride here rather than through every call site.
+      myGrants = grantsOf(_me);
     } catch (_) {}
     return _me;
   }
 
   /// Forget the cached user so the next [me] re-reads it — after a profile
   /// edit, or after the organization's idle timeout changes.
-  void forgetMe() => _me = null;
+  void forgetMe() {
+    _me = null;
+    myGrants = const {};
+  }
 
   /// Current user's role — what the screens gate on.
   Future<String?> myRole() async => (await me())?['role']?.toString();
@@ -88,6 +156,7 @@ class Api {
     _access = null;
     _refresh = null;
     _me = null;
+    myGrants = const {};
     idleMinutes.value = idleMinutesDefault;
     final p = await SharedPreferences.getInstance();
     await p.remove(_kAccess);
