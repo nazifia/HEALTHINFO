@@ -23,6 +23,7 @@ from django.utils import timezone
 from apps.accounts.models import User
 from apps.catalog.models import Disease, Medication
 from apps.pos.models import ReturnRecord, Sale
+from apps.prescriptions.models import PrescriptionItem
 from apps.tenants.current import get_current_tenant
 from apps.tenants.models import Jurisdiction, Tenant
 from config.ranges import apply_range
@@ -995,3 +996,63 @@ def platform_sales_stats(start=None, end=None, jurisdiction=None):
     for key, trunc, width in _SALES_PERIODS:
         stats[key] = _money_by_tier(sales, returns, trunc, width, level, juris)
     return stats
+
+
+def platform_controlled_stats(start=None, end=None, jurisdiction=None):
+    """Controlled (poison) drugs prescribed and dispensed, folded up to the state.
+
+    The regulator's question about the poison register: how much of the
+    controlled list was written for in this patch, and how much of it actually
+    went over the counter. Prescribed is every line on a script for an item
+    flagged ``is_controlled``; dispensed is the subset ticked off as handed
+    over. Both counted in lines and in units, because "50 scripts" and "5,000
+    tablets" are different alarms.
+
+    ponytail: a line typed in free text (``item`` blank) carries no flag and so
+    is not counted — link the script line to the shelf item to have it counted.
+    A controlled item sold at the till with no script behind it is not in here
+    either; that is a separate question, add it when someone asks it.
+    """
+    lines = apply_range(
+        _scope(
+            PrescriptionItem.all_objects.filter(item__is_controlled=True),
+            jurisdiction,
+        ),
+        start, end,
+    )
+    level = _tiers_for(
+        jurisdiction, offered=[Jurisdiction.Level.LOCAL, Jurisdiction.Level.STATE]
+    )[-1]
+    juris = {j.id: j for j in Jurisdiction.objects.all()}
+    dispensed = Q(is_dispensed=True)
+    counts = {
+        "prescribed": Count("id"),
+        "prescribed_units": Sum("quantity"),
+        "dispensed": Count("id", filter=dispensed),
+        "dispensed_units": Sum("quantity", filter=dispensed),
+    }
+    rows = (
+        lines.exclude(tenant__jurisdiction=None)
+        .values("tenant__jurisdiction")
+        .annotate(**counts)
+    )
+    totals = {}
+    for r in rows:
+        node = juris.get(r["tenant__jurisdiction"])
+        anc = node.ancestor(level) if node else None
+        if anc is None:
+            continue
+        bucket = totals.setdefault(anc.name, dict.fromkeys(counts, 0))
+        for field in counts:
+            bucket[field] += r[field] or 0
+    by_area = [
+        {level: area, **v}
+        for area, v in sorted(totals.items(), key=lambda kv: -kv[1]["prescribed"])
+    ]
+    # Which drugs, not just how many: a state acts on the molecule, not the total.
+    by_drug = list(
+        lines.values(drug=F("item__name"))
+        .annotate(**counts)
+        .order_by("-prescribed")[:50]
+    )
+    return {"level": level, "by_area": by_area, "by_drug": by_drug}

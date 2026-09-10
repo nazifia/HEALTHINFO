@@ -7,6 +7,7 @@ import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/breakdown_card.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/empty_state.dart';
+import '../shared/controlled_stats.dart';
 import '../shared/sales_headline.dart';
 import '../shared/stats_rows.dart';
 
@@ -58,6 +59,11 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
         // /api/reports/sales/ answers a different question (one shop's day) —
         // so the fallback is the same call and a {} means "not your seat".
         _load('/api/analytics/platform/sales/', '/api/analytics/platform/sales/'),
+        // Controlled (poison) drugs. Aggregate-only like the money, and with no
+        // tenant-scoped twin either — a pharmacy reads its own register, not
+        // the state's.
+        _load('/api/analytics/platform/controlled/',
+            '/api/analytics/platform/controlled/'),
       ]);
 
   @override
@@ -87,7 +93,7 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
             ]);
           }
           final [lab, imm, vital, stock, chw, facility, insurance, appt, rx, visit,
-              sales] = snap.data!;
+              sales, poison] = snap.data!;
           final takings = salesHeadline(sales);
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
@@ -179,6 +185,35 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
                 rows: salesByArea(sales, 'monthly'),
                 labelKey: 'area',
                 valueKey: 'revenue',
+              ),
+
+              // ── Controlled drugs ──
+              _SectionTitle('Controlled drugs', Icons.gpp_maybe_outlined),
+              _Metric(
+                value: units(controlledTotal(poison, 'prescribed_units')),
+                label: 'Controlled units prescribed',
+                sub: '${units(controlledTotal(poison, 'prescribed'))} script line(s) '
+                    'across the patch',
+              ),
+              _Metric(
+                value: units(controlledTotal(poison, 'dispensed_units')),
+                label: 'Controlled units dispensed',
+                sub: '${units(controlledTotal(poison, 'dispensed'))} line(s) handed '
+                    'over — the rest was written for and never collected',
+              ),
+              BreakdownCard(
+                heading: 'Dispensed by area',
+                icon: Icons.map_outlined,
+                rows: controlledByArea(poison, 'dispensed_units'),
+                labelKey: 'area',
+                valueKey: 'value',
+              ),
+              BreakdownCard(
+                heading: 'Most dispensed controlled drugs',
+                icon: Icons.medication_outlined,
+                rows: (poison['by_drug'] as List?) ?? [],
+                labelKey: 'drug',
+                valueKey: 'dispensed_units',
               ),
 
               // ── Community health workers ──

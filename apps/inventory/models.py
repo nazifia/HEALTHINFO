@@ -138,6 +138,14 @@ class StockItem(TenantOwnedModel):
     )
     gtin = models.CharField(max_length=50, blank=True)
     prescription_only = models.BooleanField(default=False)
+    # A poison/controlled drug: what a pharmacy keeps a register for and
+    # what the state counts. Flagged on the shelf row rather than the
+    # catalog because most rows carry no catalog link.
+    is_controlled = models.BooleanField(
+        default=False,
+        help_text="Controlled (poison) drug — prescribing and dispensing "
+                  "is reported to the state.",
+    )
     is_active = models.BooleanField(default=True)
 
     class Meta:

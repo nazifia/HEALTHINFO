@@ -70,6 +70,7 @@ from .stats import (
     insurance_stats,
     lab_stats,
     platform_case_report_stats,
+    platform_controlled_stats,
     platform_sales_stats,
     platform_stats,
     prescription_stats,
@@ -660,6 +661,36 @@ class PlatformSalesStatsView(APIView):
             "state_sales.csv",
             ["bucket", level, "period", "revenue", "sales"],
             rows,
+        )
+
+
+class PlatformControlledStatsView(APIView):
+    """Controlled (poison) drugs prescribed vs dispensed per state.
+
+    Same aggregate-only gate as the other platform reads: a health authority
+    sees its own patch, a platform admin sees every state until they pick one.
+    Never a patient, a prescriber or a single counter — a state, a drug, a
+    count. ?format=csv is the same numbers as one sheet, the area rows and the
+    per-drug rows under a ``bucket`` column.
+    """
+
+    permission_classes = [IsPlatformReader]
+
+    def get(self, request):
+        stats = platform_controlled_stats(
+            *_range(request), jurisdiction=_seat(request)
+        )
+        if request.query_params.get("format") != "csv":
+            return Response(stats)
+        level = stats["level"]
+        counts = ("prescribed", "prescribed_units", "dispensed", "dispensed_units")
+        rows = (
+            [bucket, r.get(level) or r.get("drug") or "—", *(r[c] for c in counts)]
+            for bucket, key in (("area", "by_area"), ("drug", "by_drug"))
+            for r in stats[key]
+        )
+        return csv_response(
+            "controlled_drugs.csv", ["bucket", "name", *counts], rows
         )
 
 

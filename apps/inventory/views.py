@@ -98,7 +98,7 @@ class StockItemViewSet(PharmacyViewSet):
     serializer_class = StockItemSerializer
     permission_classes = [IsTenantMember, IsPharmacyStaff, IsPharmacyAdminOrReadOnly]
     filterset_fields = ("form", "store", "branch", "is_active",
-                        "prescription_only", "medication")
+                        "prescription_only", "is_controlled", "medication")
     search_fields = ("name", "brand", "sku", "barcode", "gtin")
     ordering_fields = ("name", "unit_price", "created_at")
 

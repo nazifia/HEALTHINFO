@@ -339,6 +339,7 @@ const PLATFORM = [
   { key: 'consultations', label: 'Visit Stats',        path: '/api/analytics/platform/consultations/', dates: true },
   { key: 'prescriptions', label: 'Prescribing Stats', path: '/api/analytics/platform/prescriptions/', dates: true },
   { key: 'sales',         label: 'State Sales',        path: '/api/analytics/platform/sales/', dates: true, csv: true },
+  { key: 'controlled',    label: 'Controlled Drugs',   path: '/api/analytics/platform/controlled/', dates: true, csv: true },
 ];
 
 /* The trading reports (/api/reports/*). Kept out of ANALYTICS because the API
@@ -455,6 +456,7 @@ const SEAT_NAV = {
     ['#/platform/immunizations', 'chart', 'Immunization Stats'],
     ['#/platform/facility', 'chart', 'Facility Stats'],
     ['#/platform/sales', 'chart', 'State Sales'],
+    ['#/platform/controlled', 'chart', 'Controlled Drugs'],
     ['#/platform', 'chart', 'All Metrics'],
   ]],
 };

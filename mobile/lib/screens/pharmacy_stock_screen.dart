@@ -545,6 +545,7 @@ class _ItemFormState extends State<_ItemForm> {
   final _reorder = TextEditingController(text: '0');
   String _form = 'tablet';
   bool _prescriptionOnly = false;
+  bool _isControlled = false;
   bool _saving = false;
   String? _error;
 
@@ -562,6 +563,7 @@ class _ItemFormState extends State<_ItemForm> {
       _reorder.text = '${e['reorder_level'] ?? 0}';
       _form = '${e['form'] ?? 'tablet'}';
       _prescriptionOnly = e['prescription_only'] == true;
+      _isControlled = e['is_controlled'] == true;
     }
   }
 
@@ -593,6 +595,7 @@ class _ItemFormState extends State<_ItemForm> {
         'cost_price': _cost.text.trim(),
         'reorder_level': int.tryParse(_reorder.text.trim()) ?? 0,
         'prescription_only': _prescriptionOnly,
+        'is_controlled': _isControlled,
       };
       if (_isEdit) {
         await api.patch('/api/pharmacy/items/${widget.existing!['id']}/', body);
@@ -677,6 +680,14 @@ class _ItemFormState extends State<_ItemForm> {
           title: const Text('Prescription only'),
           value: _prescriptionOnly,
           onChanged: (v) => setState(() => _prescriptionOnly = v),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Controlled (poison)'),
+          subtitle: const Text(
+              'Counted in the state controlled-drug register.'),
+          value: _isControlled,
+          onChanged: (v) => setState(() => _isControlled = v),
         ),
       ],
     );

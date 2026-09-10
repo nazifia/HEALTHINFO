@@ -23,7 +23,8 @@ class SupplierAdmin(admin.ModelAdmin):
 class StockItemAdmin(admin.ModelAdmin):
     list_display = ("name", "tenant", "sku", "form", "store", "unit_price",
                     "reorder_level", "quantity_on_hand", "is_active")
-    list_filter = ("tenant", "form", "store", "is_active", "prescription_only")
+    list_filter = ("tenant", "form", "store", "is_active", "prescription_only",
+                   "is_controlled")
     search_fields = ("name", "brand", "sku", "barcode")
     raw_id_fields = ("medication", "branch")
 
