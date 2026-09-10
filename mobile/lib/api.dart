@@ -107,6 +107,23 @@ class Api {
     return _me;
   }
 
+  /// Step out of the organization a super-admin opened.
+  ///
+  /// The server closes the visit in that tenant's trail; dropping the
+  /// X-Tenant-ID header is what actually restores the platform scope, so a
+  /// failed call must not strand them inside the organization.
+  Future<void> leaveTenant() async {
+    if (tenantSlug.isEmpty) return;
+    try {
+      await post('/api/tenants/leave/');
+    } catch (_) {
+      // ponytail: the trail loses one row; the way out still works.
+    }
+    await setTenant('');
+    // The seat's own idle timeout and grants came from the tenant just left.
+    forgetMe();
+  }
+
   /// Forget the cached user so the next [me] re-reads it — after a profile
   /// edit, or after the organization's idle timeout changes.
   void forgetMe() {

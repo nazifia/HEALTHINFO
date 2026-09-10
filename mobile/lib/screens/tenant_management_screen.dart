@@ -92,7 +92,7 @@ class _TenantManagementScreenState extends State<TenantManagementScreen> {
   }
 
   Future<void> _leave() async {
-    await setTenant('');
+    await api.leaveTenant();
     if (!mounted) return;
     showSuccess(context, 'Left the organization.');
     setState(() {});
@@ -121,9 +121,17 @@ class _TenantManagementScreenState extends State<TenantManagementScreen> {
                     for (final r in rows.cast<Map<String, dynamic>>())
                       ListTile(
                         dense: true,
-                        leading: const Icon(Icons.person_outline, size: 18),
+                        leading: Icon(
+                          r['to_status'] == 'left'
+                              ? Icons.logout
+                              : Icons.person_outline,
+                          size: 18,
+                        ),
                         title: Text('${r['user_phone'] ?? r['user'] ?? '—'}'),
-                        subtitle: Text('${r['created_at'] ?? ''}'),
+                        subtitle: Text(
+                          '${r['to_status'] == 'left' ? 'left' : 'opened'}'
+                          ' · ${r['created_at'] ?? ''}',
+                        ),
                       ),
                   ],
                 ),

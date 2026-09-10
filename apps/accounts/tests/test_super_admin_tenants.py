@@ -119,3 +119,44 @@ def test_a_tenant_admin_cannot_open_or_read_the_trail(pending_tenant):
     client.credentials(HTTP_AUTHORIZATION=f"Bearer {r.json()['access']}")
     assert client.post(f"/api/tenants/{pending_tenant.id}/open/").status_code == 403
     assert client.get(f"/api/tenants/{pending_tenant.id}/access-log/").status_code == 403
+
+
+def test_leaving_closes_the_visit_in_the_trail(pending_tenant):
+    """Opening writes who went in; leaving writes who came back out."""
+    client = super_admin_client(pending_tenant.slug)
+    assert client.post(f"/api/tenants/{pending_tenant.id}/open/").status_code == 200
+    r = client.post("/api/tenants/leave/")
+    assert r.status_code == 200, r.content
+
+    rows = client.get(f"/api/tenants/{pending_tenant.id}/access-log/").json()
+    assert [row["to_status"] for row in rows] == ["left", "opened"]
+    assert rows[0]["user_phone"] == "08031234567"
+
+
+def test_leaving_outside_every_organization_is_a_404(pending_tenant):
+    """Nothing to leave, so nothing to write: no bare row on no tenant."""
+    client = super_admin_client(pending_tenant.slug)
+    client.credentials(**{
+        k: v for k, v in client._credentials.items() if k != "HTTP_X_TENANT_ID"
+    })
+    assert client.post("/api/tenants/leave/").status_code == 404
+
+
+def test_a_tenant_admin_cannot_write_a_leave_row(pending_tenant):
+    user = User.objects.create(
+        phone="08039998866", tenant=pending_tenant, role=Role.TENANT_ADMIN
+    )
+    user.set_password(PASSWORD)
+    user.save()
+    client = APIClient()
+    r = client.post(
+        "/api/auth/token/",
+        {"phone": user.phone, "password": PASSWORD},
+        format="json",
+        HTTP_X_TENANT_ID=pending_tenant.slug,
+    )
+    client.credentials(
+        HTTP_AUTHORIZATION=f"Bearer {r.json()['access']}",
+        HTTP_X_TENANT_ID=pending_tenant.slug,
+    )
+    assert client.post("/api/tenants/leave/").status_code == 403

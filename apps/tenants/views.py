@@ -20,6 +20,9 @@ from .serializers import TenantSerializer
 # from_status stays blank: entering an organization is not a state change on
 # it, it is a visit to it.
 OPENED = "opened"
+# ...and the row written when they step back out to the platform view. Paired
+# with the OPENED row above, the trail answers how long the visit lasted.
+LEFT = "left"
 
 
 class TenantViewSet(viewsets.ModelViewSet):
@@ -116,9 +119,30 @@ class TenantViewSet(viewsets.ModelViewSet):
         )
         return success(f"Working in {tenant.name}.", TenantSerializer(tenant).data)
 
+    @action(detail=False, methods=["post"], url_path="leave")
+    def leave(self, request):
+        """Record that this super-admin is stepping out of the tenant they are in.
+
+        The mirror of open_as: the client drops its X-Tenant-ID header, which
+        is what actually restores the platform scope, and this endpoint exists
+        so the trail closes the visit instead of ending at whoever entered.
+        """
+        tenant = getattr(request, "tenant", None)
+        if tenant is None:
+            raise NotFound("No organization on this request.")
+        AuditLog.objects.create(
+            tenant=tenant,
+            user=request.user,
+            content_type=ContentType.objects.get_for_model(Tenant),
+            object_id=tenant.pk,
+            from_status=OPENED,
+            to_status=LEFT,
+        )
+        return success(f"Left {tenant.name}.", TenantSerializer(tenant).data)
+
     @action(detail=True, methods=["get"], url_path="access-log")
     def access_log(self, request, pk=None):
-        """Who opened this organization, and when. Newest first."""
+        """Who opened this organization and who left it, when. Newest first."""
         tenant = self.get_object()
         # all_objects: the reader is a super-admin whose own request carries no
         # tenant, so the scoped manager would answer with nothing.
@@ -126,7 +150,7 @@ class TenantViewSet(viewsets.ModelViewSet):
             tenant=tenant,
             content_type=ContentType.objects.get_for_model(Tenant),
             object_id=tenant.pk,
-            to_status=OPENED,
+            to_status__in=(OPENED, LEFT),
         ).order_by("-created_at", "-id")
         return Response(AuditLogSerializer(logs, many=True).data)
 
