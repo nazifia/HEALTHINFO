@@ -144,7 +144,12 @@ else:
             "CONN_MAX_AGE": 60,
             # WAL lets readers run while a write is in flight (default DELETE
             # journal blocks them); NORMAL sync skips an fsync per commit.
-            "OPTIONS": {"init_command": "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;"},
+            # WAL needs real shared memory for its -shm file: on a network
+            # filesystem (PythonAnywhere's /home) committed frames are lost
+            # instead of checkpointed, so those hosts set SQLITE_JOURNAL=DELETE.
+            "OPTIONS": {"init_command":
+                f"PRAGMA journal_mode={os.getenv('SQLITE_JOURNAL', 'WAL')};"
+                " PRAGMA synchronous=NORMAL;"},
         }
     }
 
