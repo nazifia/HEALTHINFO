@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../main.dart';
+import '../pharmacy.dart' show money, units;
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/breakdown_card.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/empty_state.dart';
+import '../shared/sales_headline.dart';
 import '../shared/stats_rows.dart';
 
 /// Public-health analytics: the analysis side of the four collection feeds —
@@ -52,6 +54,10 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
         _load('/api/analytics/platform/appointments/', '/api/analytics/appointments/'),
         _load('/api/analytics/platform/prescriptions/', '/api/analytics/prescriptions/'),
         _load('/api/analytics/platform/consultations/', '/api/analytics/consultations/'),
+        // Money has no tenant-scoped twin at this path — the pharmacy's own
+        // /api/reports/sales/ answers a different question (one shop's day) —
+        // so the fallback is the same call and a {} means "not your seat".
+        _load('/api/analytics/platform/sales/', '/api/analytics/platform/sales/'),
       ]);
 
   @override
@@ -80,8 +86,9 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
               ),
             ]);
           }
-          final [lab, imm, vital, stock, chw, facility, insurance, appt, rx, visit] =
-              snap.data!;
+          final [lab, imm, vital, stock, chw, facility, insurance, appt, rx, visit,
+              sales] = snap.data!;
+          final takings = salesHeadline(sales);
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             children: [
@@ -154,6 +161,24 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
                 rows: (stock['top_consumed'] as List?) ?? [],
                 labelKey: 'medication__generic_name',
                 valueKey: 'consumed',
+              ),
+
+              // ── What the counters took ──
+              _SectionTitle('Pharmacy sales', Icons.point_of_sale_outlined),
+              if (takings.isEmpty)
+                const _Metric(value: '—', label: 'No sales recorded yet'),
+              for (final p in takings)
+                _Metric(
+                  value: money(p.revenue),
+                  label: '${_title(p.bucket)} sales — ${p.period}',
+                  sub: '${units(p.sales)} sale(s), every pharmacy in the patch',
+                ),
+              BreakdownCard(
+                heading: 'Latest month by area',
+                icon: Icons.map_outlined,
+                rows: salesByArea(sales, 'monthly'),
+                labelKey: 'area',
+                valueKey: 'revenue',
               ),
 
               // ── Community health workers ──
@@ -295,6 +320,7 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
 String _pct(dynamic rate) =>
     rate is num ? '${(rate * 100).toStringAsFixed(1)}%' : '—';
 String _num(dynamic v) => v is num ? '$v' : '—';
+String _title(String s) => s[0].toUpperCase() + s.substring(1);
 
 class _SectionTitle extends StatelessWidget {
   final String text;

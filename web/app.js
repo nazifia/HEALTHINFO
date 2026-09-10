@@ -2361,6 +2361,28 @@ async function viewGraph(type, id) {
 
 /* --------------------------------------------------------- analytics views */
 
+/* The headline takings from /analytics/platform/sales/: what every pharmacy in
+   the patch sold, for the latest day, month and year the payload carries. The
+   rows are one per (area, period), so a period's total is the sum of its rows —
+   and with a ?from/to window the latest period in range is not today, so the
+   tile names the period it is showing instead of implying one. */
+function salesHeadline(data) {
+  const tiles = [];
+  for (const bucket of ['daily', 'monthly', 'yearly']) {
+    const rows = data?.[bucket];
+    if (!Array.isArray(rows) || !rows.length) continue;
+    const period = rows.reduce((latest, r) => (r.period > latest ? r.period : latest), '');
+    const hit = rows.filter((r) => r.period === period);
+    const revenue = hit.reduce((t, r) => t + Number(r.revenue || 0), 0);
+    const count = hit.reduce((t, r) => t + Number(r.sales || 0), 0);
+    tiles.push(`<div class="tile kpi-tile">
+      <span class="tile-label">${esc(label(bucket))} sales — ${esc(period)}</span>
+      <span class="tile-val">${esc(money(revenue))}</span>
+      <span class="tile-label">${esc(fmtVal(count))} sale(s)</span></div>`);
+  }
+  return tiles.length ? `<div class="tiles">${tiles.join('')}</div>` : '';
+}
+
 function statIndex(title, registry, prefix) {
   return `<h2>${esc(title)}</h2><div class="tiles home-tiles">` +
     registry.map((m) => `<a class="tile linktile" href="#${prefix}/${m.key}"><span class="tile-label">${ico('chart')}${esc(m.label)}</span></a>`).join('') +
@@ -2410,7 +2432,12 @@ async function viewAnalytics(registry, prefix, key) {
   const rowLink = key === 'idsr' ? (r) => (r.id ? `#/r/case-reports/${r.id}` : null) : null;
   const load = async () => {
     $('#out').innerHTML = '<div class="loading">Loading…</div>';
-    try { $('#out').innerHTML = renderData(await Api.get(m.path, params()), 0, rowLink); }
+    try {
+      const data = await Api.get(m.path, params());
+      // The money report leads with its totals; the tables under it are the grain.
+      $('#out').innerHTML = (key === 'sales' ? salesHeadline(data) : '')
+        + renderData(data, 0, rowLink);
+    }
     catch (err) { $('#out').innerHTML = `<p class="err">${esc(err.message)}</p>`; }
   };
   $('#f').onsubmit = (e) => { e.preventDefault(); load(); };
@@ -2516,9 +2543,10 @@ async function viewGov() {
     return errorBox(new Error('Health authority seats only.'));
   }
   spinner();
-  const [dash, spikes] = await Promise.all([
+  const [dash, spikes, sales] = await Promise.all([
     Api.get('/api/analytics/platform/').catch(() => null),
     Api.get('/api/analytics/platform/surveillance/').catch(() => null),
+    Api.get('/api/analytics/platform/sales/').catch(() => null),
   ]);
   const alerts = spikes?.alerts || [];
   const kpis = [
@@ -2530,6 +2558,8 @@ async function viewGov() {
       <a class="btn ghost" href="#/platform">All metrics</a></div>
     <div class="tiles">${kpis.map(([k, v]) =>
       `<div class="tile kpi-tile"><span class="tile-label">${esc(k)}</span><span class="tile-val">${esc(v)}</span></div>`).join('')}</div>
+    <h3>What the pharmacies sold <a class="btn ghost" href="#/platform/sales">Details</a></h3>
+    ${salesHeadline(sales) || '<p class="muted">No sales recorded yet.</p>'}
     <div class="card"><h3>Outbreak alerts</h3>
       ${alerts.length ? tableHtml(alerts) : '<p class="muted">No spike above threshold.</p>'}</div>
     <h3>Go to</h3>
