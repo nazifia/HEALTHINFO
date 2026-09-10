@@ -19,6 +19,7 @@ from apps.accounts.permissions import (
     IsPharmacyStaff,
     IsPharmacyStaffOrInsurerReadOnly,
     IsSchemePriceListEditor,
+    IsSuperAdmin,
     IsTenantMember,
     is_pharmacy_admin,
 )
@@ -53,6 +54,7 @@ from .serializers import (
     PreAuthItemDecisionSerializer,
     PreAuthorizationItemSerializer,
     PreAuthorizationSerializer,
+    SchemeRegistrationSerializer,
 )
 
 ZERO = Decimal("0.00")
@@ -84,6 +86,21 @@ class HMOViewSet(PharmacyViewSet):
 
     def get_queryset(self):
         return insurer_scope(HMO.objects.all(), self.request.user, field="pk")
+
+    @action(detail=False, methods=["post"], permission_classes=[IsSuperAdmin])
+    def register(self, request):
+        """Sign a scheme up, with the seat that will run its desk.
+
+        Platform admin only: an insurer joining the platform is not the
+        pharmacy's decision, and the seat minted here can staff the scheme
+        itself afterwards through /api/users/.
+        """
+        s = SchemeRegistrationSerializer(data=request.data,
+                                         context={"request": request})
+        s.is_valid(raise_exception=True)
+        s.save()
+        return success("Scheme registered. Its admin can now sign in.",
+                       s.data, status=201)
 
 
 class HmoItemRuleViewSet(PharmacyViewSet):

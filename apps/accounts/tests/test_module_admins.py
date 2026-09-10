@@ -210,3 +210,50 @@ def test_a_member_cannot_grant_themselves_anything(world):
     assert resp.status_code == 200, resp.content
     plain.refresh_from_db()
     assert plain.privileges == [] and plain.username == "Ada"
+
+
+def test_super_admin_registers_a_scheme_and_its_admin(world):
+    """The platform signs an insurer up; the insurer then staffs itself."""
+    boss = seat(phone="08030000030", role=Role.SUPER_ADMIN)
+    c = APIClient()
+    c.force_authenticate(user=boss)
+    resp = c.post(
+        "/api/pharmacy/hmos/register/",
+        {
+            "tenant": world["tenant"].id,
+            "scheme": {"name": "AXA Mansard", "code": "AXA",
+                       "coverage_percent": "80.00"},
+            "admin_phone": "08030000031",
+            "admin_password": PASSWORD,
+        },
+        format="json",
+    )
+    assert resp.status_code == 201, resp.content
+    scheme = HMO.all_objects.get(name="AXA Mansard")
+    assert scheme.tenant_id == world["tenant"].id
+    admin = User.objects.get(phone="08030000031")
+    assert (admin.role, admin.is_admin, admin.hmo_id) == (
+        Role.HMO, True, scheme.id
+    )
+
+    # ...and that admin staffs the desk itself, without the pharmacy's help.
+    staffed = client_for(admin).post(
+        "/api/users/",
+        {"phone": "08030000032", "password": PASSWORD, "role": "hmo"},
+        format="json",
+    )
+    assert staffed.status_code == 201, staffed.content
+    assert User.objects.get(phone="08030000032").hmo_id == scheme.id
+
+
+def test_pharmacy_admin_cannot_register_a_scheme(world):
+    admin = seat(phone="08030000033", tenant=world["tenant"],
+                 role=Role.TENANT_ADMIN)
+    resp = client_for(admin).post(
+        "/api/pharmacy/hmos/register/",
+        {"scheme": {"name": "Leadway"}, "admin_phone": "08030000034",
+         "admin_password": PASSWORD},
+        format="json",
+    )
+    assert resp.status_code == 403, resp.content
+    assert not HMO.all_objects.filter(name="Leadway").exists()

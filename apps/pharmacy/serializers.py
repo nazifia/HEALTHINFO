@@ -1,8 +1,12 @@
 from decimal import Decimal
 
+from django.contrib.auth.password_validation import validate_password
+from django.db import transaction
 from rest_framework import serializers
 
+from apps.accounts.models import Role, User
 from apps.accounts.permissions import INSURER_ROLES
+from apps.tenants.models import Tenant
 
 from .models import (
     HMO,
@@ -150,6 +154,86 @@ class AddClaimsSerializer(serializers.Serializer):
     claims = serializers.PrimaryKeyRelatedField(
         queryset=Claim.objects, many=True, required=False
     )
+
+
+class SchemeRegistrationSerializer(serializers.Serializer):
+    """Register a scheme and the seat that will run its desk, in one call.
+
+    The platform admin signs an insurer up; from there the scheme staffs
+    itself, because the seat minted here carries ``is_admin`` and that is what
+    /api/users/ reads before letting a module admin add colleagues (see
+    ``is_module_admin``). Nobody at the pharmacy has to type an insurer's
+    people in for them.
+
+    Scheme and admin are created in one transaction: a rejected password must
+    not leave behind a scheme with nobody able to sign in to it.
+    """
+
+    scheme = HMOSerializer()
+    # Which organization's claims this scheme answers for. A super admin who
+    # has opened one is already inside it, so the body only has to name a
+    # tenant when they are working platform-wide.
+    tenant = serializers.PrimaryKeyRelatedField(
+        queryset=Tenant.objects.all(), required=False
+    )
+    admin_phone = serializers.CharField()
+    admin_name = serializers.CharField(required=False, allow_blank=True)
+    admin_email = serializers.EmailField(required=False, allow_blank=True)
+    admin_password = serializers.CharField(
+        write_only=True, validators=[validate_password]
+    )
+
+    def validate_admin_phone(self, value):
+        if User.objects.filter(phone=value).exists():
+            raise serializers.ValidationError("This phone number is already taken.")
+        return value
+
+    def validate(self, attrs):
+        tenant = attrs.get("tenant") or getattr(
+            self.context["request"], "tenant", None
+        )
+        if tenant is None:
+            raise serializers.ValidationError({
+                "tenant": "Choose the organization whose claims this scheme "
+                          "answers for.",
+            })
+        if HMO.all_objects.filter(
+            tenant=tenant, name=attrs["scheme"]["name"]
+        ).exists():
+            # unique_together would raise this as a 500 from the manager's own
+            # scoped queryset when the admin is working outside the tenant.
+            raise serializers.ValidationError({
+                "scheme": {"name": "That organization already has this scheme."},
+            })
+        attrs["tenant"] = tenant
+        return attrs
+
+    @transaction.atomic
+    def create(self, validated_data):
+        tenant = validated_data["tenant"]
+        hmo = HMO.objects.create(tenant=tenant, **validated_data["scheme"])
+        admin = User(
+            phone=validated_data["admin_phone"],
+            username=(validated_data.get("admin_name") or "").strip() or None,
+            email=validated_data.get("admin_email", ""),
+            tenant=tenant,
+            role=Role.HMO,
+            hmo=hmo,
+            is_admin=True,
+        )
+        admin.set_password(validated_data["admin_password"])
+        admin.save()
+        self.instance = {"hmo": hmo, "admin": admin}
+        return self.instance
+
+    def to_representation(self, instance):
+        hmo, admin = instance["hmo"], instance["admin"]
+        return {
+            "scheme": HMOSerializer(hmo).data,
+            "tenant": hmo.tenant_id,
+            "admin": {"id": admin.id, "phone": admin.phone, "role": admin.role,
+                      "is_admin": admin.is_admin},
+        }
 
 
 class HmoItemRuleSerializer(serializers.ModelSerializer):

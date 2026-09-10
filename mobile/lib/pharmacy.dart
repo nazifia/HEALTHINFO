@@ -32,6 +32,77 @@ bool isPharmacyStaff(String? role) => pharmacyStaffRoles.contains(role);
 bool canEditPriceList(String? role, {Object? hmoId}) =>
     role == 'hmo' ? hmoId != null : isPharmacyAdmin(role);
 
+/// The body ``POST /api/pharmacy/hmos/register/`` takes: a scheme, and the
+/// seat that will run its desk, written together.
+///
+/// The scheme's own fields go nested under ``scheme`` because that half is the
+/// ordinary insurer serializer — the platform admin signs the pair up, and the
+/// seat minted carries ``is_admin``, so the scheme staffs itself from there.
+///
+/// Decimals travel as the strings the fields were typed in; DRF parses them,
+/// and rounding a naira figure through a double on the way out would be this
+/// client inventing a number nobody typed. A blank threshold is 0: "never ask
+/// first", which is what the field left alone means.
+Map<String, dynamic> schemeSignUpBody({
+  required int? tenantId,
+  required String name,
+  required String adminPhone,
+  required String adminPassword,
+  String code = '',
+  String contact = '',
+  String email = '',
+  String coveragePercent = '100',
+  String preauthThreshold = '0',
+  bool autoSubmitClaims = false,
+  String adminName = '',
+  String adminEmail = '',
+}) {
+  String blankTo(String value, String fallback) =>
+      value.trim().isEmpty ? fallback : value.trim();
+  return {
+    'tenant': tenantId,
+    'scheme': {
+      'name': name.trim(),
+      'code': code.trim(),
+      'contact': contact.trim(),
+      'email': email.trim(),
+      'coverage_percent': blankTo(coveragePercent, '100'),
+      'preauth_threshold': blankTo(preauthThreshold, '0'),
+      'auto_submit_claims': autoSubmitClaims,
+    },
+    'admin_phone': adminPhone.trim(),
+    'admin_name': adminName.trim(),
+    'admin_email': adminEmail.trim(),
+    'admin_password': adminPassword,
+  };
+}
+
+/// What is still missing from a sign-up body, in words, or null when it is
+/// ready to send. The API refuses all of this too — this only saves the round
+/// trip, and says it in the same words the web form does.
+///
+/// ``withAdmin`` false is the platform admin adding a bare insurer row the
+/// pharmacy will keep itself: there is no seat to check, so the scheme's own
+/// fields are all that has to hold up.
+String? schemeSignUpProblem(
+  Map<String, dynamic> body, {
+  bool withAdmin = true,
+}) {
+  final scheme = body['scheme'] as Map<String, dynamic>;
+  if (body['tenant'] == null) {
+    return 'Choose the organization whose claims this scheme answers for.';
+  }
+  if ('${scheme['name']}'.isEmpty) return 'Name the scheme.';
+  if (!withAdmin) return null;
+  if ('${body['admin_phone']}'.isEmpty) {
+    return "Give the admin's phone number — it is how they sign in.";
+  }
+  if ('${body['admin_password']}'.length < 8) {
+    return 'The admin password needs 8 characters or more.';
+  }
+  return null;
+}
+
 final _money = NumberFormat('#,##0.00');
 
 /// Naira, thousands-separated, always two decimals. Accepts the strings DRF

@@ -4,6 +4,7 @@ import '../main.dart';
 import '../pharmacy.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
+import '../shared/widgets/searchable_dropdown.dart';
 import '../shared/widgets/snack.dart';
 import 'pharmacy_kit.dart';
 import 'report_scaffold.dart';
@@ -43,7 +44,7 @@ class PharmacySchemesScreen extends StatelessWidget {
             ),
             Expanded(
               child: TabBarView(children: [
-                _HmosTab(admin: admin),
+                _HmosTab(admin: admin, platform: role == 'super_admin'),
                 _MembersTab(admin: admin),
                 _RulesTab(
                   canEdit: canEditPriceList(role, hmoId: myHmo),
@@ -63,21 +64,27 @@ class PharmacySchemesScreen extends StatelessWidget {
 
 class _HmosTab extends StatelessWidget {
   final bool admin;
-  const _HmosTab({required this.admin});
+
+  /// The platform admin signs an insurer up rather than typing a row for it:
+  /// the scheme and the seat that runs its desk are one decision, so their
+  /// button opens the sign-up sheet instead of the plain insurer form. Editing
+  /// an existing scheme is the same form for everyone.
+  final bool platform;
+  const _HmosTab({required this.admin, this.platform = false});
 
   @override
   Widget build(BuildContext context) {
     return ReportListScreen(
       path: '/api/pharmacy/hmos/',
       searchHint: 'Insurer name or code…',
-      fabLabel: 'Add insurer',
+      fabLabel: platform ? 'Register scheme' : 'Add insurer',
       showFab: admin,
       emptyIcon: Icons.health_and_safety_outlined,
       emptyTitle: 'No insurers yet',
       emptyMessage: admin
           ? 'Add the HMOs and NHIA schemes this pharmacy bills.'
           : 'The pharmacy admin keeps the list of insurers.',
-      savedMessage: 'Insurer saved.',
+      savedMessage: platform ? 'Scheme saved.' : 'Insurer saved.',
       filters: const [
         ReportFilter(param: 'is_active', anyLabel: 'Any state', options: {
           'true': 'Active',
@@ -85,7 +92,9 @@ class _HmosTab extends StatelessWidget {
         }),
       ],
       card: (row, reload, edit) => _HmoCard(row: row, admin: admin, edit: edit),
-      form: (existing) => _HmoForm(existing: existing),
+      form: (existing) => platform && existing == null
+          ? const _SchemeSignUpForm()
+          : _HmoForm(existing: existing),
     );
   }
 }
@@ -280,6 +289,242 @@ class _HmoFormState extends State<_HmoForm> {
           value: _active,
           onChanged: (v) => setState(() => _active = v),
         ),
+      ],
+    );
+  }
+}
+
+/// Sign an insurer up: the scheme, and the seat that will run its desk.
+///
+/// Platform admin only (the API refuses anyone else) — an insurer joining is
+/// not the pharmacy's decision. One post writes both, so a rejected password
+/// leaves no scheme behind with nobody able to sign in to it, and from here
+/// the scheme staffs itself: the seat minted carries the portal-admin flag.
+///
+/// The seat is a switch rather than the only way through: an insurer that
+/// sends no one to the platform is still a scheme the pharmacy bills, and
+/// turning it off files that row the plain way (POST /api/pharmacy/hmos/).
+class _SchemeSignUpForm extends StatefulWidget {
+  const _SchemeSignUpForm();
+
+  @override
+  State<_SchemeSignUpForm> createState() => _SchemeSignUpFormState();
+}
+
+class _SchemeSignUpFormState extends State<_SchemeSignUpForm> {
+  final _name = TextEditingController();
+  final _code = TextEditingController();
+  final _contact = TextEditingController();
+  final _email = TextEditingController();
+  final _coverage = TextEditingController(text: '100');
+  final _threshold = TextEditingController(text: '0');
+  final _adminPhone = TextEditingController();
+  final _adminName = TextEditingController();
+  final _adminEmail = TextEditingController();
+  final _adminPassword = TextEditingController();
+  bool _autoSubmit = false;
+  bool _withAdmin = true;
+  bool _saving = false;
+  String? _error;
+  int? _tenantId;
+  List<Map<String, dynamic>> _tenants = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTenants();
+  }
+
+  Future<void> _loadTenants() async {
+    try {
+      final rows = await api.getList('/api/tenants/', {'page_size': '100'});
+      if (mounted) setState(() => _tenants = rows.cast<Map<String, dynamic>>());
+    } catch (e) {
+      // Without the list there is no organization to pin the scheme to, so say
+      // so here rather than letting the save fail on a field left empty.
+      if (mounted) setState(() => _error = '$e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _code.dispose();
+    _contact.dispose();
+    _email.dispose();
+    _coverage.dispose();
+    _threshold.dispose();
+    _adminPhone.dispose();
+    _adminName.dispose();
+    _adminEmail.dispose();
+    _adminPassword.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final body = schemeSignUpBody(
+      tenantId: _tenantId,
+      name: _name.text,
+      code: _code.text,
+      contact: _contact.text,
+      email: _email.text,
+      coveragePercent: _coverage.text,
+      preauthThreshold: _threshold.text,
+      autoSubmitClaims: _autoSubmit,
+      adminPhone: _adminPhone.text,
+      adminName: _adminName.text,
+      adminEmail: _adminEmail.text,
+      adminPassword: _adminPassword.text,
+    );
+    final missing = schemeSignUpProblem(body, withAdmin: _withAdmin);
+    if (missing != null) {
+      setState(() => _error = missing);
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      // No seat to mint: the scheme is a row the pharmacy keeps itself, and
+      // the plain insurer endpoint is what files one. The tenant rides in the
+      // header there, so the pick has to be the organization already open.
+      if (_withAdmin) {
+        await api.post('/api/pharmacy/hmos/register/', body);
+      } else {
+        await api.post('/api/pharmacy/hmos/', body['scheme']);
+      }
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ReportFormSheet(
+      title: _withAdmin ? 'Register a scheme' : 'Add an insurer',
+      saving: _saving,
+      error: _error,
+      submitLabel: _withAdmin ? 'Register scheme' : 'Add insurer',
+      onSubmit: _submit,
+      children: [
+        SearchableDropdown<int>(
+          initialValue: _tenantId,
+          decoration: const InputDecoration(
+            labelText: 'Organization',
+            helperText: 'Whose claims this scheme answers for',
+          ),
+          items: [
+            for (final t in _tenants)
+              DropdownMenuItem(
+                value: t['id'] as int,
+                child: Text('${t['name']}'),
+              ),
+          ],
+          onChanged: (v) => setState(() => _tenantId = v),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _name,
+          decoration: const InputDecoration(labelText: 'Scheme'),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _code,
+          decoration: const InputDecoration(labelText: 'Code (optional)'),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _contact,
+          decoration: const InputDecoration(labelText: 'Contact (optional)'),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _email,
+          keyboardType: TextInputType.emailAddress,
+          decoration: const InputDecoration(labelText: 'Email (optional)'),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _coverage,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(
+            labelText: 'Default cover %',
+            helperText:
+                'What the insurer pays where no drug rule says otherwise',
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _threshold,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(
+            labelText: 'Pre-authorisation threshold',
+            helperText:
+                'Insured amount above which a sale is cleared first. '
+                '0 asks for no authorisation.',
+          ),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Send each claim as it happens'),
+          subtitle: const Text('Off means a claim waits for the monthly batch'),
+          value: _autoSubmit,
+          onChanged: (v) => setState(() => _autoSubmit = v),
+        ),
+        const Divider(height: 24),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Give the scheme its own admin'),
+          subtitle: const Text(
+            'Off files the insurer as a row the pharmacy keeps itself',
+          ),
+          value: _withAdmin,
+          onChanged: (v) => setState(() => _withAdmin = v),
+        ),
+        if (_withAdmin) ...[
+          Text(
+            'Scheme admin',
+            style: TextStyle(
+              color: context.labelColor,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          Text(
+            "Runs the scheme's desk and adds the rest of its staff itself.",
+            style: TextStyle(color: context.hintColor, fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _adminPhone,
+            keyboardType: TextInputType.phone,
+            decoration: const InputDecoration(
+              labelText: 'Phone',
+              helperText: 'They sign in with it',
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _adminName,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(labelText: 'Name (optional)'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _adminEmail,
+            keyboardType: TextInputType.emailAddress,
+            decoration: const InputDecoration(labelText: 'Email (optional)'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _adminPassword,
+            obscureText: true,
+            decoration: const InputDecoration(labelText: 'Password'),
+          ),
+        ],
       ],
     );
   }

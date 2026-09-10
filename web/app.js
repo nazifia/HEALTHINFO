@@ -170,9 +170,12 @@ const RESOURCES = {
   // What a prescriber has earned and what is still owed them, on their own
   // page (extra: 'statement') — the two ledgers are settled from there.
   'pharmacy-prescribers':   { title: 'Prescribers',    group: 'Pharmacy', path: 'prescriptions/prescribers', roles: 'admin', search: true, extra: 'statement' },
-  'pharmacy-hmos':          { title: 'Schemes',         group: 'Pharmacy', hmo: true, path: 'pharmacy/hmos',            roles: 'admin', search: true },
+  // ``signUp``: a scheme joins the platform with the seat that will run its
+  // desk, so the two are made together on a page of their own (#/scheme-register)
+  // rather than by minting a scheme here and then hunting for its admin.
+  'pharmacy-hmos':          { title: 'Schemes',         group: 'Pharmacy', hmo: true, path: 'pharmacy/hmos',            roles: 'admin', search: true, signUp: true },
   'scheme-users':           { title: 'Scheme Users',    group: 'Pharmacy', hmo: true, path: 'users', superOnly: true,
-                              search: true, query: { role: 'hmo' }, filters: ORG_FILTERS },
+                              search: true, query: { role: 'hmo' }, filters: ORG_FILTERS, signUp: true },
   'pharmacy-enrollments':   { title: 'Scheme Members',  group: 'Pharmacy', hmo: true, path: 'pharmacy/enrollments',     roles: 'staff', search: true },
   // A scheme's price list: what it pays for one drug, and the most it pays
   // for a unit of it. 0 cover is the exclusion; no row means the scheme's own
@@ -1394,6 +1397,125 @@ async function viewOnboarding() {
   };
 }
 
+/* Sign an insurer up: the scheme and the seat that will run its desk, made
+ * together (POST /api/pharmacy/hmos/register/). Platform admin only — an
+ * insurer joining is not the pharmacy's decision — and from here the scheme
+ * staffs itself, because the seat minted carries ``is_admin``.
+ *
+ * Its own page rather than the generated form: one POST writes two records,
+ * and OPTIONS metadata has no shape for that. */
+async function viewSchemeRegister() {
+  if (!await ensureChrome()) return;
+  if (ME?.role !== 'super_admin') {
+    return errorBox(new Error('Only the platform admin registers a scheme.'));
+  }
+  spinner();
+  let orgs = [];
+  try { ({ rows: orgs } = await Api.list('/api/tenants/', { page_size: 100 })); }
+  catch (e) { return errorBox(e); }
+  const opts = orgs.map((o) =>
+    `<option value="${o.id}"${o.slug === Api.tenant ? ' selected' : ''}>${esc(o.name)}</option>`).join('');
+  render(`<div class="page-head"><h2>Register a scheme</h2></div>
+    <form id="f" class="card form-card">
+      <label data-field="tenant">Organization whose claims it answers for
+        <select name="tenant" required><option value=""></option>${opts}</select>
+        <em class="field-err"></em></label>
+      <h3>Scheme</h3>
+      <label data-field="name">Name<input name="name" required><em class="field-err"></em></label>
+      <label data-field="code">Code<input name="code"><em class="field-err"></em></label>
+      <label data-field="contact">Contact<input name="contact"><em class="field-err"></em></label>
+      <label data-field="email">Email<input name="email" type="email"><em class="field-err"></em></label>
+      <label data-field="coverage_percent">Default cover (%)
+        <input name="coverage_percent" type="number" step="0.01" min="0" max="100" value="100.00" required>
+        <em class="field-err"></em></label>
+      <label data-field="preauth_threshold">Authorisation needed above (₦, 0 = never)
+        <input name="preauth_threshold" type="number" step="0.01" min="0" value="0.00" required>
+        <em class="field-err"></em></label>
+      <label data-field="auto_submit_claims">Submit each claim as the sale happens
+        <input name="auto_submit_claims" type="checkbox"><em class="field-err"></em></label>
+      <h3>Scheme admin</h3>
+      <p class="muted">This seat runs the scheme's desk and adds the rest of its staff itself.</p>
+      <label data-field="admin_phone">Phone<input name="admin_phone" placeholder="08031234567" required><em class="field-err"></em></label>
+      <label data-field="admin_name">Name<input name="admin_name"><em class="field-err"></em></label>
+      <label data-field="admin_email">Email<input name="admin_email" type="email"><em class="field-err"></em></label>
+      <label data-field="admin_password">Password<input name="admin_password" type="password" required><em class="field-err"></em></label>
+      <div class="actions">
+        <button type="submit" class="btn">Register scheme</button>
+        <a class="btn ghost" href="#/r/pharmacy-hmos">Cancel</a>
+      </div>
+    </form>`);
+  makeSearchable($('#f').elements.tenant, { placeholder: 'Type an organization' });
+  $('#f').onsubmit = async (e) => {
+    e.preventDefault();
+    const body = schemeSignUpBody(new FormData(e.target));
+    const missing = schemeSignUpProblem(body);
+    if (missing) return toast(missing, true);
+    try {
+      const r = await Api.post('/api/pharmacy/hmos/register/', body);
+      toast(r?.message || 'Scheme registered. Its admin can now sign in.');
+      // The scheme list is one organization's; a platform admin with none open
+      // would land on an empty page, so send them to the list that spans them.
+      location.hash = Api.tenant ? '#/r/pharmacy-hmos' : '#/r/scheme-users';
+    } catch (err) {
+      toast(err.message, true);
+      showFieldErrors(e.target, flattenSchemeErrors(err.errors));
+    }
+  };
+}
+
+/* The body POST /api/pharmacy/hmos/register/ takes: a scheme, and the seat
+   that will run its desk, written together. The scheme's own fields go nested
+   under ``scheme`` because that half is the ordinary insurer serializer.
+
+   Decimals travel as the strings they were typed in — DRF parses them, and
+   rounding a naira figure through a float on the way out would be this client
+   inventing a number nobody typed. A blank threshold is 0: "never ask first",
+   which is what the field left alone means. The password is the one value not
+   trimmed: trimming one changes it. Mirrors mobile's schemeSignUpBody. */
+function schemeSignUpBody(fd) {
+  const f = (name) => (fd.get(name) || '').toString().trim();
+  const blankTo = (name, fallback) => f(name) || fallback;
+  return {
+    tenant: f('tenant'),
+    scheme: {
+      name: f('name'), code: f('code'), contact: f('contact'), email: f('email'),
+      coverage_percent: blankTo('coverage_percent', '100'),
+      preauth_threshold: blankTo('preauth_threshold', '0'),
+      auto_submit_claims: fd.get('auto_submit_claims') === 'on',
+    },
+    admin_phone: f('admin_phone'),
+    admin_name: f('admin_name'),
+    admin_email: f('admin_email'),
+    admin_password: (fd.get('admin_password') || '').toString(),
+  };
+}
+
+/* What is still missing from that body, in words, or null when it is ready to
+   send. The API refuses all of this too — this only saves the round trip, and
+   says it in the same words the mobile sheet does. */
+function schemeSignUpProblem(body) {
+  if (!body.tenant) {
+    return 'Choose the organization whose claims this scheme answers for.';
+  }
+  if (!body.scheme.name) return 'Name the scheme.';
+  if (!body.admin_phone) {
+    return "Give the admin's phone number — it is how they sign in.";
+  }
+  if (body.admin_password.length < 8) {
+    return 'The admin password needs 8 characters or more.';
+  }
+  return null;
+}
+
+/* The scheme's own fields come back nested under ``scheme`` (one serializer
+   inside another), but the form is flat — lift them so each message lands on
+   the field that caused it instead of on nothing. */
+function flattenSchemeErrors(errors) {
+  if (!errors?.scheme || Array.isArray(errors.scheme)) return errors;
+  const { scheme, ...rest } = errors;
+  return { ...rest, ...scheme };
+}
+
 async function viewProfile() {
   if (!await ensureChrome()) return;
   spinner();
@@ -1625,6 +1747,7 @@ async function viewList(slug) {
     render(`
       <div class="page-head"><h2>${esc(res.title)}</h2>
         ${(canWrite || res.createOnly) && !slug.startsWith('tenants') ? `<a class="btn" href="#/r/${slug}/new${res.query ? '?' + new URLSearchParams(res.query) : ''}">+ New</a>` : ''}
+        ${res.signUp && ME?.role === 'super_admin' ? '<a class="btn" href="#/scheme-register">+ Register scheme</a>' : ''}
       </div>
       <form id="search-form" class="toolbar">
         <input name="q" autocomplete="off"
@@ -3737,6 +3860,7 @@ const routes = [
   [/^\/login$/, viewLogin],
   [/^\/register$/, viewRegister],
   [/^\/onboarding$/, viewOnboarding],
+  [/^\/scheme-register$/, viewSchemeRegister],
   [/^\/forgot$/, viewForgot],
   [/^\/reset(?:\?(.*))?$/, viewReset],
   [/^\/profile$/, viewProfile],
