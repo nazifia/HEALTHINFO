@@ -13,6 +13,9 @@ import 'pharmacy_sales_screen.dart';
 /// The pharmacy counter: today's takings, what to reorder, what is about to
 /// expire, and what the insurers still owe — plus the button that starts a sale.
 ///
+/// The per-scheme breakdown lives on the HMO desk (HmoDashboardScreen); here
+/// the insurers are one tile, so the counter reads as the counter.
+///
 /// Four small summaries rather than one big endpoint, because each already
 /// exists for its own screen and a failure in one should not blank the others.
 class PharmacyCounterScreen extends StatefulWidget {
@@ -272,25 +275,6 @@ class _PharmacyCounterScreenState extends State<PharmacyCounterScreen> {
                               subtitle:
                                   'Batch ${b['batch_number']} · ${units(b['quantity'])} left',
                               trailing: '${b['expiry_date']}',
-                            ),
-                        ]),
-                ),
-                StatSection(
-                  icon: Icons.health_and_safety_outlined,
-                  heading: 'Insurers',
-                  color: EnhancedTheme.infoBlue,
-                  child: ((d.claims['by_hmo'] as List?) ?? []).isEmpty
-                      ? Text('No claims yet.',
-                          style:
-                              TextStyle(color: context.hintColor, fontSize: 13))
-                      : Column(children: [
-                          for (final h in (d.claims['by_hmo'] as List)
-                              .cast<Map<String, dynamic>>())
-                            _Line(
-                              title: '${h['name']}',
-                              subtitle:
-                                  '${h['claims']} claim(s) · ${money(h['paid'])} paid',
-                              trailing: money(h['outstanding']),
                             ),
                         ]),
                 ),

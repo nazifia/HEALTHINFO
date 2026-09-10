@@ -67,6 +67,7 @@ import 'global_search_screen.dart';
 import 'dashboard_screen.dart';
 import 'super_admin_dashboard_screen.dart';
 import 'tenant_management_screen.dart';
+import 'hmo_dashboard_screen.dart';
 import 'user_management_screen.dart';
 import 'my_health_screen.dart';
 import 'ward_screen.dart';
@@ -220,11 +221,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _Section('Customers', Icons.people_alt_outlined, CustomersScreen()),
     _Section('Prescribers', Icons.badge_outlined, PrescribersScreen()),
     _Section('Hospitals', Icons.local_hospital_outlined, HospitalsScreen()),
-    _Section('Schemes', Icons.health_and_safety_outlined,
-        PharmacySchemesScreen()),
-    _Section('HMO claims', Icons.request_quote_outlined, PharmacyClaimsScreen()),
-    _Section('Authorisations', Icons.verified_user_outlined,
-        PharmacyPreauthScreen()),
     _Section('Suppliers', Icons.local_shipping_outlined,
         PharmacySuppliersScreen()),
     _Section('Purchase orders', Icons.receipt_long_outlined,
@@ -237,6 +233,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _Section('Cashiers', Icons.badge_outlined, CashiersScreen()),
     _Section('Staff commissions', Icons.percent_outlined, CommissionsScreen()),
   ]);
+
+  // The insurance desk. Its own block rather than a run of rows inside the
+  // pharmacy one: schemes, what they authorise, and what they owe are one job,
+  // and the desk on top of it is where that job is read. Pharmacy staff only,
+  // same gate as the pharmacy block — the API scopes every call to the tenant.
+  List<_Group> get _hmoGroups => [
+        _Group('HMO', [
+          _Section('HMO desk', Icons.health_and_safety_outlined,
+              HmoDashboardScreen(onOpen: _openSection)),
+          _Section('Schemes', Icons.health_and_safety_outlined,
+              const PharmacySchemesScreen()),
+          _Section('HMO claims', Icons.request_quote_outlined,
+              const PharmacyClaimsScreen()),
+          _Section('Authorisations', Icons.verified_user_outlined,
+              const PharmacyPreauthScreen()),
+        ]),
+      ];
 
   // A patient's own record — their home, and the whole app for them. Every
   // other tenant screen 403s for the patient seat, the catalog and the lookup
@@ -383,7 +396,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final leftTenant = _menuSlug.isNotEmpty && tenantSlug.isEmpty;
     _menuSlug = tenantSlug;
     if (leftTenant) _index = 0;
-    final pharmacy = isPharmacyStaff(role) ? [_pharmacyGroup] : <_Group>[];
+    final pharmacy =
+        isPharmacyStaff(role) ? [_pharmacyGroup, ..._hmoGroups] : <_Group>[];
     if (role == 'super_admin') {
       // Inside a clinic or a pharmacy a super-admin works as that
       // organization: the cross-tenant block goes away and every screen left
@@ -427,14 +441,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return;
     }
     // Staff carrying the manage_users grant: the user list is the one admin
-    // screen they get, and it is their own organization's.
+    // screen they get, and it is their own organization's. Running a counter,
+    // it sits in that desk's group rather than an Administration group holding
+    // nothing else (same placement as web/app.js navHtml).
+    if (pharmacy.isNotEmpty) {
+      _setGroups([
+        _withUsers(pharmacy.first, manages),
+        ...pharmacy.skip(1),
+        ..._baseGroups,
+      ]);
+      return;
+    }
     final granted = manages
         ? [const _Group('Administration', [_usersSection])]
         : <_Group>[];
-    if (pharmacy.isNotEmpty) {
-      _setGroups([...granted, ...pharmacy, ..._baseGroups]);
-      return;
-    }
     if (granted.isNotEmpty) {
       _setGroups([...granted, ..._baseGroups]);
       return;

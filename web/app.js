@@ -155,31 +155,31 @@ const RESOURCES = {
   // What a prescriber has earned and what is still owed them, on their own
   // page (extra: 'statement') — the two ledgers are settled from there.
   'pharmacy-prescribers':   { title: 'Prescribers',    group: 'Pharmacy', path: 'prescriptions/prescribers', roles: 'admin', search: true, extra: 'statement' },
-  'pharmacy-hmos':          { title: 'HMOs',            group: 'Pharmacy', path: 'pharmacy/hmos',            roles: 'admin', search: true },
-  'pharmacy-enrollments':   { title: 'Scheme Members',  group: 'Pharmacy', path: 'pharmacy/enrollments',     roles: 'staff', search: true },
+  'pharmacy-hmos':          { title: 'Schemes',         group: 'Pharmacy', hmo: true, path: 'pharmacy/hmos',            roles: 'admin', search: true },
+  'pharmacy-enrollments':   { title: 'Scheme Members',  group: 'Pharmacy', hmo: true, path: 'pharmacy/enrollments',     roles: 'staff', search: true },
   // A scheme's price list: what it pays for one drug, and the most it pays
   // for a unit of it. 0 cover is the exclusion; no row means the scheme's own
   // default covers it. The insurer keeps its own list (roles: 'scheme').
-  'pharmacy-item-rules':    { title: 'Price List',      group: 'Pharmacy', path: 'pharmacy/item-rules',      roles: 'scheme', search: true,
+  'pharmacy-item-rules':    { title: 'Price List',      group: 'Pharmacy', hmo: true, path: 'pharmacy/item-rules',      roles: 'scheme', search: true,
                               filters: [{ param: 'hmo', label: 'Scheme', path: '/api/pharmacy/hmos/', text: (r) => r.name }] },
   // The insurer's answer is four fields at once — a code, what they stand
   // behind, when it lapses, or why they refused — so it gets a form of its own
   // (extra: 'preauth') rather than a chain of prompts.
-  'pharmacy-preauths':      { title: 'Authorisations',   group: 'Pharmacy', path: 'pharmacy/pre-authorizations', roles: 'staff', search: true, extra: 'preauth',
+  'pharmacy-preauths':      { title: 'Authorisations',  group: 'Pharmacy', hmo: true, path: 'pharmacy/pre-authorizations', roles: 'staff', search: true, extra: 'preauth',
                               actions: [{ name: 'cancel', label: 'Withdraw request', ask: 'reason', danger: true, when: ['requested', 'approved'] }] },
   'pharmacy-sales':         { title: 'Sales',           group: 'Pharmacy', path: 'pharmacy/sales',           roles: 'staff', search: true, readOnly: true, receipt: true,
                               actions: [{ name: 'pay', label: 'Take payment', ask: 'amount', choose: 'method:cash,card,transfer', when: ['pending'] },
                                         { name: 'cancel', label: 'Cancel sale', danger: true, when: ['pending', 'paid'] }] },
   'pharmacy-till':          { title: 'Cash Drawer',    group: 'Pharmacy', path: 'pharmacy/till-sessions',   roles: 'staff', createOnly: true,
                               actions: [{ name: 'close', label: 'Close drawer', ask: 'amount,notes', when: ['open'] }] },
-  'pharmacy-claims':        { title: 'Claims',          group: 'Pharmacy', path: 'pharmacy/claims',          roles: 'staff', search: true, readOnly: true,
+  'pharmacy-claims':        { title: 'Claims',          group: 'Pharmacy', hmo: true, path: 'pharmacy/claims',          roles: 'staff', search: true, readOnly: true,
                               actions: [{ name: 'submit', label: 'Submit', when: ['draft', 'rejected'] },
                                         { name: 'approve', label: 'Approve', ask: 'amount', adminOnly: true, when: ['submitted'] },
                                         { name: 'reject', label: 'Reject', ask: 'reason', adminOnly: true, when: ['submitted'] },
                                         { name: 'pay', label: 'Record payment', ask: 'amount', adminOnly: true, when: ['approved'] },
                                         { name: 'cancel', label: 'Stop billing', ask: 'reason', danger: true, adminOnly: true,
                                           when: ['draft', 'submitted', 'rejected', 'approved'] }] },
-  'pharmacy-claim-batches': { title: 'Claim Batches',   group: 'Pharmacy', path: 'pharmacy/claim-batches',   roles: 'staff', search: true,
+  'pharmacy-claim-batches': { title: 'Claim Batches',   group: 'Pharmacy', hmo: true, path: 'pharmacy/claim-batches',   roles: 'staff', search: true,
                               actions: [{ name: 'add-claims', label: 'Collect claims', when: ['draft'] },
                                         { name: 'submit', label: 'Submit batch', when: ['draft'] },
                                         { name: 'approve', label: 'Approve all', adminOnly: true, when: ['submitted'] },
@@ -461,6 +461,12 @@ const SEAT_NAV = {
   ]],
 };
 
+/* The insurance screens, in registry order — the sidebar's HMO group and the
+   HMO dashboard's "Go to" tiles are the same list, read from one place. */
+const hmoLinks = () => Object.entries(RESOURCES)
+  .filter(([, r]) => r.hmo)
+  .map(([slug, r]) => [`#/r/${slug}`, 'shield', r.title]);
+
 const seatLink = ([href, icon, title]) =>
   `<a href="${href}" data-route="${href.slice(1)}">${ico(icon)}${esc(title)}</a>`;
 
@@ -477,6 +483,7 @@ function navHtml() {
       + navGroup('Account', `<a href="#/profile" data-route="/profile">${ico('users')}Profile</a>`);
   }
   const iconFor = (slug, r) => slug === 'users' || slug === 'patients' ? 'users'
+    : r.hmo ? 'shield'
     : r.group === 'Clinical' ? 'activity' : slug.startsWith('tenants') ? 'shield'
     : r.group === 'Reports' ? 'file' : r.group === 'Pharmacy' ? 'pill' : 'book';
   const groups = {};
@@ -487,7 +494,11 @@ function navHtml() {
     if (r.group === 'Pharmacy' && !PHARMACY_STAFF_ROLES.has(ME?.role)) continue;
     // Patient data is clinical-staff only (apps.accounts.permissions.IsClinicalStaff).
     if (r.group === 'Clinical' && !Api.roleCanReport(ME?.role)) continue;
-    (groups[r.group] ||= []).push(`<a href="#/r/${slug}" data-route="/r/${slug}">${ico(iconFor(slug, r))}${esc(r.title)}</a>`);
+    // Insurance work is the pharmacy's, but it is its own desk — schemes,
+    // members, prices, authorisations, claims — so it is read out of the
+    // Pharmacy group into one of its own. ``group`` stays 'Pharmacy': it is
+    // what the staff gate above and canWriteRes go by.
+    (groups[r.hmo ? 'HMO' : r.group] ||= []).push(`<a href="#/r/${slug}" data-route="/r/${slug}">${ico(iconFor(slug, r))}${esc(r.title)}</a>`);
   }
   const tools = [
     `<a href="#/search" data-route="/search">${ico('search')}Search</a>`,
@@ -495,6 +506,13 @@ function navHtml() {
     `<a href="#/interaction-check" data-route="/interaction-check">${ico('pill')}Interaction Check</a>`,
     `<a href="#/notifiable" data-route="/notifiable">${ico('flag')}Notifiable Cases</a>`,
   ];
+  /* Someone trusted with the user list but not running the whole facility
+     administers one desk, so the link sits in that desk's section instead of
+     an Admin group holding nothing else. */
+  const usersLink = (groups.Admin || []).find((a) => a.includes('data-route="/r/users"'));
+  const deskUsers = usersLink && groups.Pharmacy?.length
+    && !['super_admin', 'tenant_admin'].includes(ME?.role);
+  if (deskUsers) groups.Admin = groups.Admin.filter((a) => a !== usersLink);
   let html = `<a href="#/" data-route="/" class="nav-home">${ico('home')}Home</a>`;
   // A patient reads their own record and nothing else in here. The catalog and
   // the lookup tools built on it are the clinicians' reference, and the API
@@ -512,7 +530,11 @@ function navHtml() {
       `<a href="#/pharmacy" data-route="/pharmacy">${ico('pill')}Counter</a>` +
       `<a href="#/pharmacy/sell" data-route="/pharmacy/sell">${ico('pill')}Dispense</a>` +
       `<a href="#/trading" data-route="/trading">${ico('chart')}Trading Reports</a>` +
-      groups.Pharmacy.join(''));
+      groups.Pharmacy.join('') + (deskUsers ? usersLink : ''));
+  }
+  if (groups.HMO?.length) {
+    html += navGroup('HMO',
+      `<a href="#/hmo" data-route="/hmo">${ico('shield')}Insurance Desk</a>` + groups.HMO.join(''));
   }
   const clinical = (isClinicalStaff() ? `<a href="#/clinical" data-route="/clinical">${ico('activity')}Ward</a>` : '')
     + (groups.Clinical || []).join('');
@@ -2769,13 +2791,7 @@ async function viewPharmacy() {
           owes: money(c.outstanding_debt), wallet: money(c.wallet_balance),
         })), (c) => `#/r/pharmacy-customers/${c.id}`) : '<p class="muted">Nobody owes us anything.</p>'}
       </div>
-      <div class="card"><h3>Insurers</h3>
-        ${claims && claims.by_hmo.length ? tableHtml(claims.by_hmo.map((h) => ({
-          hmo: h.name, claims: h.claims, claimed: money(h.claimed),
-          approved: money(h.approved), paid: money(h.paid),
-          outstanding: money(h.outstanding),
-        }))) : '<p class="muted">No claims yet.</p>'}
-      </div>`);
+`);
     if ($('#write-off-expired')) {
       $('#write-off-expired').onclick = async () => {
         if (!confirm(`Take ${expired.length} expired batch(es) off the shelf? Each is written off on its own, and none of it comes back.`)) return;
@@ -2787,6 +2803,78 @@ async function viewPharmacy() {
       };
     }
   } catch (e) { errorBox(e); }
+}
+
+/* ------------------------------------------------------------------ hmo */
+
+/* The pharmacy's side of the insurance desk: what the schemes have been
+   billed over a period, what they still owe, and the two queues that stall
+   money — requests the insurer has not answered, and claims nobody has
+   submitted yet. The insurer's own seat has its own screen (viewInsurer);
+   this one is the counter's.
+
+   The queues are today's work, so they are not filtered: a request left
+   unanswered since last month is exactly what this screen is for. The dates
+   narrow the money — the summary endpoint takes from/to (config.ranges). */
+async function viewHmo() {
+  if (!await ensureChrome()) return;
+  if (!isPharmacyStaff()) return errorBox(new Error('Pharmacy staff only.'));
+  render(`<div class="page-head"><h2>Insurance</h2>
+      <a class="btn ghost" href="#/r/pharmacy-claims">All claims</a></div>
+    <form id="f" class="toolbar">
+      <label>From <input type="date" name="from"></label>
+      <label>To <input type="date" name="to"></label>
+      <button>Load</button>
+    </form>
+    <div id="out"><div class="loading">Loading…</div></div>`);
+  const load = async () => {
+    $('#out').innerHTML = '<div class="loading">Loading…</div>';
+    const fd = new FormData($('#f'));
+    const range = {};
+    for (const k of ['from', 'to']) if (fd.get(k)) range[k] = fd.get(k);
+    const [claims, waiting, drafts] = await Promise.all([
+      Api.get('/api/pharmacy/claims/summary/', range).catch(() => null),
+      Api.list('/api/pharmacy/pre-authorizations/',
+               { status: 'requested', ordering: '-created_at' }).catch(() => null),
+      Api.list('/api/pharmacy/claims/', { status: 'draft', ordering: '-created_at' }).catch(() => null),
+    ]);
+    const count = (l) => (l ? fmtVal(l.count ?? l.rows.length) : '—');
+    const kpis = [
+      ['Awaiting authorisation', count(waiting)],
+      ['Claims to submit', count(drafts)],
+      ['Schemes billed', claims ? fmtVal(claims.by_hmo.length) : '—'],
+      ['Claimed', claims ? money(claims.claimed) : '—'],
+      ['Approved', claims ? money(claims.approved) : '—'],
+      ['Paid', claims ? money(claims.paid) : '—'],
+      ['Owed by insurers', claims ? money(claims.outstanding) : '—'],
+    ];
+    const queue = (title, list, slug, empty) => `<div class="card"><h3>${esc(title)}</h3>
+      ${list?.rows?.length ? tableHtml(list.rows.slice(0, 8), (r) => `#/r/${slug}/${r.id}`)
+        : `<p class="muted">${esc(empty)}</p>`}</div>`;
+    // The amounts arrive as decimal strings; the chart needs numbers, and a
+    // scheme's name is the one label column chartHtml groups the bars by.
+    const byScheme = (claims?.by_hmo || []).map((h) => ({
+      scheme: h.name,
+      claimed: Number(h.claimed) || 0,
+      paid: Number(h.paid) || 0,
+      outstanding: Number(h.outstanding) || 0,
+    }));
+    $('#out').innerHTML = `
+      <div class="tiles">${kpis.map(([k, v]) =>
+        `<div class="tile kpi-tile"><span class="tile-label">${esc(k)}</span><span class="tile-val">${esc(v)}</span></div>`).join('')}</div>
+      ${queue('Waiting on the insurer', waiting, 'pharmacy-preauths', 'Nothing awaiting an answer.')}
+      ${queue('Claims not submitted yet', drafts, 'pharmacy-claims', 'Nothing left in draft.')}
+      <div class="card"><h3>By scheme</h3>
+        ${byScheme.length
+          ? chartHtml(byScheme, { labelKey: 'scheme', numKeys: ['claimed', 'paid', 'outstanding'] })
+          : '<p class="muted">No claims in this period.</p>'}
+      </div>
+      <h3>Go to</h3>
+      <div class="tiles">${hmoLinks().map(([href, icon, title]) =>
+        `<a class="tile linktile" href="${href}"><span class="tile-label">${ico(icon)}${esc(title)}</span></a>`).join('')}</div>`;
+  };
+  $('#f').onsubmit = (e) => { e.preventDefault(); load().catch((err) => errorBox(err)); };
+  load().catch((err) => errorBox(err));
 }
 
 /* Dispensing counter. The server picks the batches (first expiry first out),
@@ -3559,6 +3647,7 @@ const routes = [
   [/^\/insurer$/, viewInsurer],
   [/^\/gov$/, viewGov],
   [/^\/pharmacy$/, viewPharmacy],
+  [/^\/hmo$/, viewHmo],
   [/^\/pharmacy\/sell$/, viewSell],
   [/^\/analytics(?:\/([a-z-]+))?$/, (m) => viewAnalytics(ANALYTICS, '/analytics', m[1])],
   [/^\/platform(?:\/([a-z-]+))?$/, (m) => viewAnalytics(PLATFORM, '/platform', m[1])],

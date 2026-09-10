@@ -64,4 +64,23 @@ assert.strictEqual(h.sidebar.open, false);
 assert.strictEqual(h.toggle.aria, 'false');
 assert.strictEqual(h.toggle.focused, 0);
 
+// The insurance desk is its own sidebar group, but the gate above it still
+// reads ``group`` — so a resource flagged ``hmo`` that left the Pharmacy group
+// would show up for staff the API refuses.
+const hmoLines = src.split(String.fromCharCode(10)).filter((l) => l.includes('hmo: true'));
+assert.ok(hmoLines.length >= 6, 'no hmo-flagged resources found');
+for (const line of hmoLines) assert.ok(line.includes("group: 'Pharmacy'"), line.trim());
+assert.ok(src.includes("groups[r.hmo ? 'HMO' : r.group]"), 'HMO links not split out');
+assert.ok(src.includes("navGroup('HMO'"), 'HMO nav group not rendered');
+// The HMO group's own dashboard: the sidebar link and the route must agree,
+// or the section's front door lands on "Page not found".
+assert.ok(src.includes('href="#/hmo"'), 'no HMO dashboard link in the sidebar');
+assert.ok(src.includes('/hmo$/, viewHmo'), 'no /hmo route');
+assert.ok(src.includes('async function viewHmo()'), 'viewHmo not defined');
+
+// A desk admin's Users link moves into their own section, so the Admin group
+// must not be the only place it renders.
+assert.ok(src.includes("deskUsers ? usersLink : ''"), 'Users link not shown in the desk section');
+assert.ok(src.includes("groups.Admin.filter((a) => a !== usersLink)"), 'Users link left in Admin too');
+
 console.log('nav.test.js ok');
