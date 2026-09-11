@@ -54,7 +54,8 @@ class _HmoData {
   final Map<String, dynamic> claims;
   final List<Map<String, dynamic>> waiting;
   final List<Map<String, dynamic>> drafts;
-  const _HmoData(this.claims, this.waiting, this.drafts);
+  final List<Map<String, dynamic>> dependents;
+  const _HmoData(this.claims, this.waiting, this.drafts, this.dependents);
 }
 
 class _HmoDashboardScreenState extends State<HmoDashboardScreen>
@@ -98,11 +99,14 @@ class _HmoDashboardScreenState extends State<HmoDashboardScreen>
           {'status': 'requested', 'ordering': '-created_at', 'page_size': '8'}),
       rows('/api/pharmacy/claims/',
           {'status': 'draft', 'ordering': '-created_at', 'page_size': '8'}),
+      rows('/api/pharmacy/dependents/',
+          {'status': 'pending', 'ordering': '-created_at', 'page_size': '8'}),
     ]);
     return _HmoData(
       results[0] as Map<String, dynamic>,
       results[1] as List<Map<String, dynamic>>,
       results[2] as List<Map<String, dynamic>>,
+      results[3] as List<Map<String, dynamic>>,
     );
   }
 
@@ -126,7 +130,9 @@ class _HmoDashboardScreenState extends State<HmoDashboardScreen>
   }
 
   String _rowTitle(Map row) {
-    for (final k in ['reference', 'claim_number', 'patient_name', 'hmo_name']) {
+    for (final k in [
+      'reference', 'claim_number', 'full_name', 'patient_name', 'hmo_name'
+    ]) {
       final v = row[k];
       if (v != null && '$v'.trim().isNotEmpty) return '$v';
     }
@@ -256,6 +262,11 @@ class _HmoDashboardScreenState extends State<HmoDashboardScreen>
                     value: units(d.drafts.length),
                     color: EnhancedTheme.errorRed),
                 KpiTile(
+                    icon: Icons.family_restroom_outlined,
+                    label: 'Dependents to approve',
+                    value: units(d.dependents.length),
+                    color: EnhancedTheme.accentPurple),
+                KpiTile(
                     icon: Icons.health_and_safety_outlined,
                     label: 'Schemes billed',
                     value: units(schemes.length),
@@ -294,6 +305,17 @@ class _HmoDashboardScreenState extends State<HmoDashboardScreen>
                 color: EnhancedTheme.errorRed,
                 rows: d.drafts,
                 trailing: (r) => money(r['amount'] ?? 0),
+              ),
+              // Raised by principals from the portal; answered on the
+              // Schemes screen's Dependents tab.
+              _queue(
+                icon: Icons.family_restroom_outlined,
+                heading: 'Dependents awaiting approval (${d.dependents.length})',
+                label: 'Schemes',
+                empty: 'Nobody waiting on an answer.',
+                color: EnhancedTheme.accentPurple,
+                rows: d.dependents,
+                trailing: (r) => '${r['relationship'] ?? ''}',
               ),
               StatSection(
                 icon: Icons.bar_chart_outlined,
