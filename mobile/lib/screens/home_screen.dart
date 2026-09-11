@@ -259,8 +259,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   // A patient's own record — their home, and the whole app for them. Every
   // other tenant screen 403s for the patient seat, the catalog and the lookup
   // tools built on it included, so nothing else is worth a menu row.
-  static const _myHealthHome =
-      _Section('My health', Icons.favorite_outline, MyHealthScreen());
+  _Section get _myHealthHome => _Section('My health', Icons.favorite_outline,
+      MyHealthScreen(onOpenProfile: () => _openSection('Profile')));
 
   // The insurer's seat. The API scopes each of these to their own scheme
   // (insurer_scope), and the claims screens refuse them every write — the

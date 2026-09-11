@@ -527,6 +527,24 @@ class Api {
       if (medication != null) 'medication': '$medication',
     });
   }
+
+  /// GET /api/portal/enrollments/ — the schemes the patient is a member of,
+  /// which is what a dependent goes under.
+  Future<List<dynamic>> portalEnrollments() =>
+      getList('/api/portal/enrollments/');
+
+  /// GET /api/portal/dependents/ — the people the principal has asked to
+  /// have covered, and what the scheme said.
+  Future<List<dynamic>> portalDependents() =>
+      getList('/api/portal/dependents/');
+
+  /// POST /api/portal/dependents/ — name one. Lands pending; the scheme's
+  /// own seat answers. [body] is full_name, relationship, and optionally
+  /// enrollment (when the patient holds more than one card), sex,
+  /// date_of_birth, phone.
+  Future<Map<String, dynamic>> addDependent(Map<String, dynamic> body) async =>
+      (await post('/api/portal/dependents/', body) as Map)
+          .cast<String, dynamic>();
 }
 
 class ApiException implements Exception {

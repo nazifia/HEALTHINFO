@@ -8,6 +8,7 @@ import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/snack.dart';
+import 'my_health_screen.dart' show PatientDetailsCard;
 
 /// Trimmed string, or null when null/blank — so empty fields render as "—".
 String? _str(Object? v) {
@@ -40,9 +41,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _future = _load();
   }
 
+  // A patient's profile is their own record first; the account row below it
+  // is the login they got it through. Stashed under a key the account never
+  // carries. An unlinked account gets 403 there and just shows the account.
   Future<Map<String, dynamic>> _load() async {
     final r = await api.get('/api/users/me/');
-    return (r as Map).cast<String, dynamic>();
+    final u = (r as Map).cast<String, dynamic>();
+    if (u['role'] == 'public') {
+      u['_patient'] = await api.portalMe().catchError((_) => <String, dynamic>{});
+    }
+    return u;
   }
 
   Future<void> _editProfile(Map<String, dynamic> u) async {
@@ -217,6 +225,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   )),
             ),
             const SizedBox(height: 20),
+            if (u['_patient'] is Map && (u['_patient'] as Map).isNotEmpty) ...[
+              PatientDetailsCard(me: (u['_patient'] as Map).cast<String, dynamic>()),
+              const SizedBox(height: 16),
+              Text('Account',
+                  style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+            ],
             GlassCard(
               padding: const EdgeInsets.all(8),
               child: Column(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../main.dart';
 import '../api.dart';
@@ -8,18 +9,22 @@ import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/snack.dart';
 
-/// A patient's own record — GET /api/portal/*.
+/// A patient's home — GET /api/portal/*.
 ///
-/// Their details, the drugs the pharmacy has actually handed over, and where
-/// to go and get more. Nothing else: the clinical timeline is the facility's
-/// working record and the portal API does not serve it.
+/// A welcome banner with the facts a nurse asks for first, the drugs the
+/// pharmacy has actually handed over, and where to go and get more. The full
+/// record lives on Profile ([PatientDetailsCard]). Nothing else: the clinical
+/// timeline is the facility's working record and the portal API does not
+/// serve it.
 ///
 /// No patient id is sent anywhere: the API reads it off the signed-in account
 /// (apps.patients.portal), so this screen cannot show anyone else's record. An
 /// account nobody has linked to a patient row gets 403, and the message says
 /// who can fix that.
 class MyHealthScreen extends StatefulWidget {
-  const MyHealthScreen({super.key});
+  /// Opens the Profile drawer section — the banner's "View full profile".
+  final VoidCallback? onOpenProfile;
+  const MyHealthScreen({super.key, this.onOpenProfile});
 
   @override
   State<MyHealthScreen> createState() => _MyHealthScreenState();
@@ -93,8 +98,14 @@ class _MyHealthScreenState extends State<MyHealthScreen>
     _future = _load();
   }
 
-  Future<List<dynamic>> _load() =>
-      Future.wait([api.portalMe(), api.portalMedications()]);
+  // The scheme calls fail soft: a patient on no scheme still has a record
+  // and a drug list, and the dependents card says why it is empty.
+  Future<List<dynamic>> _load() => Future.wait([
+        api.portalMe(),
+        api.portalMedications(),
+        api.portalEnrollments().catchError((_) => <dynamic>[]),
+        api.portalDependents().catchError((_) => <dynamic>[]),
+      ]);
 
   void _reload() => setState(() {
         _pharmacies = null;
@@ -156,15 +167,19 @@ class _MyHealthScreenState extends State<MyHealthScreen>
             }
             final me = (snap.data![0] as Map).cast<String, dynamic>();
             final meds = (snap.data![1] as List).cast<Map<String, dynamic>>();
+            final cards = (snap.data![2] as List).cast<Map<String, dynamic>>();
+            final deps = (snap.data![3] as List).cast<Map<String, dynamic>>();
             return ListView(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
               children: [
-                _DetailsCard(me: me),
+                _HeroCard(me: me, meds: meds, onOpenProfile: widget.onOpenProfile),
                 const SizedBox(height: 12),
                 _MedicationsCard(
                   meds: meds,
                   onFind: (medication) => _findPharmacies(medication: medication),
                 ),
+                const SizedBox(height: 12),
+                _DependentsCard(cards: cards, rows: deps, onAdded: _reload),
                 const SizedBox(height: 12),
                 _PharmaciesCard(
                   rows: _pharmacies,
@@ -180,9 +195,172 @@ class _MyHealthScreenState extends State<MyHealthScreen>
   }
 }
 
-class _DetailsCard extends StatelessWidget {
+/// The welcome banner a patient lands on: a greeting for the time of day,
+/// their name, and the handful of facts a nurse asks for first. Same content
+/// as the web hero (web/app.js portalHeroHtml).
+class _HeroCard extends StatelessWidget {
   final Map<String, dynamic> me;
-  const _DetailsCard({required this.me});
+  final List<Map<String, dynamic>> meds;
+  final VoidCallback? onOpenProfile;
+  const _HeroCard({required this.me, required this.meds, this.onOpenProfile});
+
+  @override
+  Widget build(BuildContext context) {
+    final h = DateTime.now().hour;
+    final greet = h < 12
+        ? 'Good morning'
+        : h < 17
+            ? 'Good afternoon'
+            : 'Good evening';
+    final name = _text(me['full_name']) == '—' ? 'there' : _text(me['full_name']);
+    final initials = name
+        .split(RegExp(r'\s+'))
+        .take(2)
+        .map((w) => w.isEmpty ? '' : w[0])
+        .join()
+        .toUpperCase();
+    final sex = me['sex'] == 'M'
+        ? 'Male'
+        : me['sex'] == 'F'
+            ? 'Female'
+            : _text(me['sex']);
+    final who = [
+      sex,
+      if (me['age'] != null) '${me['age']} yrs',
+      if (_text(me['hospital_number']) != '—')
+        'Hospital No. ${me['hospital_number']}',
+    ].where((s) => s != '—').join(' · ');
+    const white70 = Color(0xB3FFFFFF);
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [EnhancedTheme.primaryTeal, EnhancedTheme.accentCyan],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: EnhancedTheme.primaryTeal.withValues(alpha: 0.35),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: const Color(0x38FFFFFF),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: const Color(0x66FFFFFF)),
+                ),
+                child: Text(initials,
+                    style: GoogleFonts.outfit(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800)),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('$greet,',
+                        style: const TextStyle(color: white70, fontSize: 14)),
+                    Text(name,
+                        style: GoogleFonts.outfit(
+                            color: Colors.white,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                            height: 1.15)),
+                    if (who.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(who,
+                            style: const TextStyle(
+                                color: white70, fontSize: 13)),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _HeroStat('Blood group', me['blood_group']),
+              _HeroStat('Genotype', me['genotype']),
+              _HeroStat('Scheme', me['patient_type_display']),
+              _HeroStat('NHIS number', me['nhis_number']),
+              _HeroStat('Medications collected', meds.length),
+              _HeroStat('Allergies', me['allergies']),
+            ],
+          ),
+          if (onOpenProfile != null) ...[
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: onOpenProfile,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                side: const BorderSide(color: Color(0x99FFFFFF)),
+              ),
+              icon: const Icon(Icons.person_outline, size: 18),
+              label: const Text('View full profile'),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _HeroStat extends StatelessWidget {
+  final String label;
+  final Object? value;
+  const _HeroStat(this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 96),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0x2EFFFFFF),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label,
+              style: const TextStyle(color: Color(0xB3FFFFFF), fontSize: 11)),
+          Text(_text(value),
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
+}
+
+/// A patient's full record, as the portal serves it. Shown on Profile above
+/// the account row; the home banner keeps only the headline facts.
+class PatientDetailsCard extends StatelessWidget {
+  final Map<String, dynamic> me;
+  const PatientDetailsCard({super.key, required this.me});
 
   @override
   Widget build(BuildContext context) {
@@ -262,6 +440,225 @@ class _MedicationsCard extends StatelessWidget {
                 ),
               ),
         ],
+      ),
+    );
+  }
+}
+
+/// The people on the principal's card. A dependent is named here and waits
+/// on the scheme; its answer shows as the status, and can change later. A
+/// patient on no scheme has nobody to ask, so the button stays hidden.
+class _DependentsCard extends StatelessWidget {
+  final List<Map<String, dynamic>> cards;
+  final List<Map<String, dynamic>> rows;
+  final VoidCallback onAdded;
+  const _DependentsCard(
+      {required this.cards, required this.rows, required this.onAdded});
+
+  Color _statusColor(String status) => switch (status) {
+        'approved' => EnhancedTheme.successGreen,
+        'declined' => EnhancedTheme.errorRed,
+        _ => EnhancedTheme.warningAmber,
+      };
+
+  Future<void> _add(BuildContext context) async {
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _DependentForm(cards: cards),
+    );
+    if (saved == true) onAdded();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('My dependents', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          if (rows.isEmpty)
+            const Text('Nobody added yet.',
+                style: TextStyle(color: Colors.grey))
+          else
+            for (final r in rows)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.family_restroom_outlined,
+                    color: EnhancedTheme.primaryTeal),
+                title: Text(_text(r['full_name'])),
+                subtitle: Text([
+                  _text(r['relationship']),
+                  _text(r['hmo_name']),
+                  if (r['status'] == 'approved' && _text(r['member_number']) != '—')
+                    'No. ${r['member_number']}',
+                  if (r['status'] == 'declined' && _text(r['reason']) != '—')
+                    '${r['reason']}',
+                ].where((s) => s != '—').join(' · ')),
+                trailing: Chip(
+                  label: Text('${r['status']}',
+                      style: const TextStyle(color: Colors.white, fontSize: 12)),
+                  backgroundColor: _statusColor('${r['status']}'),
+                  padding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+          const SizedBox(height: 8),
+          if (cards.isEmpty)
+            const Text('You are not on a scheme yet, so there is nobody to ask.',
+                style: TextStyle(color: Colors.grey))
+          else
+            FilledButton.icon(
+              onPressed: () => _add(context),
+              icon: const Icon(Icons.person_add_alt_outlined),
+              label: const Text('Add a dependent'),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Names one dependent. Pops `true` once the scheme has it.
+class _DependentForm extends StatefulWidget {
+  final List<Map<String, dynamic>> cards;
+  const _DependentForm({required this.cards});
+
+  @override
+  State<_DependentForm> createState() => _DependentFormState();
+}
+
+class _DependentFormState extends State<_DependentForm> {
+  final _name = TextEditingController();
+  final _phone = TextEditingController();
+  String _relationship = 'child';
+  String? _sex;
+  DateTime? _dob;
+  int? _enrollment;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.cards.length == 1) _enrollment = widget.cards.first['id'] as int?;
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _phone.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final name = _name.text.trim();
+    if (name.isEmpty) return showError(context, 'Give their full name.');
+    if (_enrollment == null) {
+      return showError(context, 'Pick which membership this goes under.');
+    }
+    setState(() => _saving = true);
+    try {
+      await api.addDependent({
+        'enrollment': _enrollment,
+        'full_name': name,
+        'relationship': _relationship,
+        if (_sex != null) 'sex': _sex,
+        if (_dob != null) 'date_of_birth': _dob!.toIso8601String().substring(0, 10),
+        if (_phone.text.trim().isNotEmpty) 'phone': _phone.text.trim(),
+      });
+      if (!mounted) return;
+      showSuccess(context, 'Sent to the scheme for approval.');
+      Navigator.pop(context, true);
+    } on ApiException catch (e) {
+      if (mounted) showError(context, e.friendly);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+          16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Add a dependent',
+                style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 12),
+            if (widget.cards.length > 1)
+              DropdownButtonFormField<int>(
+                initialValue: _enrollment,
+                decoration:
+                    const InputDecoration(labelText: 'Under which membership'),
+                items: [
+                  for (final c in widget.cards)
+                    DropdownMenuItem(
+                        value: c['id'] as int,
+                        child: Text('${c['hmo_name']} · ${c['member_number']}')),
+                ],
+                onChanged: (v) => setState(() => _enrollment = v),
+              ),
+            TextField(
+              controller: _name,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(labelText: 'Full name'),
+            ),
+            DropdownButtonFormField<String>(
+              initialValue: _relationship,
+              decoration: const InputDecoration(labelText: 'Relationship'),
+              items: const [
+                DropdownMenuItem(value: 'child', child: Text('Child')),
+                DropdownMenuItem(value: 'spouse', child: Text('Spouse')),
+                DropdownMenuItem(value: 'parent', child: Text('Parent')),
+                DropdownMenuItem(value: 'other', child: Text('Other')),
+              ],
+              onChanged: (v) => setState(() => _relationship = v ?? 'child'),
+            ),
+            DropdownButtonFormField<String?>(
+              initialValue: _sex,
+              decoration: const InputDecoration(labelText: 'Sex'),
+              items: const [
+                DropdownMenuItem(value: null, child: Text('—')),
+                DropdownMenuItem(value: 'M', child: Text('Male')),
+                DropdownMenuItem(value: 'F', child: Text('Female')),
+              ],
+              onChanged: (v) => setState(() => _sex = v),
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.cake_outlined),
+              title: Text(_dob == null
+                  ? 'Date of birth'
+                  : _dob!.toIso8601String().substring(0, 10)),
+              onTap: () async {
+                final now = DateTime.now();
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: _dob ?? now,
+                  firstDate: DateTime(now.year - 120),
+                  lastDate: now,
+                );
+                if (picked != null) setState(() => _dob = picked);
+              },
+            ),
+            TextField(
+              controller: _phone,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(labelText: 'Phone (optional)'),
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: _saving ? null : _save,
+              child: Text(_saving ? 'Sending…' : 'Send for approval'),
+            ),
+          ],
+        ),
       ),
     );
   }

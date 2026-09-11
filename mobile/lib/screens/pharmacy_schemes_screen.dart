@@ -7,6 +7,7 @@ import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/searchable_dropdown.dart';
 import '../shared/widgets/snack.dart';
 import 'pharmacy_kit.dart';
+import 'pharmacy_sales_screen.dart' show askText;
 import 'report_scaffold.dart';
 
 /// The insurers the pharmacy bills, who is a member of which, and what each
@@ -31,14 +32,16 @@ class PharmacySchemesScreen extends StatelessWidget {
         final admin = isPharmacyAdmin(role);
         final myHmo = snap.data?['hmo'];
         return DefaultTabController(
-          length: 3,
+          length: 4,
           child: Column(children: [
             const TabBar(
               labelColor: EnhancedTheme.primaryTeal,
               indicatorColor: EnhancedTheme.primaryTeal,
+              isScrollable: true,
               tabs: [
                 Tab(text: 'Insurers'),
                 Tab(text: 'Members'),
+                Tab(text: 'Dependents'),
                 Tab(text: 'Price list'),
               ],
             ),
@@ -46,6 +49,7 @@ class PharmacySchemesScreen extends StatelessWidget {
               child: TabBarView(children: [
                 _HmosTab(admin: admin, platform: role == 'super_admin'),
                 _MembersTab(admin: admin),
+                _DependentsTab(answers: answersForInsurer(role)),
                 _RulesTab(
                   canEdit: canEditPriceList(role, hmoId: myHmo),
                   insurer: role == 'hmo',
@@ -594,6 +598,123 @@ class _MemberCard extends StatelessWidget {
           const ReportBadge(text: 'not valid', color: EnhancedTheme.errorRed),
         IconButton(
             icon: const Icon(Icons.edit_outlined, size: 18), onPressed: edit),
+      ]),
+    );
+  }
+}
+
+/* ----------------------------------------------------------- dependents */
+
+/// People principals asked to have covered under their card, raised from the
+/// patient portal. The scheme's own seat (or the pharmacy admin for it)
+/// answers — at any time, in either direction — so both buttons show
+/// whichever way it stands. Mirrors the web's pharmacy-dependents resource.
+class _DependentsTab extends StatelessWidget {
+  final bool answers;
+  const _DependentsTab({required this.answers});
+
+  @override
+  Widget build(BuildContext context) {
+    return ReportListScreen(
+      path: '/api/pharmacy/dependents/',
+      searchHint: 'Dependent, principal or number…',
+      fabLabel: '',
+      showFab: false,
+      emptyIcon: Icons.family_restroom_outlined,
+      emptyTitle: 'No dependents asked for',
+      emptyMessage: 'Members add them from their own portal.',
+      savedMessage: '',
+      filters: const [
+        ReportFilter(param: 'status', anyLabel: 'Any state', options: {
+          'pending': 'Awaiting approval',
+          'approved': 'Approved',
+          'declined': 'Declined',
+        }),
+      ],
+      card: (row, reload, _) =>
+          _DependentCard(row: row, reload: reload, answers: answers),
+      form: (_) => const SizedBox.shrink(),
+    );
+  }
+}
+
+class _DependentCard extends StatelessWidget {
+  final Map<String, dynamic> row;
+  final VoidCallback reload;
+  final bool answers;
+  const _DependentCard(
+      {required this.row, required this.reload, required this.answers});
+
+  Future<void> _answer(BuildContext context, String action) async {
+    final typed = await askText(
+        context,
+        action == 'approve' ? 'Approve dependent' : 'Decline dependent',
+        action == 'approve' ? 'Member number (optional)' : 'Reason');
+    if (typed == null || !context.mounted) return;
+    final body = {action == 'approve' ? 'member_number' : 'reason': typed};
+    try {
+      final r = await api.post(
+          '/api/pharmacy/dependents/${row['id']}/$action/', body);
+      if (context.mounted) {
+        showSuccess(context, '${(r as Map?)?['message'] ?? 'Done.'}');
+      }
+      reload();
+    } catch (e) {
+      if (context.mounted) showError(context, '$e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final status = '${row['status']}';
+    final (badge, color) = switch (status) {
+      'approved' => ('approved', EnhancedTheme.successGreen),
+      'declined' => ('declined', EnhancedTheme.errorRed),
+      _ => ('pending', EnhancedTheme.warningAmber),
+    };
+    final note = status == 'approved'
+        ? '${row['member_number'] ?? ''}'
+        : '${row['reason'] ?? ''}';
+    return GlassCard(
+      borderRadius: 16,
+      padding: const EdgeInsets.all(14),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${row['full_name'] ?? 'Dependent'}',
+                      style: TextStyle(
+                          color: context.labelColor,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15)),
+                  Text(
+                      '${row['relationship']} of ${row['principal_name']}'
+                      ' · ${row['hmo_name']} ${row['principal_number']}',
+                      style:
+                          TextStyle(color: context.hintColor, fontSize: 13)),
+                  if (note.isNotEmpty)
+                    Text(note,
+                        style:
+                            TextStyle(color: context.hintColor, fontSize: 12)),
+                ]),
+          ),
+          ReportBadge(text: badge, color: color),
+        ]),
+        if (answers)
+          Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+            if (status != 'approved')
+              TextButton(
+                  onPressed: () => _answer(context, 'approve'),
+                  child: const Text('Approve')),
+            if (status != 'declined')
+              TextButton(
+                  onPressed: () => _answer(context, 'decline'),
+                  style: TextButton.styleFrom(
+                      foregroundColor: EnhancedTheme.errorRed),
+                  child: const Text('Decline')),
+          ]),
       ]),
     );
   }
