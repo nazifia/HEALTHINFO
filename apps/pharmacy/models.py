@@ -217,6 +217,107 @@ class HmoEnrollment(TenantOwnedModel):
         return max(_money(self.annual_limit - used), Decimal("0.00"))
 
 
+class SchemeDependent(TenantOwnedModel):
+    """Someone a principal member wants covered under their card - a spouse, a
+    child - waiting on the scheme's yes.
+
+    The principal names them from the portal; the scheme's own seat approves
+    or declines, and may do so at any time - a declined child can be approved
+    once the papers arrive, an approved one dropped when the plan changes.
+    Only an approved dependent counts as covered.
+
+    ponytail: a person row, not a Patient. A dependent becomes a Patient when
+    a facility registers them; link the two then, not before.
+    """
+
+    class Relationship(models.TextChoices):
+        SPOUSE = "spouse", "Spouse"
+        CHILD = "child", "Child"
+        PARENT = "parent", "Parent"
+        OTHER = "other", "Other"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Awaiting approval"
+        APPROVED = "approved", "Approved"
+        DECLINED = "declined", "Declined"
+
+    enrollment = models.ForeignKey(
+        HmoEnrollment, on_delete=models.CASCADE, related_name="dependents"
+    )
+    full_name = models.CharField(max_length=200)
+    sex = models.CharField(max_length=1, blank=True)
+    date_of_birth = models.DateField(null=True, blank=True)
+    relationship = models.CharField(
+        max_length=20, choices=Relationship.choices, default=Relationship.CHILD
+    )
+    phone = models.CharField(max_length=20, blank=True)
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.PENDING
+    )
+    # The scheme's own number for this dependent, once approved.
+    member_number = models.CharField(max_length=100, blank=True)
+    reason = models.CharField(max_length=255, blank=True)
+    decided_by = models.ForeignKey(
+        "accounts.User", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    decided_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+        indexes = [models.Index(fields=["tenant", "status"])]
+
+    def __str__(self):
+        return f"{self.full_name} ({self.get_relationship_display()})"
+
+    def _notify_principal(self, title, message):
+        """Tell the principal, on their portal login, what the scheme said."""
+        user_id = self.enrollment.patient.user_id
+        if not user_id:
+            return
+        from apps.pos.models import Notification
+
+        Notification.objects.create(
+            tenant_id=self.tenant_id, user_id=user_id,
+            kind=Notification.Kind.SYSTEM, priority=Notification.Priority.MEDIUM,
+            title=title[:200], message=message,
+        )
+
+    def _decide(self, status, by, reason="", member_number=None):
+        was = self.status
+        self.status = status
+        self.reason = reason[:255]
+        if member_number is not None:
+            self.member_number = member_number[:100]
+        self.decided_by = by
+        self.decided_at = timezone.now()
+        self.save(update_fields=["status", "reason", "member_number",
+                                 "decided_by", "decided_at", "updated_at"])
+        _audit(self, by, was, status, reason)
+        return self
+
+    def approve(self, by=None, member_number="", reason=""):
+        """Cover them. Answerable from any state - a decline is not final."""
+        if self.status == self.Status.APPROVED:
+            raise ValueError("This dependent is already approved.")
+        self._decide(self.Status.APPROVED, by, reason, member_number)
+        scheme = self.enrollment.hmo.name
+        self._notify_principal(
+            f"{self.full_name} approved",
+            f"{scheme} now covers {self.full_name} under your membership.")
+        return self
+
+    def decline(self, by=None, reason=""):
+        """Refuse, or withdraw cover already given, and say why."""
+        if self.status == self.Status.DECLINED:
+            raise ValueError("This dependent is already declined.")
+        self._decide(self.Status.DECLINED, by, reason)
+        self._notify_principal(
+            f"{self.full_name} declined",
+            reason or "The scheme did not approve this dependent.")
+        return self
+
+
 class PreAuthorization(TenantOwnedModel):
     """The insurer's clearance for one covered sale, asked for before dispensing.
 

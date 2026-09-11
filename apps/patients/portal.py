@@ -16,7 +16,7 @@ patient themselves" is an answer that log should be able to give.
 """
 from math import asin, cos, radians, sin, sqrt
 
-from rest_framework import viewsets
+from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
@@ -154,6 +154,54 @@ class PatientPortalViewSet(viewsets.ViewSet):
         data = PrescriptionSerializer(rows, many=True).data
         self._log(patient, PatientAccessLog.Action.HISTORY, len(data))
         return Response(data)
+
+    # --- the people on my card ---------------------------------------------
+    @action(detail=False, methods=["get"])
+    def enrollments(self, request):
+        """The schemes this patient is a member of - what a dependent goes under."""
+        from apps.pharmacy.models import HmoEnrollment
+        from apps.pharmacy.serializers import HmoEnrollmentSerializer
+
+        patient = self._record()
+        rows = HmoEnrollment.all_objects.filter(
+            patient=patient, is_active=True).select_related("hmo")
+        return Response(HmoEnrollmentSerializer(rows, many=True).data)
+
+    @action(detail=False, methods=["get", "post"])
+    def dependents(self, request):
+        """The people the principal has asked to have covered, and asking.
+
+        POST names one: ``enrollment`` (one of the caller's own memberships;
+        left out, the only one they have), ``full_name``, ``relationship``,
+        optional ``sex``, ``date_of_birth``, ``phone``. It lands as pending;
+        the scheme's own seat approves it (see SchemeDependentViewSet). The
+        row is stamped with the enrollment's tenant, the way the audit row is:
+        a portal call carries no tenant header.
+        """
+        from apps.pharmacy.models import HmoEnrollment, SchemeDependent
+        from apps.pharmacy.serializers import SchemeDependentSerializer
+
+        patient = self._record()
+        mine = HmoEnrollment.all_objects.filter(patient=patient)
+        if request.method == "GET":
+            rows = SchemeDependent.all_objects.filter(
+                enrollment__in=mine
+            ).select_related("enrollment", "enrollment__hmo",
+                             "enrollment__patient", "decided_by")
+            return Response(SchemeDependentSerializer(rows, many=True).data)
+
+        wanted = request.data.get("enrollment")
+        active = mine.filter(is_active=True)
+        enrollment = (active.filter(pk=wanted).first() if wanted
+                      else active.first() if active.count() == 1 else None)
+        if enrollment is None:
+            raise ValidationError({"enrollment": "Pick which of your scheme "
+                                   "memberships this dependent goes under."})
+        ser = SchemeDependentSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        dep = ser.save(tenant_id=enrollment.tenant_id, enrollment=enrollment)
+        return Response(SchemeDependentSerializer(dep).data,
+                        status=status.HTTP_201_CREATED)
 
     # --- where to fill it --------------------------------------------------
     @action(detail=False, methods=["get"])

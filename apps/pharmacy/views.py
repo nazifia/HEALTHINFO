@@ -40,6 +40,7 @@ from .models import (
     HmoItemRule,
     PreAuthorization,
     PreAuthorizationItem,
+    SchemeDependent,
     _audit,
     notify_scheme_change,
 )
@@ -54,6 +55,8 @@ from .serializers import (
     PreAuthItemDecisionSerializer,
     PreAuthorizationItemSerializer,
     PreAuthorizationSerializer,
+    SchemeDependentDecisionSerializer,
+    SchemeDependentSerializer,
     SchemeRegistrationSerializer,
 )
 
@@ -369,6 +372,58 @@ class HmoEnrollmentViewSet(PharmacyViewSet):
         return insurer_scope(
             HmoEnrollment.objects.select_related("hmo", "patient"), self.request.user
         )
+
+
+class SchemeDependentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
+                             viewsets.GenericViewSet):
+    """Dependents principals have asked to have covered.
+
+    Raised by the principal from the portal (see apps.patients.portal); read
+    here by the pharmacy and the scheme, answered by the scheme's own seat or
+    the pharmacy admin on its behalf - at any time, in either direction.
+    """
+
+    serializer_class = SchemeDependentSerializer
+    permission_classes = [IsTenantMember, IsPharmacyStaffOrInsurerReadOnly]
+    insurer_ok = True
+    filterset_fields = ("status", "enrollment", "relationship")
+    search_fields = ("full_name", "member_number", "enrollment__member_number",
+                     "enrollment__patient__first_name",
+                     "enrollment__patient__last_name")
+    ordering_fields = ("created_at", "full_name")
+
+    def get_queryset(self):
+        return insurer_scope(SchemeDependent.objects.select_related(
+            "enrollment", "enrollment__hmo", "enrollment__patient", "decided_by"
+        ), self.request.user, field="enrollment__hmo")
+
+    def _answer(self, request, call, message):
+        if not answers_for_insurer(request.user):
+            raise PermissionDenied(
+                "Only the insurer or the pharmacy admin can answer for a dependent."
+            )
+        dep = self.get_object()
+        data = body(SchemeDependentDecisionSerializer, request)
+        try:
+            call(dep, data)
+        except ValueError as exc:
+            raise ValidationError({"status": str(exc)}) from exc
+        return success(message, SchemeDependentSerializer(dep).data)
+
+    @action(detail=True, methods=["post"], url_path="approve", **DECIDE)
+    def approve(self, request, pk=None):
+        return self._answer(
+            request,
+            lambda d, data: d.approve(by=request.user,
+                                      member_number=data["member_number"],
+                                      reason=data["reason"]),
+            "Dependent approved.")
+
+    @action(detail=True, methods=["post"], url_path="decline", **DECIDE)
+    def decline(self, request, pk=None):
+        return self._answer(
+            request, lambda d, data: d.decline(by=request.user, reason=data["reason"]),
+            "Dependent declined.")
 
 
 class ClaimViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,

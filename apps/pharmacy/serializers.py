@@ -15,6 +15,7 @@ from .models import (
     HmoItemRule,
     PreAuthorization,
     PreAuthorizationItem,
+    SchemeDependent,
 )
 
 
@@ -321,6 +322,40 @@ class PreAuthorizationSerializer(serializers.ModelSerializer):
                 "That membership is inactive or out of date."
             )
         return value
+
+
+class SchemeDependentSerializer(serializers.ModelSerializer):
+    """A dependent as the scheme and the pharmacy read it."""
+
+    principal_name = serializers.CharField(
+        source="enrollment.patient.full_name", read_only=True)
+    principal_number = serializers.CharField(
+        source="enrollment.member_number", read_only=True)
+    hmo_name = serializers.CharField(source="enrollment.hmo.name", read_only=True)
+    decided_by_name = serializers.CharField(
+        source="decided_by.username", read_only=True, default="")
+
+    class Meta:
+        model = SchemeDependent
+        # Ordered for the list screen: who, then what the scheme said.
+        fields = ("id", "full_name", "relationship", "status", "principal_name",
+                  "principal_number", "hmo_name", "sex", "date_of_birth",
+                  "phone", "member_number", "reason", "decided_by",
+                  "decided_by_name", "decided_at", "enrollment", "created_at",
+                  "updated_at")
+        # The membership is chosen by the caller's own record, never typed.
+        read_only_fields = ("enrollment", "status", "member_number", "reason",
+                            "decided_by", "decided_at", "created_at",
+                            "updated_at")
+
+
+class SchemeDependentDecisionSerializer(serializers.Serializer):
+    """The scheme's answer on a dependent: their number, or why not."""
+
+    member_number = serializers.CharField(max_length=100, required=False,
+                                          allow_blank=True, default="")
+    reason = serializers.CharField(max_length=255, required=False,
+                                   allow_blank=True, default="")
 
 
 class PreAuthDecisionSerializer(serializers.Serializer):

@@ -20,6 +20,7 @@ from .views import (
     HmoItemRuleViewSet,
     PreAuthorizationItemViewSet,
     PreAuthorizationViewSet,
+    SchemeDependentViewSet,
 )
 
 router = SimpleRouter()
@@ -33,6 +34,8 @@ router.register("pharmacy/pre-authorizations", PreAuthorizationViewSet,
 router.register("pharmacy/pre-authorization-items", PreAuthorizationItemViewSet,
                 basename="pharmacy-preauth-item")
 router.register("pharmacy/claims", ClaimViewSet, basename="pharmacy-claim")
+router.register("pharmacy/dependents", SchemeDependentViewSet,
+                basename="pharmacy-dependent")
 
 urlpatterns = (
     router.urls

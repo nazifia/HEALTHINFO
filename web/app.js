@@ -183,6 +183,12 @@ const RESOURCES = {
   'scheme-users':           { title: 'Scheme Users',    group: 'Pharmacy', hmo: true, path: 'users', superOnly: true,
                               search: true, query: { role: 'hmo' }, filters: ORG_FILTERS, signUp: true },
   'pharmacy-enrollments':   { title: 'Scheme Members',  group: 'Pharmacy', hmo: true, path: 'pharmacy/enrollments',     roles: 'staff', search: true },
+  // People a principal member asked to have covered under their card. Raised
+  // from the patient portal; the scheme's seat answers, and may change its
+  // answer at any time — so both buttons show whichever way it stands.
+  'pharmacy-dependents':    { title: 'Dependents',      group: 'Pharmacy', hmo: true, path: 'pharmacy/dependents',      roles: 'staff', search: true, readOnly: true,
+                              actions: [{ name: 'approve', label: 'Approve', ask: 'member_number', insurer: true, when: ['pending', 'declined'] },
+                                        { name: 'decline', label: 'Decline', ask: 'reason', insurer: true, danger: true, when: ['pending', 'approved'] }] },
   // A scheme's price list: what it pays for one drug, and the most it pays
   // for a unit of it. 0 cover is the exclusion; no row means the scheme's own
   // default covers it. The insurer keeps its own list (roles: 'scheme').
@@ -489,6 +495,7 @@ const SEAT_NAV = {
     ['#/r/pharmacy-preauths', 'flag', 'Authorisation Requests'],
     ['#/r/pharmacy-claims', 'file', 'Claims'],
     ['#/r/pharmacy-enrollments', 'users', 'Scheme Members'],
+    ['#/r/pharmacy-dependents', 'users', 'Dependents'],
     ['#/r/pharmacy-item-rules', 'pill', 'Price List'],
     ['#/r/pharmacy-hmos', 'shield', 'My Scheme'],
     ['#/notifications', 'flag', 'Notifications'],
@@ -2916,16 +2923,19 @@ async function viewInsurer() {
     return errorBox(new Error('Insurer seats only.'));
   }
   spinner();
-  const [summary, pending, billed] = await Promise.all([
+  const [summary, pending, billed, dependents] = await Promise.all([
     Api.get('/api/pharmacy/claims/summary/').catch(() => null),
     Api.list('/api/pharmacy/pre-authorizations/',
              { status: 'requested', ordering: '-created_at' }).catch(() => null),
     Api.list('/api/pharmacy/claims/',
              { status: 'submitted', ordering: '-created_at' }).catch(() => null),
+    Api.list('/api/pharmacy/dependents/',
+             { status: 'pending', ordering: '-created_at' }).catch(() => null),
   ]);
   const kpis = [
     ['Awaiting our answer', pending ? fmtVal(pending.count ?? pending.rows.length) : '—'],
     ['Claims submitted', billed ? fmtVal(billed.count ?? billed.rows.length) : '—'],
+    ['Dependents to approve', dependents ? fmtVal(dependents.count ?? dependents.rows.length) : '—'],
     ['Claimed', summary ? money(summary.claimed) : '—'],
     ['Approved', summary ? money(summary.approved) : '—'],
     ['Paid', summary ? money(summary.paid) : '—'],
@@ -2940,6 +2950,7 @@ async function viewInsurer() {
       `<div class="tile kpi-tile"><span class="tile-label">${esc(k)}</span><span class="tile-val">${esc(v)}</span></div>`).join('')}</div>
     ${card('Authorisation requests to answer', pending, 'pharmacy-preauths')}
     ${card('Claims submitted to us', billed, 'pharmacy-claims')}
+    ${card('Dependents awaiting approval', dependents, 'pharmacy-dependents')}
     <h3>Go to</h3>
     <div class="tiles">${SEAT_NAV.hmo[2].map(([href, icon, title]) =>
       `<a class="tile linktile" href="${href}"><span class="tile-label">${ico(icon)}${esc(title)}</span></a>`).join('')}</div>`);
@@ -3891,23 +3902,72 @@ function portalHeroHtml(me, meds) {
   </section>`;
 }
 
+/* The people on the principal's card. A dependent is named here and waits
+   on the scheme; its answer shows as the status, and can change later. A
+   patient on no scheme has nobody to ask, so the form stays hidden. */
+function dependentsHtml(cards, rows) {
+  const list = !rows.length
+    ? '<p class="muted">Nobody added yet.</p>'
+    : `<div class="table-wrap"><table><thead><tr>
+        <th>Name</th><th>Relationship</th><th>Scheme</th><th>Status</th><th>Note</th>
+        </tr></thead><tbody>${rows.map((r) => `<tr>
+        <td>${esc(r.full_name)}</td>
+        <td>${esc(label(r.relationship))}</td>
+        <td>${esc(r.hmo_name || '—')}</td>
+        <td>${cellHtml('status', r.status)}</td>
+        <td>${esc(r.status === 'approved' && r.member_number ? 'No. ' + r.member_number : r.reason || '')}</td>
+        </tr>`).join('')}</tbody></table></div>`;
+  if (!cards.length) {
+    return list + '<p class="muted">You are not on a scheme yet, so there is nobody to ask.</p>';
+  }
+  return `${list}
+    <form id="dependent-form" class="form-card">
+      <h4>Add a dependent</h4>
+      ${cards.length > 1 ? `<label>Under which membership
+        <select name="enrollment">${cards.map((c) =>
+          `<option value="${c.id}">${esc(c.hmo_name)} · ${esc(c.member_number)}</option>`).join('')}</select></label>` : ''}
+      <label>Full name<input name="full_name" maxlength="200" required></label>
+      <label>Relationship<select name="relationship">
+        <option value="child">Child</option><option value="spouse">Spouse</option>
+        <option value="parent">Parent</option><option value="other">Other</option></select></label>
+      <label>Sex<select name="sex"><option value="">—</option>
+        <option value="M">Male</option><option value="F">Female</option></select></label>
+      <label>Date of birth<input name="date_of_birth" type="date"></label>
+      <label>Phone (optional)<input name="phone" maxlength="20"></label>
+      <button type="submit" class="btn">Send for approval</button>
+    </form>`;
+}
+
 async function viewPortal() {
   if (!await ensureChrome()) return;
   spinner();
-  let me, meds;
+  let me, meds, cards, deps;
   try {
-    [me, meds] = await Promise.all([
+    [me, meds, cards, deps] = await Promise.all([
       Api.get('/api/portal/me/'),
       Api.get('/api/portal/medications/'),
+      Api.get('/api/portal/enrollments/').catch(() => []),
+      Api.get('/api/portal/dependents/').catch(() => []),
     ]);
   } catch (e) { return errorBox(e); }
 
   render(`${portalHeroHtml(me, meds)}
     <div class="card"><h3>My medications</h3>${portalMedsHtml(meds)}</div>
+    <div class="card"><h3>My dependents</h3>${dependentsHtml(cards, deps)}</div>
     <div class="card"><h3>Where to get them</h3>
       <div class="actions"><button id="find-pharmacies" class="btn">Find pharmacies near me</button></div>
       <div id="pharmacies"></div></div>`);
 
+  const form = $('#dependent-form');
+  if (form) form.onsubmit = async (e) => {
+    e.preventDefault();
+    const body = Object.fromEntries([...new FormData(form)].filter(([, v]) => v !== ''));
+    try {
+      await Api.post('/api/portal/dependents/', body);
+      toast('Sent to the scheme for approval.');
+      viewPortal();
+    } catch (err) { toast(err.message, true); }
+  };
   $('#find-pharmacies').onclick = () => loadPharmacies();
   for (const b of document.querySelectorAll('.find-drug')) {
     b.onclick = () => {
