@@ -18,6 +18,7 @@ class AppointmentsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return ReportListScreen(
       path: '/api/appointments/',
+      filters: const [sexFilter],
       fabLabel: 'Add appointment',
       emptyIcon: Icons.event_outlined,
       emptyTitle: 'No appointments yet',

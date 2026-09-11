@@ -113,6 +113,12 @@ window.addEventListener('online', () => Outbox.flush());
    already pinned to their own portal by the API, so the pickers would be three
    selects with one answer (``when``). Wrapped in arrows: the registry is built
    before isPlatformScope exists. */
+/* The patient's sex, copied onto every report at save time (patient_sex on
+   the API). Fixed options rather than a lookup path: the values are the
+   patient form's own. */
+const SEX_FILTER = { param: 'patient_sex', label: 'Sex', text: (r) => r.name,
+  options: [{ id: 'F', name: 'Female' }, { id: 'M', name: 'Male' }, { id: 'other', name: 'Other' }] };
+
 const ORG_FILTERS = [
   { param: 'tenant', label: 'Organization', path: '/api/tenants/', text: (r) => r.name },
   { param: 'hmo', label: 'Scheme', path: '/api/pharmacy/hmos/', text: (r) => r.name },
@@ -135,21 +141,21 @@ const RESOURCES = {
   // hours; sending it stamps the case and takes it off the worklist. The
   // stamp is what hides the button — a second call would not move the clock
   // back, but the case is no longer owed anything.
-  'case-reports':      { title: 'Case Reports',       group: 'Reports', report: true,
+  'case-reports':      { title: 'Case Reports',       group: 'Reports', report: true, filters: [SEX_FILTER],
                           actions: [{ name: 'notify', label: 'Mark notified up the IDSR tier',
                                       hideWhen: 'notified_at' }] },
-  'adverse-reactions': { title: 'Adverse Reactions',  group: 'Reports', report: true },
-  'lab-results':       { title: 'Lab Results',        group: 'Reports', report: true },
-  'immunizations':     { title: 'Immunizations',      group: 'Reports', report: true },
-  'vital-events':      { title: 'Vital Events',       group: 'Reports', report: true },
+  'adverse-reactions': { title: 'Adverse Reactions',  group: 'Reports', report: true, filters: [SEX_FILTER] },
+  'lab-results':       { title: 'Lab Results',        group: 'Reports', report: true, filters: [SEX_FILTER] },
+  'immunizations':     { title: 'Immunizations',      group: 'Reports', report: true, filters: [SEX_FILTER] },
+  'vital-events':      { title: 'Vital Events',       group: 'Reports', report: true, filters: [SEX_FILTER] },
   'stock-reports':     { title: 'Stock Reports',      group: 'Reports', report: true },
-  'chw-reports':       { title: 'CHW Reports',        group: 'Reports', report: true },
+  'chw-reports':       { title: 'CHW Reports',        group: 'Reports', report: true, filters: [SEX_FILTER] },
   'facility-metrics':  { title: 'Facility Metrics',   group: 'Reports', report: true },
-  'insurance-claims':  { title: 'Insurance Claims',   group: 'Reports', report: true },
-  'appointments':      { title: 'Appointments',       group: 'Reports', report: true },
+  'insurance-claims':  { title: 'Insurance Claims',   group: 'Reports', report: true, filters: [SEX_FILTER] },
+  'appointments':      { title: 'Appointments',       group: 'Reports', report: true, filters: [SEX_FILTER] },
   // Cancelling one drug stops the whole prescription it was written on — the
   // drugs on it are one decision, and a dispensed one is left alone.
-  'prescriptions':     { title: 'Prescriptions',      group: 'Reports', report: true,
+  'prescriptions':     { title: 'Prescriptions',      group: 'Reports', report: true, filters: [SEX_FILTER],
                           actions: [{ name: 'cancel', label: 'Cancel prescription', danger: true,
                                       when: ['prescribed', 'partially_dispensed'] }] },
   'pharmacy-items':         { title: 'Stock Items',     group: 'Pharmacy', path: 'pharmacy/items',           roles: 'admin', search: true },
@@ -254,7 +260,7 @@ const RESOURCES = {
                           actions: [{ name: 'merge', label: 'Merge a duplicate into this record', ask: 'source', adminOnly: true }] },
   // The encounter itself. Closing settles the booking and the case report with
   // it, so it goes through the action rather than a PATCH of status.
-  'consultations':     { title: 'Visits',             group: 'Clinical', report: true, fileFrom: ['prescriptions', 'case-reports'],
+  'consultations':     { title: 'Visits',             group: 'Clinical', report: true, filters: [SEX_FILTER], fileFrom: ['prescriptions', 'case-reports'],
                           actions: [{ name: 'diagnose', label: 'Record diagnosis', ask: 'diagnosis',
                                       choose: 'severity:mild,moderate,severe,critical', when: ['open'] },
                                     { name: 'close', label: 'Close visit', ask: 'follow_up_on,notes',
@@ -327,6 +333,7 @@ const TRANSITIONS = {
 // Analytics endpoints. dates => from/to inputs; days => days input.
 const ANALYTICS = [
   { key: 'dashboard',     label: 'Tenant Dashboard',  path: '/api/analytics/tenant/' },
+  { key: 'prescriptions', label: 'Prescribing Stats', path: '/api/analytics/prescriptions/', dates: true },
   { key: 'cases',         label: 'Case Stats',        path: '/api/analytics/cases/', dates: true, exportPath: '/api/analytics/cases/export/' },
   { key: 'surveillance',  label: 'Outbreak Alerts',   path: '/api/analytics/surveillance/' },
   { key: 'idsr',          label: 'IDSR Report',       path: '/api/analytics/idsr/', days: true, csv: true },
@@ -342,7 +349,6 @@ const ANALYTICS = [
   { key: 'insurance',     label: 'Insurance Stats',   path: '/api/analytics/insurance/', dates: true },
   { key: 'appointments',  label: 'Appointment Stats', path: '/api/analytics/appointments/', dates: true },
   { key: 'consultations', label: 'Visit Stats',       path: '/api/analytics/consultations/', dates: true },
-  { key: 'prescriptions', label: 'Prescribing Stats', path: '/api/analytics/prescriptions/', dates: true },
   { key: 'funnel',        label: 'Funnel',            path: '/api/analytics/funnel/' },
   { key: 'retention',     label: 'Retention',         path: '/api/analytics/retention/' },
   { key: 'benchmark',     label: 'Benchmark',         path: '/api/analytics/benchmark/' },
@@ -350,24 +356,29 @@ const ANALYTICS = [
 
 const PLATFORM = [
   { key: 'dashboard',     label: 'Platform Dashboard', path: '/api/analytics/platform/' },
-  { key: 'cases',         label: 'Case Stats',         path: '/api/analytics/platform/cases/', dates: true, exportPath: '/api/analytics/platform/cases/export/' },
+  { key: 'prescriptions', label: 'Prescribing Stats', path: '/api/analytics/platform/prescriptions/', dates: true },
+  { key: 'cases',         label: 'Collated Reports',   path: '/api/analytics/platform/cases/', dates: true, exportPath: '/api/analytics/platform/cases/export/' },
   { key: 'surveillance',  label: 'Outbreak Alerts',    path: '/api/analytics/platform/surveillance/' },
   { key: 'idsr',          label: 'IDSR Report',        path: '/api/analytics/platform/idsr/', days: true, csv: true },
   { key: 'sources',       label: 'Report Sources',     path: '/api/analytics/platform/sources/' },
-  { key: 'adr',           label: 'ADR Stats',          path: '/api/analytics/platform/adr/', dates: true },
-  { key: 'labs',          label: 'Lab Stats',          path: '/api/analytics/platform/labs/', dates: true },
-  { key: 'immunizations', label: 'Immunization Stats', path: '/api/analytics/platform/immunizations/', dates: true },
-  { key: 'vitals',        label: 'Vital Stats',        path: '/api/analytics/platform/vitals/', dates: true },
+  { key: 'adr',           label: 'ADR Collation',      path: '/api/analytics/platform/adr/', dates: true },
+  { key: 'labs',          label: 'Lab Stats',          path: '/api/analytics/platform/labs/', dates: true, clinical: true },
+  { key: 'immunizations', label: 'Immunization Stats', path: '/api/analytics/platform/immunizations/', dates: true, clinical: true },
+  { key: 'vitals',        label: 'Vital Stats',        path: '/api/analytics/platform/vitals/', dates: true, clinical: true },
   { key: 'stock',         label: 'Stock Stats',        path: '/api/analytics/platform/stock/', dates: true },
-  { key: 'chw',           label: 'CHW Stats',          path: '/api/analytics/platform/chw/', dates: true },
-  { key: 'facility',      label: 'Facility Stats',     path: '/api/analytics/platform/facility/', dates: true },
+  { key: 'chw',           label: 'CHW Stats',          path: '/api/analytics/platform/chw/', dates: true, clinical: true },
+  { key: 'facility',      label: 'Facility Stats',     path: '/api/analytics/platform/facility/', dates: true, clinical: true },
   { key: 'insurance',     label: 'Insurance Stats',    path: '/api/analytics/platform/insurance/', dates: true },
-  { key: 'appointments',  label: 'Appointment Stats',  path: '/api/analytics/platform/appointments/', dates: true },
+  { key: 'appointments',  label: 'Appointment Stats',  path: '/api/analytics/platform/appointments/', dates: true, clinical: true },
   { key: 'consultations', label: 'Visit Stats',        path: '/api/analytics/platform/consultations/', dates: true },
-  { key: 'prescriptions', label: 'Prescribing Stats', path: '/api/analytics/platform/prescriptions/', dates: true },
   { key: 'sales',         label: 'State Sales',        path: '/api/analytics/platform/sales/', dates: true, csv: true },
   { key: 'controlled',    label: 'Controlled Drugs',   path: '/api/analytics/platform/controlled/', dates: true, csv: true },
 ];
+
+/* The health authority reads the surveillance and trading rollups; the
+   clinical-service metrics (labs, vaccines, vitals, CHW, facility, appointments) are the
+   platform admin's. */
+const platformMetrics = () => (ME?.role === 'government' ? PLATFORM.filter((m) => !m.clinical) : PLATFORM);
 
 /* The trading reports (/api/reports/*). Kept out of ANALYTICS because the API
    admits pharmacy staff only — a nurse opening the analytics index would get a
@@ -487,11 +498,12 @@ const SEAT_NAV = {
     ['#/notifications', 'flag', 'Notifications'],
   ]],
   government: ['#/gov', 'Public Health', [
+    ['#/platform/prescriptions', 'chart', 'Prescribing Stats'],
     ['#/platform/surveillance', 'flag', 'Outbreak Alerts'],
     ['#/platform/idsr', 'file', 'IDSR Report'],
-    ['#/platform/cases', 'chart', 'Case Stats'],
-    ['#/platform/immunizations', 'chart', 'Immunization Stats'],
-    ['#/platform/facility', 'chart', 'Facility Stats'],
+    ['#/platform/cases', 'chart', 'Collated Reports'],
+    ['#/platform/adr', 'chart', 'ADR Collation'],
+    ['#/platform/sources', 'file', 'Report Sources'],
     ['#/platform/sales', 'chart', 'State Sales'],
     ['#/platform/controlled', 'chart', 'Controlled Drugs'],
     ['#/platform', 'chart', 'All Metrics'],
@@ -1715,7 +1727,7 @@ function canWriteRes(slug, res) {
 // re-fetch on every keystroke would buy nothing.
 // ponytail: first 100 rows; paginate the picker if a tenant outgrows that.
 const filterCache = {};
-const filterOptions = (f) => (filterCache[f.path] ||=
+const filterOptions = (f) => f.options || (filterCache[f.path] ||=
   Api.list(f.path, { page_size: 100 }).then((r) => r.rows).catch(() => []));
 
 const listState = {}; // per-resource {page, search, filters, seq} kept across visits
@@ -2726,8 +2738,10 @@ function controlledHeadline(data) {
 }
 
 function statIndex(title, registry, prefix) {
+  // The dashboard is rendered inline under the tiles, so no tile for it —
+  // the first tile is the first metric (prescribing).
   return `<h2>${esc(title)}</h2><div class="tiles home-tiles">` +
-    registry.map((m) => `<a class="tile linktile" href="#${prefix}/${m.key}"><span class="tile-label">${ico('chart')}${esc(m.label)}</span></a>`).join('') +
+    registry.filter((m) => m.key !== 'dashboard').map((m) => `<a class="tile linktile" href="#${prefix}/${m.key}"><span class="tile-label">${ico('chart')}${esc(m.label)}</span></a>`).join('') +
     '</div>';
 }
 
@@ -3905,7 +3919,7 @@ const routes = [
   [/^\/hmo$/, viewHmo],
   [/^\/pharmacy\/sell$/, viewSell],
   [/^\/analytics(?:\/([a-z-]+))?$/, (m) => viewAnalytics(ANALYTICS, '/analytics', m[1])],
-  [/^\/platform(?:\/([a-z-]+))?$/, (m) => viewAnalytics(PLATFORM, '/platform', m[1])],
+  [/^\/platform(?:\/([a-z-]+))?$/, (m) => viewAnalytics(platformMetrics(), '/platform', m[1])],
   [/^\/trading(?:\/([a-z-]+))?$/, (m) => viewAnalytics(PHARMACY_REPORTS, '/trading', m[1])],
 ];
 

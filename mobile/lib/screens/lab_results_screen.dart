@@ -19,6 +19,7 @@ class LabResultsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return ReportListScreen(
       path: '/api/lab-results/',
+      filters: const [sexFilter],
       fabLabel: 'Add result',
       emptyIcon: Icons.science_outlined,
       emptyTitle: 'No lab results yet',

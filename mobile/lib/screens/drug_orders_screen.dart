@@ -39,6 +39,7 @@ class DrugOrdersScreen extends StatelessWidget {
             'dispensed': 'Dispensed',
             'cancelled': 'Cancelled',
           }),
+          sexFilter,
         ],
         header: (items) => _Header(items: items),
         collapse: collapseByGroup,

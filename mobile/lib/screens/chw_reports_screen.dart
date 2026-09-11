@@ -18,6 +18,7 @@ class ChwReportsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return ReportListScreen(
       path: '/api/chw-reports/',
+      filters: const [sexFilter],
       fabLabel: 'Add report',
       emptyIcon: Icons.groups_outlined,
       emptyTitle: 'No field reports yet',

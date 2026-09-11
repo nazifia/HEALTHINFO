@@ -39,11 +39,16 @@ class _AdrScreenState extends State<AdrScreen>
   @override
   void initState() {
     super.initState();
-    _future = api.getList('/api/adverse-reactions/');
+    _future = _load();
   }
 
+  String? _sex; // the picked patient_sex, or every patient
+
+  Future<List<dynamic>> _load() =>
+      api.getList('/api/adverse-reactions/', _sex == null ? null : {'patient_sex': _sex!});
+
   void _reload() {
-    setState(() { _future = api.getList('/api/adverse-reactions/'); });
+    setState(() { _future = _load(); });
   }
 
   Future<void> _openForm([Map<String, dynamic>? existing]) async {
@@ -74,54 +79,68 @@ class _AdrScreenState extends State<AdrScreen>
         label: const Text('Report reaction',
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
       ),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          _reload();
-          await _future;
-        },
-        child: FutureBuilder<List<dynamic>>(
-          future: _future,
-          builder: (context, snap) {
-            if (snap.connectionState == ConnectionState.waiting) {
-              return const Center(
-                  child: CircularProgressIndicator(
-                      color: EnhancedTheme.primaryTeal));
-            }
-            if (snap.hasError) {
-              return ListView(children: [
-                const SizedBox(height: 80),
-                EmptyState(
-                  icon: Icons.error_outline,
-                  title: 'Could not load reactions',
-                  message: '${snap.error}',
-                  color: EnhancedTheme.errorRed,
-                ),
-              ]);
-            }
-            final items = (snap.data ?? []).cast<Map<String, dynamic>>();
-            if (items.isEmpty) {
-              return ListView(children: const [
-                SizedBox(height: 80),
-                EmptyState(
-                  icon: Icons.medication_liquid_outlined,
-                  title: 'No reactions yet',
-                  message: 'Tap "Report reaction" to file the first one.',
-                ),
-              ]);
-            }
-            return ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
-              itemCount: items.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 10),
-              itemBuilder: (context, i) => _AdrCard(
-                row: items[i],
-                onChanged: _reload,
-                onEdit: () => _openForm(items[i]),
-              ),
-            );
-          },
+      body: Column(children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: Row(children: [
+            FilterDropdown(
+              filter: sexFilter,
+              value: _sex,
+              onChanged: (v) { _sex = v; _reload(); },
+            ),
+          ]),
         ),
-      ),
+        Expanded(
+          child: RefreshIndicator(
+          onRefresh: () async {
+            _reload();
+            await _future;
+          },
+          child: FutureBuilder<List<dynamic>>(
+            future: _future,
+            builder: (context, snap) {
+              if (snap.connectionState == ConnectionState.waiting) {
+                return const Center(
+                    child: CircularProgressIndicator(
+                        color: EnhancedTheme.primaryTeal));
+              }
+              if (snap.hasError) {
+                return ListView(children: [
+                  const SizedBox(height: 80),
+                  EmptyState(
+                    icon: Icons.error_outline,
+                    title: 'Could not load reactions',
+                    message: '${snap.error}',
+                    color: EnhancedTheme.errorRed,
+                  ),
+                ]);
+              }
+              final items = (snap.data ?? []).cast<Map<String, dynamic>>();
+              if (items.isEmpty) {
+                return ListView(children: const [
+                  SizedBox(height: 80),
+                  EmptyState(
+                    icon: Icons.medication_liquid_outlined,
+                    title: 'No reactions yet',
+                    message: 'Tap "Report reaction" to file the first one.',
+                  ),
+                ]);
+              }
+              return ListView.separated(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+                itemCount: items.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                itemBuilder: (context, i) => _AdrCard(
+                  row: items[i],
+                  onChanged: _reload,
+                  onEdit: () => _openForm(items[i]),
+                ),
+              );
+            },
+          ),
+        ),
+        ),
+      ]),
     );
   }
 }

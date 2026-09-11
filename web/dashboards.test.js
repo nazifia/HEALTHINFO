@@ -52,6 +52,17 @@ for (const [role, [home, , links]] of Object.entries(SEAT_NAV)) {
   }
 }
 
+// The health authority's desk is surveillance and trade, not clinical service.
+const govHrefs = SEAT_NAV.government[2].map(([h]) => h).join(' ');
+const platformFor = (role) => load(
+  slice('const PLATFORM = [', '/* The trading reports'),
+  'platformMetrics().map((m) => m.key)', { ME: { role } });
+for (const shut of ['labs', 'immunizations', 'vitals', 'chw', 'facility', 'appointments']) {
+  assert.ok(!govHrefs.includes(shut), `government sidebar offers ${shut}`);
+  assert.ok(!platformFor('government').includes(shut), `government metrics offer ${shut}`);
+  assert.ok(platformFor('super_admin').includes(shut), `super admin lost ${shut}`);
+}
+
 // An insurer never gets the pharmacy's own screens in their sidebar.
 const insurerHrefs = SEAT_NAV.hmo[2].map(([h]) => h).join(' ');
 for (const shut of ['pharmacy-items', 'pharmacy-sales', 'patients', 'users']) {

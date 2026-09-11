@@ -127,6 +127,12 @@ class _CollatedReportsScreenState extends State<CollatedReportsScreen> {
                 labelKey: 'patient_age_group',
               ),
               BreakdownCard(
+                heading: 'By sex',
+                icon: Icons.wc_outlined,
+                rows: (d['by_sex'] as List?) ?? [],
+                labelKey: 'sex',
+              ),
+              BreakdownCard(
                 heading: 'Top diseases',
                 icon: Icons.coronavirus_outlined,
                 rows: (d['top_diseases'] as List?) ?? [],

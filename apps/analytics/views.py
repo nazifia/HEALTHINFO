@@ -175,7 +175,7 @@ class CaseReportViewSet(viewsets.ModelViewSet):
 
     serializer_class = CaseReportSerializer
     permission_classes = [IsTenantMember, ReadOnlyOrReportRole]
-    filterset_fields = ("severity", "outcome", "disease", "patient_age_group", "region", "patient")
+    filterset_fields = ("severity", "outcome", "disease", "patient_age_group", "region", "patient", "patient_sex")
     ordering_fields = ("created_at", "severity")
 
     def get_queryset(self):
@@ -202,7 +202,7 @@ class AdverseDrugReactionViewSet(viewsets.ModelViewSet):
 
     serializer_class = AdverseDrugReactionSerializer
     permission_classes = [IsTenantMember, ReadOnlyOrReportRole]
-    filterset_fields = ("severity", "outcome", "medication", "region", "patient")
+    filterset_fields = ("severity", "outcome", "medication", "region", "patient", "patient_sex")
     ordering_fields = ("created_at", "severity")
 
     def get_queryset(self):
@@ -238,7 +238,7 @@ class LabResultViewSet(_ReportViewSet):
 
     model = LabResult
     serializer_class = LabResultSerializer
-    filterset_fields = ("flag", "lab_test", "disease", "organism", "region", "patient")
+    filterset_fields = ("flag", "lab_test", "disease", "organism", "region", "patient", "patient_sex")
 
 
 class ImmunizationViewSet(_ReportViewSet):
@@ -246,7 +246,7 @@ class ImmunizationViewSet(_ReportViewSet):
 
     model = Immunization
     serializer_class = ImmunizationSerializer
-    filterset_fields = ("vaccine", "dose_number", "patient_age_group", "region", "patient")
+    filterset_fields = ("vaccine", "dose_number", "patient_age_group", "region", "patient", "patient_sex")
 
 
 class VitalEventViewSet(_ReportViewSet):
@@ -254,7 +254,7 @@ class VitalEventViewSet(_ReportViewSet):
 
     model = VitalEvent
     serializer_class = VitalEventSerializer
-    filterset_fields = ("event_type", "maternal_death", "infant_death", "region", "patient")
+    filterset_fields = ("event_type", "maternal_death", "infant_death", "region", "patient", "patient_sex")
 
 
 class StockReportViewSet(_ReportViewSet):
@@ -270,7 +270,7 @@ class CommunityHealthReportViewSet(_ReportViewSet):
 
     model = CommunityHealthReport
     serializer_class = CommunityHealthReportSerializer
-    filterset_fields = ("report_type", "danger_signs", "referred", "region", "patient")
+    filterset_fields = ("report_type", "danger_signs", "referred", "region", "patient", "patient_sex")
 
 
 class FacilityMetricViewSet(_ReportViewSet):
@@ -286,7 +286,7 @@ class InsuranceClaimViewSet(_ReportViewSet):
 
     model = InsuranceClaim
     serializer_class = InsuranceClaimSerializer
-    filterset_fields = ("status", "diagnosis", "region", "patient")
+    filterset_fields = ("status", "diagnosis", "region", "patient", "patient_sex")
 
 
 class ConsultationViewSet(_ReportViewSet):
@@ -300,7 +300,7 @@ class ConsultationViewSet(_ReportViewSet):
     model = Consultation
     serializer_class = ConsultationSerializer
     filterset_fields = ("status", "disposition", "patient", "appointment",
-                        "case_report", "region", "follow_up_on")
+                        "case_report", "region", "follow_up_on", "patient_sex")
 
     def _save(self, serializer, **kwargs):
         """Save through the model's own rules, reporting a broken one as a 400.
@@ -387,7 +387,7 @@ class AppointmentViewSet(_ReportViewSet):
 
     model = Appointment
     serializer_class = AppointmentSerializer
-    filterset_fields = ("mode", "status", "region", "patient")
+    filterset_fields = ("mode", "status", "region", "patient", "patient_sex")
 
 
 class PrescriptionViewSet(_ReportViewSet):
@@ -406,7 +406,7 @@ class PrescriptionViewSet(_ReportViewSet):
     # tenant scoping stamps it — and carries them as its reporter.
     independent_ok = True
     filterset_fields = ("status", "medication", "case_report", "region", "patient",
-                        "group")
+                        "group", "patient_sex")
     # Digits only: apps.prescriptions hangs hospitals/, prescribers/ and the
     # payout lists off the same /api/prescriptions/ prefix, and this detail
     # route is matched first — a catch-all pk would swallow them as ids.

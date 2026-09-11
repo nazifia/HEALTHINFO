@@ -25,6 +25,14 @@ class ReportFilter {
   });
 }
 
+/// The patient's sex, copied onto every report at save time (``patient_sex``
+/// on the API). Same values the patient form writes.
+const sexFilter = ReportFilter(param: 'patient_sex', anyLabel: 'Any sex', options: {
+  'F': 'Female',
+  'M': 'Male',
+  'other': 'Other',
+});
+
 /// Query params for a list request: the picked filters plus the search box.
 ///
 /// Null when nothing is set, so an unfiltered list asks for a bare URL. A blank
@@ -195,7 +203,7 @@ class _ReportListScreenState extends State<ReportListScreen>
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
             child: Row(children: [
               for (final f in widget.filters) ...[
-                _FilterDropdown(
+                FilterDropdown(
                   filter: f,
                   value: _picked[f.param],
                   onChanged: (v) {
@@ -280,12 +288,15 @@ class _ReportListScreenState extends State<ReportListScreen>
 /// Compact pill dropdown for one [ReportFilter]. A null value means "any", and
 /// it stays in the list so a picked filter can be cleared without a second
 /// control.
-class _FilterDropdown extends StatelessWidget {
+/// One filter dropdown, on its own for the screens that build their own list
+/// (cases, ADRs) rather than sitting on ReportListScreen.
+class FilterDropdown extends StatelessWidget {
   final ReportFilter filter;
   final String? value;
   final ValueChanged<String?> onChanged;
 
-  const _FilterDropdown({
+  const FilterDropdown({
+    super.key,
     required this.filter,
     required this.value,
     required this.onChanged,

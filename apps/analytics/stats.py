@@ -280,6 +280,7 @@ def _case_breakdown(reports):
         "by_severity": _grouped(reports, "severity"),
         "by_outcome": _grouped(reports, "outcome"),
         "by_age_group": _grouped(reports, "patient_age_group"),
+        "by_sex": _by_sex(reports),
         "by_region": _grouped(reports, "region"),
         "by_region_state": _fold_region_to_state(_grouped(reports, "region")),
         "top_diseases": list(
@@ -548,6 +549,7 @@ def adr_stats(start=None, end=None, platform=False, jurisdiction=None):
         "top_reactions": list(
             reports.values("reaction").annotate(count=Count("id")).order_by("-count")[:10]
         ),
+        "by_sex": _by_sex(reports),
         "trend": _series(reports, days=90),
     }
     if platform:
@@ -587,6 +589,20 @@ def _grouped(qs, field, limit=None):
     return list(rows[:limit] if limit else rows)
 
 
+def _by_sex(qs):
+    """Rows split by the patient's sex, the blank ones named for what they are.
+
+    ``patient_sex`` is copied off the patient at save time; a row filed with no
+    patient carries "". Printing that as an empty label reads as a bug, so it
+    goes out as "unknown" — and stays in, because a sex breakdown that quietly
+    drops the unrecorded share would overstate the split.
+    """
+    return [
+        {"sex": r["patient_sex"] or "unknown", "count": r["count"]}
+        for r in _grouped(qs, "patient_sex")
+    ]
+
+
 def lab_stats(start=None, end=None, platform=False, jurisdiction=None):
     """Lab-result rollup incl. the antimicrobial-resistance (AMR) signal.
 
@@ -617,6 +633,7 @@ def lab_stats(start=None, end=None, platform=False, jurisdiction=None):
     out = {
         "total": reports.count(),
         "by_flag": _grouped(reports, "flag"),
+        "by_sex": _by_sex(reports),
         "isolates_tested": tested_n,
         "resistant": resistant.count(),
         "amr_rate": round(resistant.count() / tested_n, 4) if tested_n else None,
@@ -643,6 +660,7 @@ def chw_stats(start=None, end=None, platform=False, jurisdiction=None):
         "referred": referred,
         "referral_rate": round(referred / total, 4) if total else None,
         "by_type": _grouped(reports, "report_type"),
+        "by_sex": _by_sex(reports),
         "by_region_state": _fold_region_to_state(_grouped(reports, "region")),
         "trend": _series(reports, days=90),
     }
@@ -698,6 +716,7 @@ def insurance_stats(start=None, end=None, platform=False, jurisdiction=None):
         "total_amount": float(claims.aggregate(s=Sum("amount"))["s"] or 0),
         "approval_rate": round(approved / decided, 4) if decided else None,
         "by_status": _grouped(claims, "status"),
+        "by_sex": _by_sex(claims),
         "top_diagnoses": list(
             claims.exclude(diagnosis=None)
             .values("diagnosis__name")
@@ -725,6 +744,7 @@ def appointment_stats(start=None, end=None, platform=False, jurisdiction=None):
         "telemedicine": appts.filter(mode=Appointment.Mode.TELEMEDICINE).count(),
         "no_show_rate": round(no_show / due, 4) if due else None,
         "by_mode": _grouped(appts, "mode"),
+        "by_sex": _by_sex(appts),
         "by_status": _grouped(appts, "status"),
         "trend": _series(appts, days=90),
     }
@@ -785,7 +805,7 @@ def consultation_stats(start=None, end=None, platform=False, jurisdiction=None):
         ),
         "by_disposition": _grouped(closed, "disposition"),
         "by_age_group": _grouped(rows, "patient_age_group"),
-        "by_sex": _grouped(rows, "patient_sex"),
+        "by_sex": _by_sex(rows),
         "top_complaints": _grouped(rows, "chief_complaint", 20),
         "by_region": _grouped(rows, "region"),
         "trend": _series(rows, days=90),
@@ -802,6 +822,7 @@ def immunization_stats(start=None, end=None, platform=False, jurisdiction=None):
         "total_doses": reports.count(),
         "by_vaccine": _grouped(reports, "vaccine", 20),
         "by_age_group": _grouped(reports, "patient_age_group"),
+        "by_sex": _by_sex(reports),
         "by_region": _grouped(reports, "region"),
         "by_region_state": _fold_region_to_state(_grouped(reports, "region")),
         "trend": _series(reports, days=90),
@@ -836,6 +857,7 @@ def vital_stats(start=None, end=None, platform=False, jurisdiction=None):
         "maternal_mortality_ratio": round(maternal / births * 100000, 1) if births else None,
         "infant_mortality_rate": round(infant / births * 1000, 1) if births else None,
         "deaths_by_cause": _grouped(deaths.exclude(cause=None), "cause__name", 10),
+        "deaths_by_sex": _by_sex(deaths),
         "by_region": _fold_region_to_state(_grouped(events, "region")),
         "birth_trend": _series(
             events.filter(event_type=VitalEvent.Kind.BIRTH), days=90
@@ -912,6 +934,7 @@ def prescription_stats(start=None, end=None, platform=False, jurisdiction=None):
         "linked": linked,
         "linked_rate": round(linked / total, 4) if total else None,
         "by_status": _grouped(rx, "status"),
+        "by_sex": _by_sex(rx),
         "by_region": _grouped(rx, "region"),
         "trend": _series(rx, days=90),
     }

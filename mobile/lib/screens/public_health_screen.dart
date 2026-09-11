@@ -44,15 +44,24 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
     return {};
   }
 
-  Future<List<Map<String, dynamic>>> _loadAll() => Future.wait([
-        _load('/api/analytics/platform/labs/', '/api/analytics/labs/'),
-        _load('/api/analytics/platform/immunizations/', '/api/analytics/immunizations/'),
-        _load('/api/analytics/platform/vitals/', '/api/analytics/vitals/'),
+  /// The health authority reads surveillance and trade; the clinical-service
+  /// feeds (labs, vaccines, vitals, CHW, facility, appointments) are the
+  /// platform admin's — same fence as platformMetrics in web/app.js.
+  bool _oversight = false;
+
+  Future<List<Map<String, dynamic>>> _loadAll() async {
+    _oversight = await api.myRole() == 'government';
+    Future<Map<String, dynamic>> clinical(String platformPath, String tenantPath) =>
+        _oversight ? Future.value(<String, dynamic>{}) : _load(platformPath, tenantPath);
+    return Future.wait([
+        clinical('/api/analytics/platform/labs/', '/api/analytics/labs/'),
+        clinical('/api/analytics/platform/immunizations/', '/api/analytics/immunizations/'),
+        clinical('/api/analytics/platform/vitals/', '/api/analytics/vitals/'),
         _load('/api/analytics/platform/stock/', '/api/analytics/stock/'),
-        _load('/api/analytics/platform/chw/', '/api/analytics/chw/'),
-        _load('/api/analytics/platform/facility/', '/api/analytics/facility/'),
+        clinical('/api/analytics/platform/chw/', '/api/analytics/chw/'),
+        clinical('/api/analytics/platform/facility/', '/api/analytics/facility/'),
         _load('/api/analytics/platform/insurance/', '/api/analytics/insurance/'),
-        _load('/api/analytics/platform/appointments/', '/api/analytics/appointments/'),
+        clinical('/api/analytics/platform/appointments/', '/api/analytics/appointments/'),
         _load('/api/analytics/platform/prescriptions/', '/api/analytics/prescriptions/'),
         _load('/api/analytics/platform/consultations/', '/api/analytics/consultations/'),
         // Money has no tenant-scoped twin at this path — the pharmacy's own
@@ -65,6 +74,7 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
         _load('/api/analytics/platform/controlled/',
             '/api/analytics/platform/controlled/'),
       ]);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -98,6 +108,55 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             children: [
+              // ── Prescribing & dispensing ──
+              _SectionTitle('Prescribing & dispensing', Icons.description_outlined),
+              MetricCard(
+                value: _pct(rx['dispense_rate']),
+                label: 'Orders actually dispensed',
+                sub: '${rx['dispensed'] ?? 0} of ${rx['total'] ?? 0} prescriptions'
+                    ' — cancelled ones excluded',
+              ),
+              // Says how much of the prescribing the two breakdowns below
+              // actually cover. Reading them as the whole picture when most
+              // orders carry no diagnosis is the way this section misleads.
+              MetricCard(
+                value: _pct(rx['linked_rate']),
+                label: 'Orders with a diagnosis recorded',
+                sub: '${rx['linked'] ?? 0} of ${rx['total'] ?? 0} orders link '
+                    'back to a case — the rest sit under "—" below',
+              ),
+              BreakdownCard(
+                heading: 'By sex',
+                icon: Icons.wc_outlined,
+                rows: (rx['by_sex'] as List?) ?? [],
+                labelKey: 'sex',
+              ),
+              BreakdownCard(
+                heading: 'Most prescribed',
+                icon: Icons.medication_outlined,
+                rows: (rx['top_medications'] as List?) ?? [],
+                labelKey: 'medication__generic_name',
+              ),
+              BreakdownCard(
+                heading: 'By diagnosis',
+                icon: Icons.coronavirus_outlined,
+                rows: (rx['by_diagnosis'] as List?) ?? [],
+                labelKey: 'diagnosis',
+              ),
+              BreakdownCard(
+                heading: 'Prescribed for each diagnosis',
+                icon: Icons.medical_information_outlined,
+                rows: diagnosisPairRows(rx['by_diagnosis_medication']),
+                labelKey: 'pair',
+              ),
+              BreakdownCard(
+                heading: 'By status',
+                icon: Icons.fact_check_outlined,
+                rows: (rx['by_status'] as List?) ?? [],
+                labelKey: 'status',
+              ),
+
+              if (!_oversight) ...[
               // ── Antimicrobial resistance ──
               _SectionTitle('Antimicrobial resistance', Icons.biotech_outlined),
               MetricCard(
@@ -126,6 +185,12 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
               _SectionTitle('Immunization coverage', Icons.vaccines_outlined),
               MetricCard(value: '${imm['total_doses'] ?? 0}', label: 'Doses administered'),
               BreakdownCard(
+                heading: 'By sex',
+                icon: Icons.wc_outlined,
+                rows: (imm['by_sex'] as List?) ?? [],
+                labelKey: 'sex',
+              ),
+              BreakdownCard(
                 heading: 'By vaccine',
                 icon: Icons.medical_services_outlined,
                 rows: (imm['by_vaccine'] as List?) ?? [],
@@ -147,11 +212,19 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
                     'IMR ${_num(vital['infant_mortality_rate'])} per 1k',
               ),
               BreakdownCard(
+                heading: 'Deaths by sex',
+                icon: Icons.wc_outlined,
+                rows: (vital['deaths_by_sex'] as List?) ?? [],
+                labelKey: 'sex',
+              ),
+              BreakdownCard(
                 heading: 'Deaths by cause',
                 icon: Icons.dangerous_outlined,
                 rows: (vital['deaths_by_cause'] as List?) ?? [],
                 labelKey: 'cause__name',
               ),
+
+              ],
 
               // ── Pharmacy shortages ──
               _SectionTitle('Pharmacy stock', Icons.inventory_2_outlined),
@@ -191,6 +264,7 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
               _SectionTitle('Controlled drugs', Icons.gpp_maybe_outlined),
               ...controlledCards(poison),
 
+              if (!_oversight) ...[
               // ── Community health workers ──
               _SectionTitle('Community health workers', Icons.groups_outlined),
               MetricCard(
@@ -215,6 +289,8 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
                     '${facility['patients_treated'] ?? 0} patients treated',
               ),
 
+              ],
+
               // ── Insurance ──
               _SectionTitle('Insurance claims', Icons.receipt_long_outlined),
               MetricCard(
@@ -236,6 +312,7 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
                 labelKey: 'diagnosis__name',
               ),
 
+              if (!_oversight) ...[
               // ── Appointments / telemedicine ──
               _SectionTitle('Appointments & telemedicine', Icons.event_outlined),
               MetricCard(
@@ -243,6 +320,12 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
                 label: 'Appointments',
                 sub: '${appt['telemedicine'] ?? 0} telemedicine · '
                     'no-show rate ${_pct(appt['no_show_rate'])}',
+              ),
+              BreakdownCard(
+                heading: 'By sex',
+                icon: Icons.wc_outlined,
+                rows: (appt['by_sex'] as List?) ?? [],
+                labelKey: 'sex',
               ),
               BreakdownCard(
                 heading: 'By mode',
@@ -257,6 +340,8 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
                 labelKey: 'status',
               ),
 
+              ],
+
               // ── Clinic load ──
               _SectionTitle('Clinic load', Icons.medical_information_outlined),
               MetricCard(
@@ -264,6 +349,12 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
                 label: 'Consultations',
                 sub: '${visit['open'] ?? 0} still open · '
                     'admission rate ${_pct(visit['admission_rate'])}',
+              ),
+              BreakdownCard(
+                heading: 'By sex',
+                icon: Icons.wc_outlined,
+                rows: (visit['by_sex'] as List?) ?? [],
+                labelKey: 'sex',
               ),
               BreakdownCard(
                 heading: 'Where the visit went',
@@ -278,47 +369,6 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
                 labelKey: 'chief_complaint',
               ),
 
-              // ── Prescribing & dispensing ──
-              _SectionTitle('Prescribing & dispensing', Icons.description_outlined),
-              MetricCard(
-                value: _pct(rx['dispense_rate']),
-                label: 'Orders actually dispensed',
-                sub: '${rx['dispensed'] ?? 0} of ${rx['total'] ?? 0} prescriptions'
-                    ' — cancelled ones excluded',
-              ),
-              // Says how much of the prescribing the two breakdowns below
-              // actually cover. Reading them as the whole picture when most
-              // orders carry no diagnosis is the way this section misleads.
-              MetricCard(
-                value: _pct(rx['linked_rate']),
-                label: 'Orders with a diagnosis recorded',
-                sub: '${rx['linked'] ?? 0} of ${rx['total'] ?? 0} orders link '
-                    'back to a case — the rest sit under "—" below',
-              ),
-              BreakdownCard(
-                heading: 'Most prescribed',
-                icon: Icons.medication_outlined,
-                rows: (rx['top_medications'] as List?) ?? [],
-                labelKey: 'medication__generic_name',
-              ),
-              BreakdownCard(
-                heading: 'By diagnosis',
-                icon: Icons.coronavirus_outlined,
-                rows: (rx['by_diagnosis'] as List?) ?? [],
-                labelKey: 'diagnosis',
-              ),
-              BreakdownCard(
-                heading: 'Prescribed for each diagnosis',
-                icon: Icons.medical_information_outlined,
-                rows: diagnosisPairRows(rx['by_diagnosis_medication']),
-                labelKey: 'pair',
-              ),
-              BreakdownCard(
-                heading: 'By status',
-                icon: Icons.fact_check_outlined,
-                rows: (rx['by_status'] as List?) ?? [],
-                labelKey: 'status',
-              ),
             ],
           );
         },

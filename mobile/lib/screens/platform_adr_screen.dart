@@ -112,6 +112,12 @@ class _PlatformAdrScreenState extends State<PlatformAdrScreen> {
                 labelKey: 'outcome',
               ),
               BreakdownCard(
+                heading: 'By sex',
+                icon: Icons.wc_outlined,
+                rows: (d['by_sex'] as List?) ?? [],
+                labelKey: 'sex',
+              ),
+              BreakdownCard(
                 heading: 'Top medications',
                 icon: Icons.medication_outlined,
                 rows: (d['top_medications'] as List?) ?? [],

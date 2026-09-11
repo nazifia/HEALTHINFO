@@ -19,6 +19,7 @@ class VitalEventsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return ReportListScreen(
       path: '/api/vital-events/',
+      filters: const [sexFilter],
       fabLabel: 'Record event',
       emptyIcon: Icons.child_friendly_outlined,
       emptyTitle: 'No vital events yet',

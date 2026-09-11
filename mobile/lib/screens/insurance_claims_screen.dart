@@ -19,6 +19,7 @@ class InsuranceClaimsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return ReportListScreen(
       path: '/api/insurance-claims/',
+      filters: const [sexFilter],
       fabLabel: 'Add claim',
       emptyIcon: Icons.receipt_long_outlined,
       emptyTitle: 'No claims yet',

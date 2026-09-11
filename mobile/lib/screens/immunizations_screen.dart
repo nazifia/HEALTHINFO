@@ -18,6 +18,7 @@ class ImmunizationsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return ReportListScreen(
       path: '/api/immunizations/',
+      filters: const [sexFilter],
       fabLabel: 'Record dose',
       emptyIcon: Icons.vaccines_outlined,
       emptyTitle: 'No doses recorded yet',

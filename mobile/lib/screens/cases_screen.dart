@@ -40,11 +40,16 @@ class _CasesScreenState extends State<CasesScreen>
   @override
   void initState() {
     super.initState();
-    _future = api.getList('/api/case-reports/');
+    _future = _load();
   }
 
+  String? _sex; // the picked patient_sex, or every patient
+
+  Future<List<dynamic>> _load() =>
+      api.getList('/api/case-reports/', _sex == null ? null : {'patient_sex': _sex!});
+
   void _reload() {
-    setState(() { _future = api.getList('/api/case-reports/'); });
+    setState(() { _future = _load(); });
   }
 
   Future<void> _openForm([Map<String, dynamic>? existing]) async {
@@ -95,54 +100,68 @@ class _CasesScreenState extends State<CasesScreen>
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          _reload();
-          await _future;
-        },
-        child: FutureBuilder<List<dynamic>>(
-          future: _future,
-          builder: (context, snap) {
-            if (snap.connectionState == ConnectionState.waiting) {
-              return const Center(
-                  child: CircularProgressIndicator(
-                      color: EnhancedTheme.primaryTeal));
-            }
-            if (snap.hasError) {
-              return ListView(children: [
-                const SizedBox(height: 80),
-                EmptyState(
-                  icon: Icons.error_outline,
-                  title: 'Could not load cases',
-                  message: '${snap.error}',
-                  color: EnhancedTheme.errorRed,
-                ),
-              ]);
-            }
-            final items = (snap.data ?? []).cast<Map<String, dynamic>>();
-            if (items.isEmpty) {
-              return ListView(children: const [
-                SizedBox(height: 80),
-                EmptyState(
-                  icon: Icons.assignment_outlined,
-                  title: 'No cases yet',
-                  message: 'Tap "Report case" to file the first one.',
-                ),
-              ]);
-            }
-            return ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
-              itemCount: items.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 10),
-              itemBuilder: (context, i) => _CaseCard(
-                row: items[i],
-                onChanged: _reload,
-                onEdit: () => _openForm(items[i]),
-              ),
-            );
-          },
+      body: Column(children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: Row(children: [
+            FilterDropdown(
+              filter: sexFilter,
+              value: _sex,
+              onChanged: (v) { _sex = v; _reload(); },
+            ),
+          ]),
         ),
-      ),
+        Expanded(
+          child: RefreshIndicator(
+          onRefresh: () async {
+            _reload();
+            await _future;
+          },
+          child: FutureBuilder<List<dynamic>>(
+            future: _future,
+            builder: (context, snap) {
+              if (snap.connectionState == ConnectionState.waiting) {
+                return const Center(
+                    child: CircularProgressIndicator(
+                        color: EnhancedTheme.primaryTeal));
+              }
+              if (snap.hasError) {
+                return ListView(children: [
+                  const SizedBox(height: 80),
+                  EmptyState(
+                    icon: Icons.error_outline,
+                    title: 'Could not load cases',
+                    message: '${snap.error}',
+                    color: EnhancedTheme.errorRed,
+                  ),
+                ]);
+              }
+              final items = (snap.data ?? []).cast<Map<String, dynamic>>();
+              if (items.isEmpty) {
+                return ListView(children: const [
+                  SizedBox(height: 80),
+                  EmptyState(
+                    icon: Icons.assignment_outlined,
+                    title: 'No cases yet',
+                    message: 'Tap "Report case" to file the first one.',
+                  ),
+                ]);
+              }
+              return ListView.separated(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+                itemCount: items.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                itemBuilder: (context, i) => _CaseCard(
+                  row: items[i],
+                  onChanged: _reload,
+                  onEdit: () => _openForm(items[i]),
+                ),
+              );
+            },
+          ),
+        ),
+        ),
+      ]),
     );
   }
 }

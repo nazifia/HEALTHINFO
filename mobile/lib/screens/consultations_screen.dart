@@ -73,6 +73,7 @@ class ConsultationsScreen extends StatelessWidget {
             param: 'disposition',
             anyLabel: 'Any disposition',
             options: _dispositions),
+        sexFilter,
       ],
       header: (items) => _Header(items: items),
       card: (row, reload, edit) => _Card(row: row, reload: reload, edit: edit),
