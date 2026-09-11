@@ -1533,10 +1533,15 @@ async function viewProfile() {
   spinner();
   try {
     const me = await Api.myself();
+    // A patient's profile is their own record first; the account row below
+    // it is the login they got it through.
+    const patient = me.role === 'public' ? await Api.get('/api/portal/me/').catch(() => null) : null;
     // The tenant's admin sets the idle timeout for everyone in it; a
     // super-admin sets it for whichever organization they have open.
     const canSetIdle = ['tenant_admin', 'super_admin'].includes(me.role) && Api.tenant;
-    render(`<h2>Profile</h2><div class="card">${dlHtml(me)}</div>
+    render(`<h2>Profile</h2>
+      ${patient ? `<div class="card"><h3>My details</h3>${dlHtml(portalDetails(patient))}</div>` : ''}
+      <div class="card">${patient ? '<h3>Account</h3>' : ''}${dlHtml(me)}</div>
       ${canSetIdle ? `<div class="card"><h3>Auto sign-out</h3>
         <form id="idle-form">
           <label>Minutes of inactivity before sign-out (0 = never)
@@ -3848,6 +3853,44 @@ async function loadPharmacies(medication) {
   }
 }
 
+// The patient's details as a card, in the order they read them. Shown on
+// the Profile page; the welcome page shows a summary.
+const portalDetails = (me) => Object.fromEntries(
+  PORTAL_FIELDS.filter((k) => me[k] !== undefined).map((k) => [k, me[k]])
+);
+
+// The welcome banner a patient lands on: their name, a greeting for the time
+// of day, and the handful of facts a nurse asks for first. The full record
+// lives under Profile.
+function portalHeroHtml(me, meds) {
+  const h = new Date().getHours();
+  const greet = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+  const name = me.full_name || ME.username || 'there';
+  const initials = name.split(/\s+/).slice(0, 2).map((w) => w[0] || '').join('').toUpperCase();
+  const who = [me.sex === 'M' ? 'Male' : me.sex === 'F' ? 'Female' : me.sex,
+    me.age != null ? `${me.age} yrs` : ''].filter(Boolean).join(' · ');
+  const stat = (label, v) => `<div class="hero-stat"><span>${esc(label)}</span><strong>${esc(fmtVal(v))}</strong></div>`;
+  return `<section class="hero">
+    <div class="hero-top">
+      <div class="hero-avatar" aria-hidden="true">${esc(initials)}</div>
+      <div>
+        <p class="hero-greet">${greet},</p>
+        <h2 class="hero-name">${esc(name)}</h2>
+        <p class="hero-sub">${esc(who)}${who && me.hospital_number ? ' · ' : ''}${me.hospital_number ? 'Hospital No. ' + esc(me.hospital_number) : ''}</p>
+      </div>
+      <a href="#/profile" class="btn hero-link">View full profile</a>
+    </div>
+    <div class="hero-stats">
+      ${stat('Blood group', me.blood_group)}
+      ${stat('Genotype', me.genotype)}
+      ${stat('Scheme', me.patient_type_display)}
+      ${stat('NHIS number', me.nhis_number)}
+      ${stat('Medications collected', meds.length)}
+      ${stat('Allergies', me.allergies)}
+    </div>
+  </section>`;
+}
+
 async function viewPortal() {
   if (!await ensureChrome()) return;
   spinner();
@@ -3859,12 +3902,7 @@ async function viewPortal() {
     ]);
   } catch (e) { return errorBox(e); }
 
-  const details = Object.fromEntries(
-    PORTAL_FIELDS.filter((k) => me[k] !== undefined).map((k) => [k, me[k]])
-  );
-
-  render(`<div class="page-head"><h2>My Health</h2></div>
-    <div class="card">${dlHtml(details)}</div>
+  render(`${portalHeroHtml(me, meds)}
     <div class="card"><h3>My medications</h3>${portalMedsHtml(meds)}</div>
     <div class="card"><h3>Where to get them</h3>
       <div class="actions"><button id="find-pharmacies" class="btn">Find pharmacies near me</button></div>
@@ -4057,5 +4095,6 @@ $('#theme-toggle').onclick = () => {
   localStorage.theme = t;
   applyTheme(t);
 };
+$('#topbar-logout').onclick = async () => { await Api.logout(); ME = null; location.hash = '#/login'; };
 route();
 Outbox.flush(); // send anything queued from a previous offline session
