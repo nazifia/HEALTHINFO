@@ -285,6 +285,15 @@ class UserSerializer(serializers.ModelSerializer):
                     "jurisdiction": "Choose the jurisdiction this health "
                                     "authority seat answers for.",
                 })
+            # A state, or one local government inside it. The national tier
+            # is the whole country — the platform admin's view, never an
+            # authority's — so it is refused here and fails closed on the
+            # read side too (User.has_patch).
+            if jurisdiction.level == Jurisdiction.Level.NATIONAL:
+                raise serializers.ValidationError({
+                    "jurisdiction": "A health authority answers for a state "
+                                    "or a local government, not the country.",
+                })
         if role == Role.HMO:
             # An insurer signs in to the organization whose claims they answer
             # for, and reads only their own scheme's rows (see insurer_scope).

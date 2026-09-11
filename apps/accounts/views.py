@@ -157,7 +157,7 @@ class UserViewSet(viewsets.ModelViewSet):
             # A health authority runs the seats inside its own patch. No patch
             # set means no module to run, the same fail-closed rule its
             # rollups use (IsPlatformReader).
-            if user.jurisdiction_id is None:
+            if not user.has_patch:
                 return User.objects.none()
             return User.objects.filter(
                 role=Role.GOVERNMENT, jurisdiction__in=user.jurisdiction.subtree()

@@ -128,7 +128,7 @@ def is_module_admin(user):
     if user.role == Role.HMO:
         return user.hmo_id is not None and user.tenant_id is not None
     if user.role == Role.GOVERNMENT:
-        return user.jurisdiction_id is not None
+        return user.has_patch
     # Facility staff carrying the grant: the tenant is the module they staff.
     return user.tenant_id is not None and user.role not in PATIENT_ROLES
 
@@ -244,10 +244,11 @@ class IsPlatformReader(BasePermission):
     permission is a rollup, so a health authority reading it never sees a named
     patient, and it is read-only by construction (all GET views).
 
-    A health authority is also refused without a jurisdiction set. Its rollups
-    narrow to the patch it answers for, so a seat with none has no patch —
-    refusing is the fail-closed half of that narrowing, and mirrors an insurer
-    with no scheme.
+    A health authority is also refused without a patch (User.has_patch): no
+    jurisdiction, or the national tier. Its rollups narrow to the patch it
+    answers for, so a seat with none has nothing to read and one on the
+    national tier would read every state — refusing is the fail-closed half of
+    that narrowing, and mirrors an insurer with no scheme.
     """
 
     def has_permission(self, request, view):
@@ -256,7 +257,7 @@ class IsPlatformReader(BasePermission):
             return False
         if user.is_super_admin:
             return True
-        return user.role in OVERSIGHT_ROLES and user.jurisdiction_id is not None
+        return user.role in OVERSIGHT_ROLES and user.has_patch
 
 
 class ReadOnlyOrWriteRole(BasePermission):

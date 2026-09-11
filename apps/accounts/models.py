@@ -168,6 +168,18 @@ class User(AbstractUser):
         return self.role == Role.SUPER_ADMIN or self.is_superuser
 
     @property
+    def has_patch(self):
+        """True when a health authority seat answers for one state or less.
+
+        The national tier is not a patch: a seat sitting on it would read the
+        whole country, which is the platform admin's view, not an authority's.
+        Every oversight gate reads this rather than ``jurisdiction_id`` so a
+        national row fails closed the same way an unset one does.
+        """
+        return (self.jurisdiction_id is not None
+                and self.jurisdiction.level != Jurisdiction.Level.NATIONAL)
+
+    @property
     def is_independent(self):
         """True for a licensed clinician who staffs no facility.
 

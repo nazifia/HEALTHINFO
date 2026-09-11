@@ -107,3 +107,43 @@ def test_a_seat_with_no_jurisdiction_reads_nothing(country):
     for path in ("/api/analytics/platform/", "/api/analytics/platform/cases/",
                  "/api/analytics/platform/surveillance/"):
         assert client.get(path).status_code == 403, path
+
+
+def test_a_seat_on_the_national_tier_reads_nothing(country):
+    """The country is the platform admin's view, never an authority's."""
+    nation, *_ = country
+    gov = User.objects.create_user(phone="08030000503", password="x",
+                                   role=Role.GOVERNMENT, jurisdiction=nation)
+    client = _client(gov)
+    for path in ("/api/analytics/platform/", "/api/analytics/platform/cases/",
+                 "/api/analytics/platform/sales/"):
+        assert client.get(path).status_code == 403, path
+
+
+def test_a_seat_cannot_be_minted_on_the_national_tier(country):
+    nation, kano, *_ = country
+    root = User.objects.create_user(phone="08030000504", password="x",
+                                    role=Role.SUPER_ADMIN)
+    body = {"phone": "08030000505", "password": "sup3r-secret-pw",
+            "role": Role.GOVERNMENT}
+    res = _client(root).post("/api/users/", {**body, "jurisdiction": nation.pk},
+                             format="json")
+    assert res.status_code == 400 and "jurisdiction" in res.json()["errors"]
+    res = _client(root).post("/api/users/", {**body, "jurisdiction": kano.pk},
+                             format="json")
+    assert res.status_code == 201, res.content
+
+
+def test_migration_unseats_a_national_seat(country):
+    from importlib import import_module
+    from django.apps import apps as registry
+    nation, kano, *_ = country
+    national = User.objects.create_user(phone="08030000506", password="x",
+                                        role=Role.GOVERNMENT, jurisdiction=nation)
+    state = User.objects.create_user(phone="08030000507", password="x",
+                                     role=Role.GOVERNMENT, jurisdiction=kano)
+    mod = import_module("apps.accounts.migrations.0011_unseat_national_government")
+    mod.unseat_national(registry, None)
+    national.refresh_from_db(); state.refresh_from_db()
+    assert national.jurisdiction is None
+    assert state.jurisdiction == kano
