@@ -84,8 +84,8 @@ class HMO(TenantOwnedModel):
     coverage_percent = models.DecimalField(
         max_digits=5, decimal_places=2, default=Decimal("100.00")
     )
-    # Some insurers want each claim as the sale happens; others only read the
-    # monthly schedule. Off by default, so a claim waits for its ``ClaimBatch``.
+    # Some insurers want each claim as the sale happens; others wait for the
+    # pharmacy to send it. Off by default, so a claim starts as a draft.
     auto_submit_claims = models.BooleanField(default=False)
     # Per-drug cover lives in ``HmoItemRule``; anything with no rule of its own
     # is covered at ``coverage_percent``.
@@ -583,11 +583,6 @@ class Claim(TenantOwnedModel):
         HmoEnrollment, null=True, blank=True, on_delete=models.SET_NULL,
         related_name="claims",
     )
-    # Set when the claim is bundled into a monthly submission (see ClaimBatch).
-    batch = models.ForeignKey(
-        "pharmacy.ClaimBatch", null=True, blank=True, on_delete=models.SET_NULL,
-        related_name="claims",
-    )
     reference = models.CharField(max_length=30)
     amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     amount_approved = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -607,12 +602,6 @@ class Claim(TenantOwnedModel):
             models.Index(fields=["tenant", "status", "created_at"]),
             models.Index(fields=["tenant", "hmo"]),
         ]
-
-    # What a monthly schedule may still collect. A claim sent on its own — the
-    # auto-submitting insurers — belongs on the schedule too: that is the
-    # document the remittance is read against. Approved, paid and cancelled
-    # claims are past the point where bundling means anything.
-    BATCHABLE = (Status.DRAFT, Status.REJECTED, Status.SUBMITTED)
 
     def __str__(self):
         return f"{self.reference} ({self.status}: {self.amount})"
@@ -679,18 +668,16 @@ class Claim(TenantOwnedModel):
         return self
 
     def cancel(self, reason=""):
-        """Stop billing for this claim and drop it off any schedule.
+        """Stop billing for this claim.
 
         A cancelled claim costs the insurer nothing, so it also gives the
         member's annual benefit back (see ``HmoEnrollment.used_this_year``).
         """
         self._guard("cancel")
         self.status = self.Status.CANCELLED
-        self.batch = None
         if reason:
             self.rejection_reason = reason[:255]
-        self.save(update_fields=["status", "batch", "rejection_reason",
-                                 "updated_at"])
+        self.save(update_fields=["status", "rejection_reason", "updated_at"])
         return self
 
     def record_payment(self, amount):
@@ -731,160 +718,6 @@ def claim_for_sale(sale):
     if claim.hmo.auto_submit_claims:
         claim.submit()
     return claim
-
-
-class ClaimBatch(TenantOwnedModel):
-    """A month's claims bundled into one submission to one insurer.
-
-    HMOs are billed on a cycle, not per sale: the pharmacy sends a schedule and
-    gets back one remittance for the lot. The batch is that envelope. Money
-    still settles per claim — a remittance is allocated across the claims in it
-    — so a part-paid batch says exactly which claims are still short.
-    """
-
-    class Status(models.TextChoices):
-        DRAFT = "draft"
-        SUBMITTED = "submitted"
-        APPROVED = "approved"
-        PAID = "paid"
-        CANCELLED = "cancelled"
-
-    reference = models.CharField(max_length=30)
-    hmo = models.ForeignKey(HMO, on_delete=models.PROTECT, related_name="batches")
-    period_start = models.DateField(null=True, blank=True)
-    period_end = models.DateField(null=True, blank=True)
-    status = models.CharField(
-        max_length=20, choices=Status.choices, default=Status.DRAFT
-    )
-    submitted_at = models.DateTimeField(null=True, blank=True)
-    notes = models.TextField(blank=True)
-
-    class Meta:
-        verbose_name_plural = "claim batches"
-        ordering = ("-created_at", "-id")
-        unique_together = ("tenant", "reference")
-        indexes = [models.Index(fields=["tenant", "status", "created_at"])]
-
-    def __str__(self):
-        return f"{self.reference} ({self.hmo_id}: {self.status})"
-
-    def save(self, *args, **kwargs):
-        if not self.reference:
-            self.reference = f"CB{uuid4().hex[:10].upper()}"
-        super().save(*args, **kwargs)
-
-    def _claims(self):
-        return Claim.all_objects.filter(batch=self).order_by("id")
-
-    @property
-    def totals(self):
-        """Claimed, approved and paid across the batch, plus what is still owed."""
-        agg = self._claims().exclude(status=Claim.Status.CANCELLED).aggregate(
-            claims=models.Count("id"), claimed=models.Sum("amount"),
-            approved=models.Sum("amount_approved"), paid=models.Sum("amount_paid"),
-        )
-        zero = Decimal("0.00")
-        approved = _money(agg["approved"] or zero)
-        paid = _money(agg["paid"] or zero)
-        return {
-            "claims": agg["claims"] or 0,
-            "claimed": _money(agg["claimed"] or zero),
-            "approved": approved,
-            "paid": paid,
-            "outstanding": max(approved - paid, zero),
-        }
-
-    def add_claims(self, claims):
-        """Put claims in this batch. Returns how many moved.
-
-        Only unbatched claims for this batch's insurer that are still open are
-        taken — one already in another month's envelope, or already decided, is
-        left where it is. A claim sent on its own still joins: it is the same
-        month's money, and the insurer reconciles against the schedule.
-        """
-        if self.status != self.Status.DRAFT:
-            raise ValueError("Only a draft batch can take more claims.")
-        ids = [c.pk for c in claims]
-        return Claim.all_objects.filter(
-            pk__in=ids, hmo_id=self.hmo_id, batch__isnull=True,
-            status__in=Claim.BATCHABLE,
-        ).update(batch=self)
-
-    def submit(self):
-        """Send the schedule: the batch and every claim on it go out together."""
-        if self.status != self.Status.DRAFT:
-            raise ValueError("Only a draft batch can be submitted.")
-        if not self._claims().exclude(status=Claim.Status.CANCELLED).exists():
-            raise ValueError("The batch has no claims to submit.")
-        # Claims already out with the insurer ride along without being sent
-        # twice; the schedule is the covering document for all of them.
-        claims = list(self._claims().filter(
-            status__in=(Claim.Status.DRAFT, Claim.Status.REJECTED)
-        ))
-        with transaction.atomic():
-            for claim in claims:
-                claim.submit()
-            self.status = self.Status.SUBMITTED
-            self.submitted_at = timezone.now()
-            self.save(update_fields=["status", "submitted_at", "updated_at"])
-        return self
-
-    def approve_all(self):
-        """Insurer accepted the schedule in full — approve every claim on it.
-
-        A partial acceptance is not this: approve or reject the individual
-        claims instead, then the batch follows what its claims say.
-        """
-        if self.status != self.Status.SUBMITTED:
-            raise ValueError("Only a submitted batch can be approved.")
-        with transaction.atomic():
-            for claim in self._claims().filter(status=Claim.Status.SUBMITTED):
-                claim.approve()
-            self.status = self.Status.APPROVED
-            self.save(update_fields=["status", "updated_at"])
-        return self
-
-    def record_payment(self, amount):
-        """Spread one remittance across the batch, oldest claim first.
-
-        Insurers pay a batch, not a claim, so the money is allocated here: each
-        approved claim takes what it is still owed until the remittance runs
-        out. Paying more than the batch is owed is refused rather than parked
-        somewhere unaccounted.
-        """
-        remaining = _money(amount)
-        if remaining <= 0:
-            raise ValueError("Payment must be positive.")
-        if self.status not in (self.Status.SUBMITTED, self.Status.APPROVED):
-            raise ValueError("Only a submitted or approved batch can be paid.")
-        outstanding = self.totals["outstanding"]
-        if remaining > outstanding:
-            raise ValueError(
-                f"The batch is only owed {outstanding}; that remittance is larger."
-            )
-        with transaction.atomic():
-            for claim in self._claims().filter(status=Claim.Status.APPROVED):
-                if remaining <= 0:
-                    break
-                take = min(claim.outstanding, remaining)
-                if take <= 0:
-                    continue
-                claim.record_payment(take)
-                remaining -= take
-            if self.totals["outstanding"] == 0:
-                self.status = self.Status.PAID
-                self.save(update_fields=["status", "updated_at"])
-        return self
-
-    def cancel(self):
-        """Withdraw the schedule. Claims are released back to stand alone."""
-        if self.status == self.Status.PAID:
-            raise ValueError("A paid batch cannot be cancelled.")
-        with transaction.atomic():
-            self._claims().update(batch=None)
-            self.status = self.Status.CANCELLED
-            self.save(update_fields=["status", "updated_at"])
-        return self
 
 
 # --- moved models, re-exported ------------------------------------------

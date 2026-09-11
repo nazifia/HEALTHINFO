@@ -20,7 +20,6 @@ from apps.patients.models import Patient
 from apps.pharmacy.models import (
     HMO,
     Claim,
-    ClaimBatch,
     HmoEnrollment,
     HmoItemRule,
     PreAuthorization,
@@ -498,113 +497,6 @@ def test_purchase_order_lines_freeze_once_sent(pharmacy):
     assert frozen.status_code == 400
 
 
-def test_claim_batch_submits_together_and_pays_per_claim(pharmacy):
-    """One envelope out, one remittance back, allocated claim by claim."""
-    tenant = pharmacy["tenant"]
-    hmo = HMO.all_objects.create(tenant=tenant, name="Hygeia",
-                                 coverage_percent=Decimal("100.00"))
-    first = _hmo_sale(pharmacy, hmo, 4, "HY-1")    # 50.00
-    second = _hmo_sale(pharmacy, hmo, 8, "HY-2")   # 100.00
-    # A claim for another insurer must not be swept into this batch.
-    other_hmo = HMO.all_objects.create(tenant=tenant, name="Reliance")
-    outsider = _hmo_sale(pharmacy, other_hmo, 2, "RL-1")
-
-    staff = _client(pharmacy["staff"], tenant)
-    admin = _client(pharmacy["admin"], tenant)
-    today = timezone.localdate()
-    created = staff.post("/api/pharmacy/claim-batches/", {
-        "hmo": hmo.id, "period_start": str(today - timedelta(days=30)),
-        "period_end": str(today),
-    }, format="json")
-    assert created.status_code == 201, created.content
-    batch = ClaimBatch.all_objects.get(pk=created.json()["id"])
-    assert batch.totals["claims"] == 2
-    assert batch.totals["claimed"] == Decimal("150.00")
-    outsider.refresh_from_db()
-    assert outsider.batch_id is None
-
-    assert staff.post(f"/api/pharmacy/claim-batches/{batch.pk}/submit/", {},
-                      format="json").status_code == 200
-    first.refresh_from_db()
-    second.refresh_from_db()
-    batch.refresh_from_db()
-    assert first.status == second.status == Claim.Status.SUBMITTED
-    assert batch.status == ClaimBatch.Status.SUBMITTED
-
-    # Staff send the schedule; only the admin settles it.
-    assert staff.post(f"/api/pharmacy/claim-batches/{batch.pk}/approve/", {},
-                      format="json").status_code == 403
-    assert admin.post(f"/api/pharmacy/claim-batches/{batch.pk}/approve/", {},
-                      format="json").status_code == 200
-    batch.refresh_from_db()
-    assert batch.status == ClaimBatch.Status.APPROVED
-    assert batch.totals["outstanding"] == Decimal("150.00")
-
-    # A remittance is spread oldest claim first: 60 settles the 50 claim and
-    # leaves 10 against the 100 one.
-    assert admin.post(f"/api/pharmacy/claim-batches/{batch.pk}/pay/",
-                      {"amount": "60.00"}, format="json").status_code == 200
-    first.refresh_from_db()
-    second.refresh_from_db()
-    assert (first.status, first.amount_paid) == (Claim.Status.PAID,
-                                                 Decimal("50.00"))
-    assert (second.status, second.amount_paid) == (Claim.Status.APPROVED,
-                                                   Decimal("10.00"))
-
-    # Money the batch is not owed has nowhere to go.
-    too_much = admin.post(f"/api/pharmacy/claim-batches/{batch.pk}/pay/",
-                          {"amount": "500.00"}, format="json")
-    assert too_much.status_code == 400
-    assert "only owed" in too_much.json()["message"]
-
-    assert admin.post(f"/api/pharmacy/claim-batches/{batch.pk}/pay/",
-                      {"amount": "90.00"}, format="json").status_code == 200
-    batch.refresh_from_db()
-    second.refresh_from_db()
-    assert second.status == Claim.Status.PAID
-    assert batch.status == ClaimBatch.Status.PAID
-    assert batch.totals["outstanding"] == Decimal("0.00")
-
-
-def test_cancelled_batch_releases_its_claims(pharmacy):
-    tenant = pharmacy["tenant"]
-    hmo = HMO.all_objects.create(tenant=tenant, name="AXA")
-    claim = _hmo_sale(pharmacy, hmo, 2, "AX-1")
-    staff = _client(pharmacy["staff"], tenant)
-    batch = ClaimBatch.all_objects.get(pk=staff.post("/api/pharmacy/claim-batches/",
-                                                     {"hmo": hmo.id},
-                                                     format="json").json()["id"])
-    claim.refresh_from_db()
-    assert claim.batch_id == batch.pk
-
-    assert staff.post(f"/api/pharmacy/claim-batches/{batch.pk}/cancel/", {},
-                      format="json").status_code == 200
-    claim.refresh_from_db()
-    batch.refresh_from_db()
-    # The claim is loose again and can be sent on its own or in another month.
-    assert claim.batch_id is None and claim.status == Claim.Status.DRAFT
-    assert batch.status == ClaimBatch.Status.CANCELLED
-
-
-def test_batch_of_cancelled_claims_will_not_submit(pharmacy):
-    """Nothing is left to send once every collected claim was cancelled with its
-    sale, so the schedule is refused rather than going out empty."""
-    tenant = pharmacy["tenant"]
-    hmo = HMO.all_objects.create(tenant=tenant, name="Hygeia")
-    claim = _hmo_sale(pharmacy, hmo, 2, "HY-1")
-    staff = _client(pharmacy["staff"], tenant)
-    batch = ClaimBatch.all_objects.get(pk=staff.post("/api/pharmacy/claim-batches/",
-                                                     {"hmo": hmo.id},
-                                                     format="json").json()["id"])
-    Sale.all_objects.get(pk=claim.sale_id).cancel()
-
-    response = staff.post(f"/api/pharmacy/claim-batches/{batch.pk}/submit/", {},
-                          format="json")
-    assert response.status_code == 400, response.content
-    batch.refresh_from_db()
-    assert batch.status == ClaimBatch.Status.DRAFT
-
-
 def test_receipt_prints_the_sale(pharmacy):
     tenant, item = pharmacy["tenant"], pharmacy["item"]
     staff = _client(pharmacy["staff"], tenant)
@@ -669,59 +561,6 @@ def test_insured_patient_is_billed_without_naming_the_card(pharmacy):
     }, format="json")
     assert ambiguous.status_code == 400
     assert "more than one scheme" in str(ambiguous.json()["errors"]["enrollment"])
-
-
-def test_batch_collects_a_claim_that_was_sent_on_its_own(pharmacy):
-    """An auto-submitting insurer still gets a monthly schedule: its claims are
-    already with it, but the batch is what the remittance is read against."""
-    tenant = pharmacy["tenant"]
-    hmo = HMO.all_objects.create(tenant=tenant, name="Reliance",
-                                 coverage_percent=Decimal("100.00"),
-                                 auto_submit_claims=True)
-    sent = _hmo_sale(pharmacy, hmo, 4, "RL-1")     # 50.00, already submitted
-    assert sent.status == Claim.Status.SUBMITTED
-
-    hmo.auto_submit_claims = False
-    hmo.save(update_fields=["auto_submit_claims"])
-    waiting = _hmo_sale(pharmacy, hmo, 8, "RL-2")  # 100.00, still a draft
-
-    staff = _client(pharmacy["staff"], tenant)
-    admin = _client(pharmacy["admin"], tenant)
-    today = timezone.localdate()
-    unbatched = [r["batch_reference"]
-                 for r in staff.get("/api/pharmacy/claims/").json()["results"]]
-    created = staff.post("/api/pharmacy/claim-batches/", {
-        "hmo": hmo.id, "period_start": str(today - timedelta(days=30)),
-        "period_end": str(today),
-    }, format="json")
-    assert created.status_code == 201, created.content
-    batch = ClaimBatch.all_objects.get(pk=created.json()["id"])
-    assert batch.totals["claims"] == 2
-    assert batch.totals["claimed"] == Decimal("150.00")
-
-    # The claim list names the schedule each claim landed on — unbatched before,
-    # this batch after. That is the only place a reader can see the collection.
-    assert unbatched == [None, None]
-    listed = staff.get("/api/pharmacy/claims/").json()["results"]
-    assert {r["batch_reference"] for r in listed} == {batch.reference}
-
-    # Sending the schedule submits the draft and leaves the sent one alone —
-    # its submitted_at is when the insurer actually got it.
-    sent_at = sent.submitted_at
-    assert staff.post(f"/api/pharmacy/claim-batches/{batch.pk}/submit/", {},
-                      format="json").status_code == 200
-    sent.refresh_from_db()
-    waiting.refresh_from_db()
-    assert sent.status == waiting.status == Claim.Status.SUBMITTED
-    assert sent.submitted_at == sent_at
-
-    # And the remittance settles both.
-    assert admin.post(f"/api/pharmacy/claim-batches/{batch.pk}/approve/", {},
-                      format="json").status_code == 200
-    assert admin.post(f"/api/pharmacy/claim-batches/{batch.pk}/pay/",
-                      {"amount": "150.00"}, format="json").status_code == 200
-    sent.refresh_from_db()
-    assert sent.status == Claim.Status.PAID
 
 
 def test_drawer_reconciles_the_cash_that_went_through_it(pharmacy):
@@ -1545,3 +1384,63 @@ def test_a_lump_sum_answer_is_reopened_too(pharmacy):
     # A spent clearance is not unpicked, and neither is a withdrawn request.
     assert admin.post(f"/api/pharmacy/pre-authorizations/{auth.pk}/reopen/", {},
                       format="json").status_code == 400
+
+
+def test_the_insurer_seat_answers_its_own_requests_and_claims(pharmacy):
+    """The scheme's own seat clears a request and approves a claim itself —
+    the admin is only a stand-in for an insurer with no seat. It still answers
+    for its own scheme alone, and the pharmacy's money stays the admin's."""
+    tenant, item = pharmacy["tenant"], pharmacy["item"]
+    patient = Patient.all_objects.create(tenant=tenant, first_name="Amaka",
+                                         last_name="Obi")
+    hmo, enrollment = _scheme(tenant, patient,
+                              coverage_percent=Decimal("100.00"),
+                              preauth_threshold=Decimal("100.00"))
+    other = HMO.all_objects.create(tenant=tenant, name="Hygeia")
+    other_card = HmoEnrollment.all_objects.create(
+        tenant=tenant, patient=patient, hmo=other, member_number="HY-1")
+    staff = _client(pharmacy["staff"], tenant)
+    insurer = _client(_insurer_seat(tenant, hmo), tenant)
+
+    asked = staff.post("/api/pharmacy/pre-authorizations/", {
+        "enrollment": enrollment.id, "amount": "125.00",
+    }, format="json")
+    assert asked.status_code == 201, asked.content
+    auth_id = asked.json()["id"]
+    theirs = PreAuthorization.all_objects.create(
+        tenant=tenant, hmo=other, enrollment=other_card, amount=Decimal("90.00"))
+
+    # Another scheme's request is not even visible to this seat.
+    assert insurer.post(f"/api/pharmacy/pre-authorizations/{theirs.pk}/approve/",
+                        {}, format="json").status_code == 404
+    # Raising or withdrawing a request stays the pharmacy's.
+    assert insurer.post("/api/pharmacy/pre-authorizations/", {
+        "enrollment": enrollment.id, "amount": "10.00"}, format="json"
+    ).status_code == 403
+    assert insurer.post(f"/api/pharmacy/pre-authorizations/{auth_id}/cancel/",
+                        {}, format="json").status_code == 403
+
+    cleared = insurer.post(f"/api/pharmacy/pre-authorizations/{auth_id}/approve/",
+                           {"code": "LW-OK-1", "amount": "100.00"}, format="json")
+    assert cleared.status_code == 200, cleared.content
+    auth = PreAuthorization.all_objects.get(pk=auth_id)
+    assert (auth.status, auth.code, auth.amount_approved) == (
+        PreAuthorization.Status.APPROVED, "LW-OK-1", Decimal("100.00"))
+
+    # The clearance is spent on the sale, and the claim it raises goes back to
+    # the same seat to approve.
+    sold = staff.post("/api/pharmacy/sales/", {
+        "patient": patient.id, "payment_method": "hmo",
+        "enrollment": enrollment.id, "authorization": auth_id,
+        "items": [{"item": item.id, "quantity": 8}],
+    }, format="json")
+    assert sold.status_code == 201, sold.content
+    claim = Claim.all_objects.get(sale_id=sold.json()["id"])
+    staff.post(f"/api/pharmacy/claims/{claim.pk}/submit/", {}, format="json")
+    assert insurer.post(f"/api/pharmacy/claims/{claim.pk}/approve/",
+                        {"amount": "80.00"}, format="json").status_code == 200
+    claim.refresh_from_db()
+    assert claim.amount_approved == Decimal("80.00")
+    # Banking the remittance is the pharmacy's, not the insurer's.
+    assert insurer.post(f"/api/pharmacy/claims/{claim.pk}/pay/",
+                        {"amount": "80.00"}, format="json").status_code == 403

@@ -6,8 +6,7 @@
 
 Fills one pharmacy with enough to click through every screen: suppliers, a
 priced item list with dated batches (some low, some near expiry), an open
-purchase order part-delivered, cash and HMO sales, and a claim batch that has
-been submitted, approved and part-paid.
+purchase order part-delivered, and cash and HMO sales.
 
 Passes tenant= explicitly so it works without the request middleware bound.
 
@@ -24,7 +23,7 @@ from django.utils import timezone
 from apps.accounts.models import Role, User
 from apps.patients.models import Patient
 from apps.pharmacy.models import (
-    HMO, Claim, ClaimBatch, HmoEnrollment, PurchaseOrder, PurchaseOrderLine,
+    HMO, Claim, HmoEnrollment, PurchaseOrder, PurchaseOrderLine,
     Sale, SaleItem, StockBatch, StockItem, StockMovement, Supplier,
     TillSession,
     claim_for_sale, receive_purchase_line, receive_stock,
@@ -54,7 +53,7 @@ CATALOGUE = [
 
 # Deleted in FK order: PROTECT means a supplier or an item cannot go before the
 # rows pointing at it.
-RESET_MODELS = (Claim, ClaimBatch, SaleItem, Sale, StockMovement,
+RESET_MODELS = (Claim, SaleItem, Sale, StockMovement,
                 PurchaseOrderLine, PurchaseOrder, StockBatch, StockItem,
                 HmoEnrollment, HMO, Supplier)
 
@@ -233,13 +232,5 @@ class Command(BaseCommand):
         self.stdout.write(
             f"auto-submitted claim {auto_claim.reference} ({auto_claim.status})")
 
-        batch = ClaimBatch.all_objects.create(
-            tenant=tenant, hmo=hmo, period_start=today - timedelta(days=30),
-            period_end=today)
-        batch.add_claims(list(Claim.all_objects.filter(tenant=tenant, hmo=hmo)))
-        batch.submit()
-        batch.approve_all()
-        batch.record_payment(Decimal("1000.00"))  # part-settled
         self.stdout.write(
-            f"sales: {Sale.all_objects.filter(tenant=tenant).count()}, "
-            f"claim batch {batch.reference} ({batch.status})")
+            f"sales: {Sale.all_objects.filter(tenant=tenant).count()}")

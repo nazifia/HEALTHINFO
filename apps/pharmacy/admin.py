@@ -3,7 +3,6 @@ from django.contrib import admin
 from .models import (
     HMO,
     Claim,
-    ClaimBatch,
     HmoEnrollment,
     HmoItemRule,
     PreAuthorization,
@@ -43,16 +42,7 @@ class ClaimAdmin(admin.ModelAdmin):
                     "amount_approved", "amount_paid", "submitted_at")
     list_filter = ("tenant", "status", "hmo")
     search_fields = ("reference", "sale__reference")
-    raw_id_fields = ("sale", "hmo", "enrollment", "batch")
-
-
-@admin.register(ClaimBatch)
-class ClaimBatchAdmin(admin.ModelAdmin):
-    list_display = ("reference", "tenant", "hmo", "status", "period_start",
-                    "period_end", "submitted_at")
-    list_filter = ("tenant", "status", "hmo")
-    search_fields = ("reference", "notes")
-    raw_id_fields = ("hmo",)
+    raw_id_fields = ("sale", "hmo", "enrollment")
 
 
 @admin.register(HmoItemRule)

@@ -13,7 +13,8 @@ import 'report_scaffold.dart';
 ///
 /// Requests are raised at the counter, with the basket in front of the
 /// pharmacist — there is nothing to add by hand here. What this screen is for
-/// is the answer: the admin records what the insurer said, and everyone sees
+/// is the answer: the insurer's seat gives it (or the admin records what the
+/// insurer said by phone), and everyone sees
 /// it, because a cleared quantity is what the counter may dispense.
 class PharmacyPreauthScreen extends StatelessWidget {
   const PharmacyPreauthScreen({super.key});
@@ -198,10 +199,10 @@ class _PreauthCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final items = _items;
     final status = '${row['status']}';
-    final decidesItems = isPharmacyAdmin(role) && status == 'requested';
+    final decidesItems = answersForInsurer(role) && status == 'requested';
     // A wrong answer to a medication is undone until the clearance is spent.
     final reopensItems =
-        isPharmacyAdmin(role) && status != 'used' && status != 'cancelled';
+        answersForInsurer(role) && status != 'used' && status != 'cancelled';
     final actions = preauthActions(status, role, itemised: items.isNotEmpty);
     return GlassCard(
       borderRadius: 16,

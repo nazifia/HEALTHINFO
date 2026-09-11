@@ -186,7 +186,10 @@ const RESOURCES = {
   // A scheme's price list: what it pays for one drug, and the most it pays
   // for a unit of it. 0 cover is the exclusion; no row means the scheme's own
   // default covers it. The insurer keeps its own list (roles: 'scheme').
+  // ``inline``: the two numbers a scheme tunes are edited on the list itself
+  // (click the cell); the shelf price is the pharmacy's and stays read-only.
   'pharmacy-item-rules':    { title: 'Price List',      group: 'Pharmacy', hmo: true, path: 'pharmacy/item-rules',      roles: 'scheme', search: true,
+                              inline: ['coverage_percent', 'tariff'],
                               filters: [{ param: 'hmo', label: 'Scheme', path: '/api/pharmacy/hmos/', text: (r) => r.name }] },
   // The insurer's answer is four fields at once — a code, what they stand
   // behind, when it lapses, or why they refused — so it gets a form of its own
@@ -200,17 +203,11 @@ const RESOURCES = {
                               actions: [{ name: 'close', label: 'Close drawer', ask: 'amount,notes', when: ['open'] }] },
   'pharmacy-claims':        { title: 'Claims',          group: 'Pharmacy', hmo: true, path: 'pharmacy/claims',          roles: 'staff', search: true, readOnly: true,
                               actions: [{ name: 'submit', label: 'Submit', when: ['draft', 'rejected'] },
-                                        { name: 'approve', label: 'Approve', ask: 'amount', adminOnly: true, when: ['submitted'] },
-                                        { name: 'reject', label: 'Reject', ask: 'reason', adminOnly: true, when: ['submitted'] },
+                                        { name: 'approve', label: 'Approve', ask: 'amount', insurer: true, when: ['submitted'] },
+                                        { name: 'reject', label: 'Reject', ask: 'reason', insurer: true, when: ['submitted'] },
                                         { name: 'pay', label: 'Record payment', ask: 'amount', adminOnly: true, when: ['approved'] },
                                         { name: 'cancel', label: 'Stop billing', ask: 'reason', danger: true, adminOnly: true,
                                           when: ['draft', 'submitted', 'rejected', 'approved'] }] },
-  'pharmacy-claim-batches': { title: 'Claim Batches',   group: 'Pharmacy', hmo: true, path: 'pharmacy/claim-batches',   roles: 'staff', search: true,
-                              actions: [{ name: 'add-claims', label: 'Collect claims', when: ['draft'] },
-                                        { name: 'submit', label: 'Submit batch', when: ['draft'] },
-                                        { name: 'approve', label: 'Approve all', adminOnly: true, when: ['submitted'] },
-                                        { name: 'pay', label: 'Allocate remittance', ask: 'amount', adminOnly: true, when: ['submitted', 'approved'] },
-                                        { name: 'cancel', label: 'Cancel batch', danger: true, when: ['draft', 'submitted', 'approved'] }] },
   // The counter's customer list and their wallets. A balance is the total of
   // the ledger below it, so money moves through the actions — never by typing
   // over the field.
@@ -491,7 +488,6 @@ const SEAT_NAV = {
   hmo: ['#/insurer', 'Claims Desk', [
     ['#/r/pharmacy-preauths', 'flag', 'Authorisation Requests'],
     ['#/r/pharmacy-claims', 'file', 'Claims'],
-    ['#/r/pharmacy-claim-batches', 'file', 'Claim Batches'],
     ['#/r/pharmacy-enrollments', 'users', 'Scheme Members'],
     ['#/r/pharmacy-item-rules', 'pill', 'Price List'],
     ['#/r/pharmacy-hmos', 'shield', 'My Scheme'],
@@ -1177,13 +1173,17 @@ function renderData(data, depth = 0, linkFor = null) {
   return html || '<p class="muted">No data.</p>';
 }
 
-function tableHtml(rows, linkFor, rowAction) {
+// ``inline``: {slug, fields} — those columns become click-to-edit cells that
+// PATCH the row in place (see the #main click handler below).
+function tableHtml(rows, linkFor, rowAction, inline) {
   const cols = pickColumns(rows);
   const keys = Object.keys(mergedRow(rows));
   const head = cols.map((c) => `<th>${esc(colLabel(keys, c))}</th>`).join('')
     + (rowAction ? '<th></th>' : '');
   const body = rows.map((r, i) => {
-    const cells = cols.map((c) => `<td>${cellHtml(c, r[c])}</td>`).join('')
+    const cells = cols.map((c) => inline?.fields.includes(c)
+      ? `<td class="inline-edit" title="Click to edit" data-slug="${inline.slug}" data-id="${r.id}" data-field="${c}">${cellHtml(c, r[c])}</td>`
+      : `<td>${cellHtml(c, r[c])}</td>`).join('')
       + (rowAction ? `<td>${rowAction(r)}</td>` : '');
     const href = linkFor && linkFor(r);
     return href ? `<tr class="rowlink" onclick="location.hash='${href}'">${cells}</tr>` : `<tr>${cells}</tr>`;
@@ -1227,7 +1227,7 @@ function pickColumns(rows) {
   const resolved = (k) => namedElsewhere(keys, k);
   const first = keys.filter((k) => ['id', 'reference', 'status', 'name', 'generic_name', 'title', 'phone', 'slug'].includes(k));
   // null is a scalar here, not an object — a column empty on the sampled row
-  // (an unbatched claim's batch) still belongs in the table.
+  // still belongs in the table.
   const rest = keys.filter((k) => !first.includes(k) && !resolved(k)
     && (row[k] === null || typeof row[k] !== 'object')
     && !(typeof row[k] === 'string' && row[k].length > 80));
@@ -1694,13 +1694,18 @@ function reportSummaryHtml(slug, rows) {
    own claims) gets the record and none of the buttons the API would refuse. */
 const canActRes = (res) => res.group !== 'Pharmacy' || isPharmacyStaff();
 
+/* The insurer's answer — to a request or a claim — is given by its own seat,
+   or recorded by the pharmacy admin on its behalf. Mirrors answers_for_insurer. */
+const answersForInsurer = () => isPharmacyAdmin() || (ME?.role === 'hmo' && !!ME?.hmo);
+
 /* Module actions (dispensing, claims, notifications): each POSTs to its own
    endpoint. Offer only the ones this record can actually take — the API
    rejects the rest, so a button that always fails is a trap rather than a
    feature. ``when`` is the states that allow it, ``hideWhen`` a field whose
-   presence means it has already been done. */
+   presence means it has already been done; ``insurer`` is an answer the
+   scheme's own seat may give. */
 const visibleActions = (res, obj) => (res.actions || []).filter((a) =>
-  canActRes(res) && (!a.adminOnly || isPharmacyAdmin())
+  (a.insurer ? answersForInsurer() : canActRes(res) && (!a.adminOnly || isPharmacyAdmin()))
   && (!a.when || a.when.includes(obj.status))
   && (!a.hideWhen || !obj[a.hideWhen]));
 
@@ -1774,7 +1779,8 @@ async function viewList(slug) {
       ${res.report ? reportSummaryHtml(slug, rows) : ''}
       ${rows.length ? tableHtml(slug === 'prescriptions' ? collapseByGroup(rows) : rows,
         res.noLink ? null : (r) => `#/r/${slug}/${r.id}`,
-        slug === 'prescriptions' && canWrite ? cancelButtonHtml : null) : '<p class="muted">Nothing here yet.</p>'}
+        slug === 'prescriptions' && canWrite ? cancelButtonHtml : null,
+        canWrite && res.inline ? { slug, fields: res.inline } : null) : '<p class="muted">Nothing here yet.</p>'}
       <div class="pager">
         <button id="prev" ${st.page <= 1 ? 'disabled' : ''}>&larr; Prev</button>
         <span>Page ${st.page}${count != null ? ` of ${pages} (${count})` : ''}</span>
@@ -3429,14 +3435,14 @@ async function viewSell() {
 
 /* The ordered medications on one request, each with the insurer's answer.
    Everyone sees the answers — that is the feedback the counter dispenses on —
-   but only the admin gets the buttons, because only they may record a decision. */
+   but only the insurer's seat and the admin get the buttons. */
 function preauthItemsHtml(auth) {
   const items = auth.items || [];
   if (!items.length) return '';
-  const decides = isPharmacyAdmin() && auth.status === 'requested';
+  const decides = answersForInsurer() && auth.status === 'requested';
   // A wrong answer is undone rather than lived with, right up until the
   // clearance is spent on a sale.
-  const reopens = isPharmacyAdmin()
+  const reopens = answersForInsurer()
     && auth.status !== 'used' && auth.status !== 'cancelled';
   const row = (it) => `<tr>
     <td>${esc(it.item_name || it.item)}</td><td>${it.quantity}</td>
@@ -3445,7 +3451,7 @@ function preauthItemsHtml(auth) {
       : `${esc(it.status)}${it.status === 'approved'
         ? ` · ${it.quantity_approved} · ${money(it.amount_approved)}` : ''}${
         it.reason ? ` · ${esc(it.reason)}` : ''}`}</td>
-    ${decides || reopens ? `<td>${it.status !== 'requested'
+    ${decides || reopens ? `<td><div class="decide">${it.status !== 'requested'
       ? (reopens ? `<input name="reason" maxlength="255" data-for="${it.id}"
              aria-label="Reason" autocomplete="off" placeholder="Reason (optional)">
          <button class="btn danger" data-item="${it.id}" data-decide="reopen">Reopen</button>`
@@ -3459,7 +3465,7 @@ function preauthItemsHtml(auth) {
          <input name="reason" maxlength="255" data-for="${it.id}" aria-label="Reason"
              autocomplete="off" placeholder="Reason (a refusal)">
          <button class="btn" data-item="${it.id}" data-decide="approve">Approve</button>
-         <button class="btn danger" data-item="${it.id}" data-decide="decline">Decline</button>`}</td>` : ''}
+         <button class="btn danger" data-item="${it.id}" data-decide="decline">Decline</button>`}</div></td>` : ''}
   </tr>`;
   return `<div class="card"><h3>Ordered medications</h3>
     <table><thead><tr><th>Medication</th><th>Qty</th><th>Asked</th><th>Insurer</th>
@@ -3497,10 +3503,10 @@ function wirePreauthItems(reload) {
   }
 }
 
-/* Recording what the insurer said about one pre-authorization request.
-   Rendered under its detail page, admin only — the answer is what the pharmacy
-   is later allowed to bill against, so the API refuses anyone else. A request
-   already decided has nothing left to record. */
+/* The insurer's answer to one pre-authorization request: given by its own
+   seat, or recorded by the admin from a call. Rendered under its detail page —
+   the answer is what the pharmacy is later allowed to bill against, so the API
+   refuses anyone else. A request already decided has nothing left to record. */
 /* A prescriber's statement: what each ledger owes them, the rows behind it,
  * and — for the admin, whose money it is — one button that settles both.
  *
@@ -3541,7 +3547,7 @@ async function loadStatement(slug, id) {
 }
 
 function preauthDecisionHtml(auth) {
-  if (!isPharmacyAdmin()) return '';
+  if (!answersForInsurer()) return '';
   // An itemised request is answered drug by drug and settles itself once every
   // medication is decided — answering it twice over would contradict that.
   if ((auth.items || []).length) return '';
@@ -3558,12 +3564,13 @@ function preauthDecisionHtml(auth) {
       </form></div>`;
   }
   if (auth.status !== 'requested') return '';
-  return `<div class="card"><h3>Record the insurer's answer</h3>
+  const own = ME?.role === 'hmo';
+  return `<div class="card"><h3>${own ? 'Your answer' : "Record the insurer's answer"}</h3>
     <form id="preauth-decide" class="form-card">
-      <label>Their code<input name="code" maxlength="60" autocomplete="off"></label>
+      <label>${own ? 'Authorisation code' : 'Their code'}<input name="code" maxlength="60" autocomplete="off"></label>
       <label>Amount authorised
         <input type="number" name="amount" step="0.01" min="0" value="${esc(auth.amount)}">
-        <small class="muted">They may stand behind less than the ${money(auth.amount)} asked for.</small></label>
+        <small class="muted">${own ? 'You' : 'They'} may stand behind less than the ${money(auth.amount)} asked for.</small></label>
       <label>Expires on<input type="date" name="expires_on">
         <small class="muted">Leave blank if the clearance does not lapse.</small></label>
       <label>Reason (a refusal)<input name="reason" maxlength="255" autocomplete="off"></label>
@@ -3963,6 +3970,38 @@ matchMedia('(max-width: 760px)').addEventListener('change', () => setNav(false))
 // Re-picking the page you are already on fires no hashchange, so nothing
 // re-renders and the drawer would stay over the page it just took you to.
 $('#sidebar').addEventListener('click', (e) => { if (e.target.closest('a')) setNav(false); });
+// Click-to-edit cells on a list (``inline`` resources): the cell swaps to a
+// number box, Enter/blur PATCHes just that field, Escape puts the old value back.
+$('#main').addEventListener('click', (e) => {
+  const td = e.target.closest('td.inline-edit');
+  if (!td) return;
+  e.stopPropagation();  // the row's own click would open the detail page
+  if (td.querySelector('input')) return;
+  const { slug, id, field } = td.dataset;
+  const old = td.textContent;
+  const input = document.createElement('input');
+  input.type = 'number'; input.step = '0.01'; input.min = '0';
+  if (field === 'coverage_percent') input.max = '100';
+  input.value = old === '—' ? '' : old;
+  td.replaceChildren(input);
+  input.focus(); input.select();
+  let done = false;
+  const finish = async (save) => {
+    if (done) return; done = true;
+    const val = input.value.trim();
+    if (!save || val === (old === '—' ? '' : old)) { td.textContent = old; return; }
+    try {
+      const r = await Api.patch(rdetail(slug, `${id}/`), { [field]: val === '' ? null : val });
+      td.textContent = fmtVal(r[field]);
+      toast('Saved.');
+    } catch (err) { td.textContent = old; toast(err.message, true); }
+  };
+  input.onkeydown = (ev) => {
+    if (ev.key === 'Enter') { ev.preventDefault(); finish(true); }
+    if (ev.key === 'Escape') finish(false);
+  };
+  input.onblur = () => finish(true);
+}, true);
 $('#sidebar').addEventListener('toggle', e => {
   const g = e.target.dataset?.group;
   if (!g) return;

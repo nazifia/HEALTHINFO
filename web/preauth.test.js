@@ -16,9 +16,11 @@ const esc = (v) => String(v ?? '').replace(/[&<>"']/g,
   (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const money = (v) => '₦' + Number(v || 0).toFixed(2);
 let admin = true;
-const load = new Function('esc', 'money', 'isPharmacyAdmin',
-  `${src.slice(from, to)}; return { preauthDecisionHtml, preauthItemsHtml };`);
-const { preauthDecisionHtml, preauthItemsHtml } = load(esc, money, () => admin);
+let ME = { role: 'tenant_admin' };
+const load = new Function('esc', 'money', 'isPharmacyAdmin', 'ME',
+  `const answersForInsurer = () => isPharmacyAdmin() || (ME?.role === 'hmo' && !!ME?.hmo);
+   ${src.slice(from, to)}; return { preauthDecisionHtml, preauthItemsHtml };`);
+const { preauthDecisionHtml, preauthItemsHtml } = load(esc, money, () => admin, ME);
 
 const requested = { status: 'requested', amount: '48000.00' };
 
@@ -35,6 +37,15 @@ assert.ok(html.includes('data-decide="approve"') && html.includes('data-decide="
 // them, so a form that always fails is not offered.
 admin = false;
 assert.strictEqual(preauthDecisionHtml(requested), '');
+
+// The insurer's own seat answers its requests itself, in its own voice; a
+// seat with no scheme set answers for nothing.
+ME.role = 'hmo'; ME.hmo = 3;
+assert.ok(preauthDecisionHtml(requested).includes('Your answer'),
+  'the insurer seat is not offered the answer form');
+ME.hmo = null;
+assert.strictEqual(preauthDecisionHtml(requested), '', 'a scheme-less seat is offered the form');
+ME.role = 'tenant_admin';
 
 // Nothing left to record once the request was spent or withdrawn.
 admin = true;

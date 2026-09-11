@@ -14,7 +14,6 @@ from apps.inventory.urls import register as register_inventory
 from apps.pos.urls import register as register_pos
 
 from .views import (
-    ClaimBatchViewSet,
     ClaimViewSet,
     HMOViewSet,
     HmoEnrollmentViewSet,
@@ -34,8 +33,6 @@ router.register("pharmacy/pre-authorizations", PreAuthorizationViewSet,
 router.register("pharmacy/pre-authorization-items", PreAuthorizationItemViewSet,
                 basename="pharmacy-preauth-item")
 router.register("pharmacy/claims", ClaimViewSet, basename="pharmacy-claim")
-router.register("pharmacy/claim-batches", ClaimBatchViewSet,
-                basename="pharmacy-claim-batch")
 
 urlpatterns = (
     router.urls

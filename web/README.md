@@ -78,7 +78,7 @@ CORS_ALLOWED_ORIGINS=https://<your-project>.web.app,https://<your-project>.fireb
   purchase orders, sales, returns, dispensing log, cash drawer, cashiers,
   expenses, customers and their wallets, prescribers with commissions and
   consultation payouts, branches, HMOs/members/drug cover, pre-authorisations,
-  claims and claim batches
+  claims
 - Trading reports (`#/trading`, pharmacy staff only): sales, profit, month by
   day, stock valuation, customers and debt, cashier takings, staff performance
 

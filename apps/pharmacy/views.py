@@ -17,6 +17,7 @@ from apps.accounts.permissions import (
     INSURER_ROLES,
     IsPharmacyAdminOrReadOnly,
     IsPharmacyStaff,
+    IsPharmacyStaffOrInsurer,
     IsPharmacyStaffOrInsurerReadOnly,
     IsSchemePriceListEditor,
     IsSuperAdmin,
@@ -33,7 +34,6 @@ from config.responses import success
 from .models import (
     HMO,
     Claim,
-    ClaimBatch,
     HmoEnrollment,
     HmoItemRule,
     PreAuthorization,
@@ -42,8 +42,6 @@ from .models import (
     notify_scheme_change,
 )
 from .serializers import (
-    AddClaimsSerializer,
-    ClaimBatchSerializer,
     ClaimDecisionSerializer,
     ClaimPaymentSerializer,
     ClaimSerializer,
@@ -58,6 +56,27 @@ from .serializers import (
 )
 
 ZERO = Decimal("0.00")
+
+
+def answers_for_insurer(user):
+    """Who may give the insurer's answer — to a pre-authorization or a claim:
+    the insurer's own seat, or the pharmacy admin recording what the insurer
+    said by phone.
+
+    The insurer seat only ever reaches its own scheme's rows — the queryset is
+    fenced by ``insurer_scope`` — so being a seated insurer is the whole check
+    here. A seat with no scheme answers for nothing.
+    """
+    if not user.is_authenticated:
+        return False
+    if user.role in INSURER_ROLES:
+        return user.hmo_id is not None
+    return is_pharmacy_admin(user)
+
+
+# The insurer is admitted to these actions alone; everything else on the
+# record stays read-only for them (see IsPharmacyStaffOrInsurerReadOnly).
+DECIDE = dict(permission_classes=[IsTenantMember, IsPharmacyStaffOrInsurer])
 
 
 def insurer_scope(qs, user, field="hmo"):
@@ -182,8 +201,9 @@ class HmoItemRuleViewSet(PharmacyViewSet):
 class PreAuthorizationViewSet(PharmacyViewSet):
     """Clearances asked of an insurer before a high-value covered sale.
 
-    Staff raise the request; only the admin records what the insurer answered,
-    because that answer is what the pharmacy is later allowed to bill against.
+    Staff raise the request; the insurer's own seat answers it, or the admin
+    records what the insurer said — that answer is what the pharmacy is later
+    allowed to bill against, so nobody else touches it.
     """
 
     model = PreAuthorization
@@ -212,12 +232,12 @@ class PreAuthorizationViewSet(PharmacyViewSet):
         return success(message, PreAuthorizationSerializer(auth).data)
 
     def _require_admin(self, request):
-        if not is_pharmacy_admin(request.user):
+        if not answers_for_insurer(request.user):
             raise PermissionDenied(
-                "Only the pharmacy admin can record an insurer's decision."
+                "Only the insurer or the pharmacy admin can answer a request."
             )
 
-    @action(detail=True, methods=["post"], url_path="approve")
+    @action(detail=True, methods=["post"], url_path="approve", **DECIDE)
     def approve(self, request, pk=None):
         """Record the clearance: their code, the amount, and when it lapses."""
         self._require_admin(request)
@@ -229,7 +249,7 @@ class PreAuthorizationViewSet(PharmacyViewSet):
             "Authorisation recorded.",
         )
 
-    @action(detail=True, methods=["post"], url_path="decline")
+    @action(detail=True, methods=["post"], url_path="decline", **DECIDE)
     def decline(self, request, pk=None):
         """Record a refusal and why."""
         self._require_admin(request)
@@ -237,7 +257,7 @@ class PreAuthorizationViewSet(PharmacyViewSet):
         return self._transition(lambda a: a.decline(data.get("reason", "")),
                                 "Authorisation declined.")
 
-    @action(detail=True, methods=["post"], url_path="reopen")
+    @action(detail=True, methods=["post"], url_path="reopen", **DECIDE)
     def reopen(self, request, pk=None):
         """Undo a wrong answer so the right one can be recorded."""
         self._require_admin(request)
@@ -277,9 +297,9 @@ class PreAuthorizationItemViewSet(mixins.ListModelMixin,
                                   viewsets.GenericViewSet):
     """The insurer's answer to one ordered medication on a request.
 
-    Lines are raised with the request itself, so there is no create here. Only
-    the admin records a decision — the same rule the request as a whole follows,
-    because a cleared drug is money the pharmacy may bill for.
+    Lines are raised with the request itself, so there is no create here. The
+    insurer or the admin records a decision — the same rule the request as a
+    whole follows, because a cleared drug is money the pharmacy may bill for.
     """
 
     serializer_class = PreAuthorizationItemSerializer
@@ -295,9 +315,9 @@ class PreAuthorizationItemViewSet(mixins.ListModelMixin,
         )
 
     def _decide(self, request, call, message):
-        if not is_pharmacy_admin(request.user):
+        if not answers_for_insurer(request.user):
             raise PermissionDenied(
-                "Only the pharmacy admin can record an insurer's decision."
+                "Only the insurer or the pharmacy admin can answer a request."
             )
         line = self.get_object()
         try:
@@ -306,7 +326,7 @@ class PreAuthorizationItemViewSet(mixins.ListModelMixin,
             raise ValidationError({"status": str(exc)}) from exc
         return success(message, PreAuthorizationItemSerializer(line).data)
 
-    @action(detail=True, methods=["post"], url_path="approve")
+    @action(detail=True, methods=["post"], url_path="approve", **DECIDE)
     def approve(self, request, pk=None):
         """Clear this medication, for all or part of what was asked for it."""
         data = body(PreAuthItemDecisionSerializer, request)
@@ -315,14 +335,14 @@ class PreAuthorizationItemViewSet(mixins.ListModelMixin,
             lambda l: l.approve(data.get("amount"), data.get("quantity")),
             "Medication authorised.")
 
-    @action(detail=True, methods=["post"], url_path="decline")
+    @action(detail=True, methods=["post"], url_path="decline", **DECIDE)
     def decline(self, request, pk=None):
         """Refuse this medication and say why — it is not dispensed on cover."""
         data = body(PreAuthItemDecisionSerializer, request)
         return self._decide(request, lambda l: l.decline(data.get("reason", "")),
                             "Medication declined.")
 
-    @action(detail=True, methods=["post"], url_path="reopen")
+    @action(detail=True, methods=["post"], url_path="reopen", **DECIDE)
     def reopen(self, request, pk=None):
         """Undo a wrong answer to this medication so it can be recorded again."""
         data = body(PreAuthItemDecisionSerializer, request)
@@ -365,7 +385,7 @@ class ClaimViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
 
     def get_queryset(self):
         return insurer_scope(
-            Claim.objects.select_related("hmo", "sale", "sale__patient", "batch"),
+            Claim.objects.select_related("hmo", "sale", "sale__patient"),
             self.request.user,
         )
 
@@ -381,24 +401,29 @@ class ClaimViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         if not is_pharmacy_admin(request.user):
             raise PermissionDenied("Only the pharmacy admin can settle claims.")
 
+    def _require_insurer(self, request):
+        if not answers_for_insurer(request.user):
+            raise PermissionDenied(
+                "Only the insurer or the pharmacy admin can answer a claim.")
+
     @action(detail=True, methods=["post"], url_path="submit")
     def submit(self, request, pk=None):
         """Send the claim to the insurer. Staff may do this."""
         return self._transition(request, lambda c: c.submit(), "Claim submitted.")
 
-    @action(detail=True, methods=["post"], url_path="approve")
+    @action(detail=True, methods=["post"], url_path="approve", **DECIDE)
     def approve(self, request, pk=None):
-        """Record the insurer's approval, for all or part of the amount."""
-        self._require_admin(request)
+        """The insurer's approval, for all or part of the amount."""
+        self._require_insurer(request)
         data = body(ClaimDecisionSerializer, request)
         return self._transition(
             request, lambda c: c.approve(data.get("amount")), "Claim approved."
         )
 
-    @action(detail=True, methods=["post"], url_path="reject")
+    @action(detail=True, methods=["post"], url_path="reject", **DECIDE)
     def reject(self, request, pk=None):
-        """Record a refusal and why — a rejected claim can be resubmitted."""
-        self._require_admin(request)
+        """The insurer's refusal and why — a rejected claim can be resubmitted."""
+        self._require_insurer(request)
         data = body(ClaimDecisionSerializer, request)
         return self._transition(
             request, lambda c: c.reject(data.get("reason", "")), "Claim rejected."
@@ -458,84 +483,3 @@ class ClaimViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         })
 
 
-class ClaimBatchViewSet(mixins.CreateModelMixin, mixins.ListModelMixin,
-                        mixins.RetrieveModelMixin, mixins.UpdateModelMixin,
-                        viewsets.GenericViewSet):
-    """Monthly claim schedules: one envelope per insurer, one remittance back.
-
-    Creating a batch collects the insurer's unbatched open claims for the
-    period, which is the whole job most months; ``add-claims`` is there for the
-    ones added by hand afterwards.
-    """
-
-    serializer_class = ClaimBatchSerializer
-    permission_classes = [IsTenantMember, IsPharmacyStaffOrInsurerReadOnly]
-    insurer_ok = True
-    filterset_fields = ("status", "hmo")
-    search_fields = ("reference", "notes")
-    ordering_fields = ("created_at",)
-
-    def get_queryset(self):
-        return insurer_scope(ClaimBatch.objects.select_related("hmo"),
-                             self.request.user)
-
-    def perform_create(self, serializer):
-        batch = serializer.save()
-        claims = Claim.objects.filter(
-            hmo=batch.hmo, batch__isnull=True, status__in=Claim.BATCHABLE,
-        )
-        if batch.period_start:
-            claims = claims.filter(created_at__date__gte=batch.period_start)
-        if batch.period_end:
-            claims = claims.filter(created_at__date__lte=batch.period_end)
-        batch.add_claims(list(claims))
-
-    def _transition(self, call, message):
-        batch = self.get_object()
-        try:
-            call(batch)
-        except ValueError as exc:
-            raise ValidationError({"status": str(exc)}) from exc
-        batch.refresh_from_db()
-        return success(message, ClaimBatchSerializer(batch).data)
-
-    @action(detail=True, methods=["post"], url_path="add-claims")
-    def add_claims(self, request, pk=None):
-        """Add named claims (or sweep up the insurer's remaining open ones)."""
-        batch = self.get_object()
-        data = body(AddClaimsSerializer, request)
-        claims = data.get("claims") or list(Claim.objects.filter(
-            hmo=batch.hmo, batch__isnull=True, status__in=Claim.BATCHABLE,
-        ))
-        try:
-            moved = batch.add_claims(claims)
-        except ValueError as exc:
-            raise ValidationError({"status": str(exc)}) from exc
-        return success(f"{moved} claim(s) added to the batch.",
-                       ClaimBatchSerializer(batch).data)
-
-    @action(detail=True, methods=["post"], url_path="submit")
-    def submit(self, request, pk=None):
-        """Send the schedule and every claim on it."""
-        return self._transition(lambda b: b.submit(), "Batch submitted.")
-
-    @action(detail=True, methods=["post"], url_path="approve")
-    def approve(self, request, pk=None):
-        """Insurer accepted the whole schedule. Admin only."""
-        if not is_pharmacy_admin(request.user):
-            raise PermissionDenied("Only the pharmacy admin can settle claims.")
-        return self._transition(lambda b: b.approve_all(), "Batch approved.")
-
-    @action(detail=True, methods=["post"], url_path="pay")
-    def pay(self, request, pk=None):
-        """Allocate one remittance across the batch's claims. Admin only."""
-        if not is_pharmacy_admin(request.user):
-            raise PermissionDenied("Only the pharmacy admin can settle claims.")
-        data = body(ClaimPaymentSerializer, request)
-        return self._transition(lambda b: b.record_payment(data["amount"]),
-                                "Remittance allocated across the batch.")
-
-    @action(detail=True, methods=["post"], url_path="cancel")
-    def cancel(self, request, pk=None):
-        """Withdraw the schedule and release its claims."""
-        return self._transition(lambda b: b.cancel(), "Batch cancelled.")

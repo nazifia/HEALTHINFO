@@ -16,11 +16,21 @@ const pharmacyStaffRoles = {...pharmacyAdminRoles, 'pharmacist'};
 /// rather than being threaded through every call site.
 Set<String> myGrants = const {};
 
+/// The scheme an insurer seat answers for, set from /api/users/me/ the same
+/// way. Null for everyone else, and for an insurer seat with no scheme yet.
+int? myHmoId;
+
 /// The admin role, or a pharmacist the admin trusted with the money screens.
 /// The staff check still runs alongside this, so a grant admits no outsider.
 bool isPharmacyAdmin(String? role) =>
     pharmacyAdminRoles.contains(role) || myGrants.contains('pharmacy_admin');
 bool isPharmacyStaff(String? role) => pharmacyStaffRoles.contains(role);
+
+/// Who gives the insurer's answer — to a request or a claim: the scheme's own
+/// seat, or the pharmacy admin recording what the insurer said by phone.
+/// Mirrors answers_for_insurer in apps/pharmacy/views.py.
+bool answersForInsurer(String? role) =>
+    role == 'hmo' ? myHmoId != null : isPharmacyAdmin(role);
 
 /// Who keeps a scheme's price list (mirrors IsSchemePriceListEditor).
 ///
@@ -226,52 +236,39 @@ Map<String, dynamic> preauthBody({
 /// once every one is decided, so it is never answered as a whole.
 List<String> preauthActions(String? status, String? role,
     {bool itemised = false}) {
-  if (!isPharmacyStaff(role)) return const [];
-  final decides = isPharmacyAdmin(role) && !itemised && status == 'requested';
+  final answers = answersForInsurer(role);
+  if (!isPharmacyStaff(role) && !answers) return const [];
+  final decides = answers && !itemised && status == 'requested';
   return [
     if (decides) 'approve',
     if (decides) 'decline',
     // An answer typed wrong is withdrawn and recorded again. A spent or
     // withdrawn request stays as it is - the sale it cleared is already made.
-    if (isPharmacyAdmin(role) &&
-        !itemised &&
-        (status == 'approved' || status == 'declined'))
+    if (answers && !itemised && (status == 'approved' || status == 'declined'))
       'reopen',
-    if (status == 'requested' || status == 'approved') 'cancel',
+    // Withdrawing the request is the pharmacy's, not the insurer's.
+    if (isPharmacyStaff(role) && (status == 'requested' || status == 'approved'))
+      'cancel',
   ];
 }
 
 /// Actions offered on a claim in its current state, mirroring the transitions
 /// the API allows (apps/pharmacy/models.py Claim._ALLOWED). Staff send a claim;
-/// only the admin decides or banks one.
+/// the insurer's seat (or the admin for it) decides one; only the admin banks
+/// the money.
 List<String> claimActions(String? status, String? role) {
-  if (!isPharmacyStaff(role)) return const [];
+  final answers = answersForInsurer(role);
+  if (!isPharmacyStaff(role) && !answers) return const [];
   final admin = isPharmacyAdmin(role);
   switch (status) {
     case 'draft':
     case 'rejected':
-      return const ['submit'];
+      return isPharmacyStaff(role) ? const ['submit'] : const [];
     case 'submitted':
-      return admin ? const ['approve', 'reject'] : const [];
+      return answers ? const ['approve', 'reject'] : const [];
     case 'approved':
       return admin ? const ['pay'] : const [];
     default: // paid, cancelled — nothing left to do
-      return const [];
-  }
-}
-
-/// Same idea for a claim batch (ClaimBatch's transitions).
-List<String> batchActions(String? status, String? role) {
-  if (!isPharmacyStaff(role)) return const [];
-  final admin = isPharmacyAdmin(role);
-  switch (status) {
-    case 'draft':
-      return const ['add-claims', 'submit', 'cancel'];
-    case 'submitted':
-      return admin ? const ['approve', 'pay', 'cancel'] : const ['cancel'];
-    case 'approved':
-      return admin ? const ['pay', 'cancel'] : const ['cancel'];
-    default: // paid, cancelled
       return const [];
   }
 }

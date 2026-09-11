@@ -104,16 +104,6 @@ void main() {
     expect(claimActions('draft', 'nurse'), isEmpty);
   });
 
-  test('batch actions follow the same split', () {
-    expect(batchActions('draft', 'pharmacist'),
-        ['add-claims', 'submit', 'cancel']);
-    expect(batchActions('submitted', 'pharmacist'), ['cancel']);
-    expect(batchActions('submitted', 'tenant_admin'),
-        ['approve', 'pay', 'cancel']);
-    expect(batchActions('paid', 'tenant_admin'), isEmpty);
-    expect(batchActions('draft', 'doctor'), isEmpty);
-  });
-
   test('money and units read blanks without crashing', () {
     expect(money('4575.00'), '₦4,575.00');
     expect(money(1650), '₦1,650.00');
@@ -324,5 +314,22 @@ void main() {
     expect(preauthActions('approved', 'tenant_admin', itemised: true), ['cancel']);
     expect(preauthActions('cancelled', 'tenant_admin'), isEmpty);
     expect(preauthActions('requested', 'cashier'), isEmpty);
+  });
+
+  test('the insurer seat answers its own requests and claims', () {
+    // With no scheme set the seat answers for nothing.
+    myHmoId = null;
+    expect(preauthActions('requested', 'hmo'), isEmpty);
+    expect(claimActions('submitted', 'hmo'), isEmpty);
+    myHmoId = 3;
+    // It answers and withdraws its answer, but raising or withdrawing the
+    // request stays the pharmacy's.
+    expect(preauthActions('requested', 'hmo'), ['approve', 'decline']);
+    expect(preauthActions('approved', 'hmo'), ['reopen']);
+    // It approves or rejects a submitted claim; the pharmacy banks the money.
+    expect(claimActions('submitted', 'hmo'), ['approve', 'reject']);
+    expect(claimActions('approved', 'hmo'), isEmpty);
+    expect(claimActions('draft', 'hmo'), isEmpty);
+    myHmoId = null;
   });
 }

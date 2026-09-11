@@ -13,9 +13,9 @@ const from = src.indexOf('const visibleActions = (res, obj) =>');
 const to = src.indexOf(';', src.indexOf('!obj[a.hideWhen]'));
 assert.ok(from > 0 && to > from, 'visibleActions not found in app.js');
 
-const load = (admin, staff) => new Function('isPharmacyAdmin', 'isPharmacyStaff',
+const load = (admin, staff, insurer = false) => new Function('isPharmacyAdmin', 'isPharmacyStaff', 'answersForInsurer',
   `const canActRes = (res) => res.group !== 'Pharmacy' || isPharmacyStaff();
-   ${src.slice(from, to + 1)}; return visibleActions;`)(() => admin, () => staff);
+   ${src.slice(from, to + 1)}; return visibleActions;`)(() => admin, () => staff, () => admin || insurer);
 
 const notify = { name: 'notify', label: 'Mark notified', hideWhen: 'notified_at' };
 const cases = { group: 'Reports', actions: [notify] };
@@ -42,6 +42,18 @@ assert.deepStrictEqual(load(true, true)(batches, {}), [correct, writeOff]);
 const claims = { group: 'Pharmacy', actions: [{ name: 'submit', when: ['draft', 'rejected'] },
                                               { name: 'pay', when: ['approved'] }] };
 assert.deepStrictEqual(load(true, true)(claims, { status: 'approved' }).map((a) => a.name), ['pay']);
+
+// The insurer's answer to a claim is its own seat's to give — it is not
+// pharmacy staff, yet approves and rejects; banking the money stays the admin's.
+const answer = { name: 'approve', insurer: true, when: ['submitted'] };
+const bank = { name: 'pay', adminOnly: true, when: ['approved'] };
+const claimsDesk = { group: 'Pharmacy', actions: [answer, bank] };
+assert.deepStrictEqual(load(false, false, true)(claimsDesk, { status: 'submitted' }), [answer]);
+assert.deepStrictEqual(load(false, false, true)(claimsDesk, { status: 'approved' }), []);
+assert.deepStrictEqual(load(false, true)(claimsDesk, { status: 'submitted' }), [],
+  "a counter hand was offered the insurer's answer");
+assert.ok(/'pharmacy-claims':[\s\S]{0,400}name: 'approve'[^}]*insurer: true/.test(src),
+          "the claim approve action is no longer the insurer's");
 
 // The registry entries these buttons come from, so a rename in app.js fails
 // here rather than silently dropping the button.

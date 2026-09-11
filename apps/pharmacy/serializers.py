@@ -11,7 +11,6 @@ from apps.tenants.models import Tenant
 from .models import (
     HMO,
     Claim,
-    ClaimBatch,
     HmoEnrollment,
     HmoItemRule,
     PreAuthorization,
@@ -99,12 +98,6 @@ class ClaimSerializer(serializers.ModelSerializer):
     enrollment_member_number = serializers.CharField(
         source="enrollment.member_number", read_only=True
     )
-    # Which monthly schedule the claim sits on, if any — since a submitted
-    # claim can still be collected, "is this on a schedule?" is a real question.
-    batch_reference = serializers.CharField(source="batch.reference",
-                                            read_only=True, allow_null=True)
-    # The insurer's own clearance for the sale, when they asked for one — they
-    # quote it back on the remittance.
     authorization_code = serializers.SerializerMethodField()
 
     def get_authorization_code(self, obj):
@@ -134,26 +127,6 @@ class ClaimDecisionSerializer(serializers.Serializer):
 class ClaimPaymentSerializer(serializers.Serializer):
     amount = serializers.DecimalField(max_digits=12, decimal_places=2,
                                       min_value=Decimal("0.01"))
-
-
-class ClaimBatchSerializer(serializers.ModelSerializer):
-    hmo_name = serializers.CharField(source="hmo.name", read_only=True)
-    totals = serializers.DictField(read_only=True)
-
-    class Meta:
-        model = ClaimBatch
-        exclude = ("tenant",)
-        read_only_fields = ("reference", "status", "submitted_at", "created_at",
-                            "updated_at")
-
-
-class AddClaimsSerializer(serializers.Serializer):
-    """Which claims to bundle. Left empty, the batch collects every unbatched
-    open claim for its insurer inside its period."""
-
-    claims = serializers.PrimaryKeyRelatedField(
-        queryset=Claim.objects, many=True, required=False
-    )
 
 
 class SchemeRegistrationSerializer(serializers.Serializer):

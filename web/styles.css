@@ -266,6 +266,14 @@ tr:last-child td { border-bottom: 0; }
 tbody tr:hover { background: var(--bg); }
 /* A row action (cancel a prescription) sits in the row without stretching it. */
 td > button { padding: 4px 10px; font-size: 13px; }
+/* The insurer's answer to one medication: three inputs and two buttons in one
+   cell. Sized and wrapped, or the first 100%-wide input hides the rest. */
+td .decide { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+td .decide input { width: 9ch; padding: 4px 8px; }
+td .decide input[name="reason"] { width: 18ch; }
+td .decide .btn { padding: 4px 10px; font-size: 13px; }
+td.inline-edit { cursor: text; text-decoration: underline dotted var(--viz-muted); }
+td.inline-edit input { width: 7em; padding: 2px 6px; font: inherit; }
 
 tr.rowlink { cursor: pointer; }
 tr.rowlink:hover { background: var(--brand-soft); }
@@ -322,6 +330,12 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 dl.detail { display: grid; grid-template-columns: minmax(140px, max-content) 1fr; gap: 8px 24px; margin: 0; }
 dl.detail dt { color: var(--muted); font-size: 13px; padding-top: 2px; }
 dl.detail dd { margin: 0; word-break: break-word; white-space: pre-wrap; }
+/* A nested row list (a request's medications) scrolls inside its own cell:
+   min-width: 0 lets the grid track shrink, or the table pushes the whole
+   card wider than the screen. */
+dl.detail dd { min-width: 0; }
+dl.detail dd .table-wrap { margin: 0; max-width: 100%; }
+dl.detail dd .table-wrap td, dl.detail dd .table-wrap th { padding: 8px 10px; font-size: 13px; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
 .chip {

@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'config.dart';
-import 'pharmacy.dart' show myGrants;
+import 'pharmacy.dart' show myGrants, myHmoId;
 
 /// Thin REST client for the HEALTH INFO Django API.
 /// Handles JWT storage, the X-Tenant-ID header, and one transparent
@@ -117,6 +117,7 @@ class Api {
       // The role helpers in pharmacy.dart take a role string and nothing else,
       // so the grants ride here rather than through every call site.
       myGrants = grantsOf(_me);
+      myHmoId = _me?['hmo'] is int ? _me!['hmo'] as int : null;
     } catch (_) {}
     return _me;
   }
@@ -149,6 +150,7 @@ class Api {
   void forgetMe() {
     _me = null;
     myGrants = const {};
+    myHmoId = null;
   }
 
   /// Current user's role — what the screens gate on.
@@ -194,6 +196,7 @@ class Api {
     _refresh = null;
     _me = null;
     myGrants = const {};
+    myHmoId = null;
     idleMinutes.value = idleMinutesDefault;
     final p = await SharedPreferences.getInstance();
     await p.remove(_kAccess);
