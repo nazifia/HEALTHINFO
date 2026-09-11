@@ -58,12 +58,14 @@ assert.ok(fieldHtml('patient', { type: 'field', choices: choices(2) }, '').inclu
   'patient picker overridden by choices');
 
 // Long closed lists become type-aheads; short ones stay plain selects.
+// A multi-select is picked over by makeMultiPicker instead, whatever its size.
 const sels = (n) => [{ options: { length: n }, multiple: false }];
+const formOf = (n) => ({ querySelectorAll: (q) => (q.endsWith('[multiple]') ? [] : sels(n)) });
 searchable = [];
-wireChoiceFields({ querySelectorAll: () => sels(13) });
+wireChoiceFields(formOf(13));
 assert.strictEqual(searchable.length, 1, 'long list not made searchable');
 searchable = [];
-wireChoiceFields({ querySelectorAll: () => sels(12) });
+wireChoiceFields(formOf(12));
 assert.strictEqual(searchable.length, 0, 'short list needlessly swapped');
 
 // What a picked select sends: an id, and a list of ids for a to-many.

@@ -28,9 +28,11 @@ bool isPharmacyStaff(String? role) => pharmacyStaffRoles.contains(role);
 
 /// Who gives the insurer's answer — to a request or a claim: the scheme's own
 /// seat, or the pharmacy admin recording what the insurer said by phone.
-/// Mirrors answers_for_insurer in apps/pharmacy/views.py.
-bool answersForInsurer(String? role) =>
-    role == 'hmo' ? myHmoId != null : isPharmacyAdmin(role);
+/// Mirrors answers_for_insurer in apps/pharmacy/views.py: on the scheme's
+/// side the seat needs its admin's decide_claims grant.
+bool answersForInsurer(String? role) => role == 'hmo'
+    ? myHmoId != null && myGrants.contains('decide_claims')
+    : isPharmacyAdmin(role);
 
 /// Who keeps a scheme's price list (mirrors IsSchemePriceListEditor).
 ///
@@ -39,8 +41,9 @@ bool answersForInsurer(String? role) =>
 /// of a scheme with no seat of its own. A seat with no scheme has no list to
 /// keep. The counter reads and never writes: what a sale was covered at is not
 /// a dispensing mistake's way out.
-bool canEditPriceList(String? role, {Object? hmoId}) =>
-    role == 'hmo' ? hmoId != null : isPharmacyAdmin(role);
+bool canEditPriceList(String? role, {Object? hmoId}) => role == 'hmo'
+    ? hmoId != null && myGrants.contains('edit_tariff')
+    : isPharmacyAdmin(role);
 
 /// The body ``POST /api/pharmacy/hmos/register/`` takes: a scheme, and the
 /// seat that will run its desk, written together.

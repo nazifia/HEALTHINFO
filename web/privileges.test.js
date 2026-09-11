@@ -26,7 +26,7 @@ const userFields = () => ({
   role: { choices: ['super_admin', 'tenant_admin', 'doctor', 'pharmacist', 'hmo', 'government', 'public']
     .map((value) => ({ value, display_name: value })) },
   privileges: { child: { choices: [{ value: 'manage_users' }, { value: 'pharmacy_admin' }] } },
-  tenant: {}, hmo: {}, jurisdiction: {},
+  tenant: {}, hmo: {}, jurisdiction: {}, license_number: {},
 });
 
 // The facility's admin staffs the facility: every role of that module, the
@@ -40,6 +40,7 @@ assert.deepStrictEqual(fields.role.choices.map((c) => c.value),
 assert.strictEqual(fields.tenant, undefined);
 assert.strictEqual(fields.jurisdiction, undefined);
 assert.ok(fields.hmo);                       // they mint their insurer's seat
+assert.ok(fields.license_number);            // their doctors sign in with one
 
 // A pharmacist trusted with the user list passes on that one grant, and cannot
 // offer the role that would let someone take the trust back.
@@ -59,6 +60,7 @@ api.narrowUserFields(fields);
 assert.deepStrictEqual(fields.role.choices.map((c) => c.value), ['hmo']);
 assert.strictEqual(fields.hmo, undefined);
 assert.strictEqual(fields.jurisdiction, undefined);
+assert.strictEqual(fields.license_number, undefined);   // no clinician sits on a desk
 
 // A health authority's admin keeps the jurisdiction field: they may seat
 // someone on a smaller patch inside their own. The money grant is not theirs

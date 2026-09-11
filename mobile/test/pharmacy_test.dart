@@ -11,7 +11,12 @@ void main() {
   test('a scheme keeps its own price list, the counter never does', () {
     // The insurer that agreed the contract, and the pharmacy admin keeping
     // the list of a scheme with no seat of its own.
+    myGrants = {'edit_tariff'};
     expect(canEditPriceList('hmo', hmoId: 4), isTrue);
+    // A clerk the scheme's admin never trusted with the tariff reads it.
+    myGrants = const {};
+    expect(canEditPriceList('hmo', hmoId: 4), isFalse);
+    myGrants = {'edit_tariff'};
     expect(canEditPriceList('tenant_admin'), isTrue);
     expect(canEditPriceList('super_admin'), isTrue);
     // A seat with no scheme has no list to keep.
@@ -322,6 +327,10 @@ void main() {
     expect(preauthActions('requested', 'hmo'), isEmpty);
     expect(claimActions('submitted', 'hmo'), isEmpty);
     myHmoId = 3;
+    // A clerk its admin never trusted with the answer reads the desk.
+    expect(preauthActions('requested', 'hmo'), isEmpty);
+    expect(claimActions('submitted', 'hmo'), isEmpty);
+    myGrants = {'decide_claims'};
     // It answers and withdraws its answer, but raising or withdrawing the
     // request stays the pharmacy's.
     expect(preauthActions('requested', 'hmo'), ['approve', 'decline']);
@@ -331,5 +340,6 @@ void main() {
     expect(claimActions('approved', 'hmo'), isEmpty);
     expect(claimActions('draft', 'hmo'), isEmpty);
     myHmoId = null;
+    myGrants = const {};
   });
 }

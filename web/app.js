@@ -440,7 +440,7 @@ const needsFacility = () => isIndependent() && !Api.tenant;
    the seat's own module counts for nothing, here and on the server. */
 const MODULE_PRIVILEGES = {
   facility: ['manage_users', 'pharmacy_admin'],
-  scheme: ['manage_users'],
+  scheme: ['manage_users', 'decide_claims', 'edit_tariff'],
   oversight: ['manage_users'],
 };
 
@@ -1695,8 +1695,10 @@ function reportSummaryHtml(slug, rows) {
 const canActRes = (res) => res.group !== 'Pharmacy' || isPharmacyStaff();
 
 /* The insurer's answer — to a request or a claim — is given by its own seat,
-   or recorded by the pharmacy admin on its behalf. Mirrors answers_for_insurer. */
-const answersForInsurer = () => isPharmacyAdmin() || (ME?.role === 'hmo' && !!ME?.hmo);
+   or recorded by the pharmacy admin on its behalf. Mirrors answers_for_insurer:
+   on the scheme's side the seat needs its admin's decide_claims grant. */
+const answersForInsurer = () => isPharmacyAdmin()
+  || (ME?.role === 'hmo' && !!ME?.hmo && hasPriv('decide_claims'));
 
 /* Module actions (dispensing, claims, notifications): each POSTs to its own
    endpoint. Offer only the ones this record can actually take — the API
@@ -1716,7 +1718,8 @@ function canWriteRes(slug, res) {
   if (res.roles === 'admin') return isPharmacyAdmin();
   // A scheme's price list is written by that scheme, or by the pharmacy admin
   // for a scheme with no seat of its own. Mirrors IsSchemePriceListEditor.
-  if (res.roles === 'scheme') return isPharmacyAdmin() || (ME?.role === 'hmo' && !!ME?.hmo);
+  if (res.roles === 'scheme') return isPharmacyAdmin()
+    || (ME?.role === 'hmo' && !!ME?.hmo && hasPriv('edit_tariff'));
   if (res.roles === 'staff') return isPharmacyStaff();
   if (res.roles === 'tenant_admin') return ['super_admin', 'tenant_admin'].includes(ME.role);
   // Patients: the same cadres that may read them may register and edit them.
@@ -2113,6 +2116,9 @@ function narrowUserFields(fields) {
     else delete fields.privileges;          // nothing of theirs to pass on
   }
   delete fields.tenant;                     // pinned to the writer's own
+  // A licence belongs to a clinical cadre; neither a scheme's desk nor a
+  // health authority's office seats one, so the field is noise there.
+  if (module !== 'facility') delete fields.license_number;
   if (module === 'scheme') { delete fields.hmo; delete fields.jurisdiction; }
   if (module === 'oversight') delete fields.hmo;
   if (module === 'facility') delete fields.jurisdiction;
@@ -2232,6 +2238,44 @@ function wireChoiceFields(form) {
   for (const sel of form.querySelectorAll('select[data-choice]:not([multiple])')) {
     if (sel.options.length > 12) makeSearchable(sel, { placeholder: 'Type to search…' });
   }
+  for (const sel of form.querySelectorAll('select[data-choice][multiple]')) makeMultiPicker(sel);
+}
+
+/* A multi-select (a seat's grants) becomes a type-ahead plus chips: type or
+   drop the list down to add one, × on a chip to take it back. The <select>
+   stays, hidden, as the value — collectForm reads it exactly as before.
+   ponytail: native <datalist> does the searching; no menu code of our own. */
+function makeMultiPicker(sel) {
+  sel.hidden = true;
+  const box = document.createElement('input');
+  box.type = 'search';
+  box.autocomplete = 'off';
+  box.placeholder = 'Type or pick to add…';
+  box.setAttribute('list', `dl-${++menuSeq}`);
+  const list = document.createElement('datalist');
+  list.id = box.getAttribute('list');
+  const chips = document.createElement('div');
+  chips.className = 'chips';
+  sel.after(box, list, chips);
+
+  const paint = () => {
+    list.innerHTML = [...sel.options].filter((o) => !o.selected)
+      .map((o) => `<option value="${esc(o.textContent)}"></option>`).join('');
+    chips.innerHTML = [...sel.selectedOptions].map((o) =>
+      `<span class="chip">${esc(o.textContent)} <button type="button" aria-label="Remove ${esc(o.textContent)}" data-v="${esc(o.value)}">×</button></span>`).join('');
+  };
+  box.addEventListener('change', () => {
+    const typed = box.value.trim().toLowerCase();
+    const hit = [...sel.options].find((o) => o.textContent.trim().toLowerCase() === typed);
+    if (hit) { hit.selected = true; box.value = ''; paint(); }
+  });
+  chips.addEventListener('click', (e) => {
+    const v = e.target.closest('button')?.dataset.v;
+    if (v == null) return;
+    sel.querySelector(`option[value="${CSS.escape(v)}"]`).selected = false;
+    paint();
+  });
+  paint();
 }
 
 function fieldHtml(name, f, value) {

@@ -53,13 +53,17 @@ MANAGEABLE_ROLES = {
 MANAGE_USERS = "manage_users"       # run your own portal's user list
 PHARMACY_ADMIN = "pharmacy_admin"   # the facility's money screens: prices,
                                     # stock corrections, claim settlement
+DECIDE_CLAIMS = "decide_claims"     # answer the scheme's pre-authorizations
+                                    # and claims
+EDIT_TARIFF = "edit_tariff"         # keep the scheme's own price list
 
-# Which grants mean anything in which portal. A scheme's desk and a health
-# authority's office have no money screens of their own, so the only grant
-# worth holding there is the user list.
+# Which grants mean anything in which portal. A scheme's desk splits the way
+# the facility's does: its admin decides who on the desk answers claims and
+# who moves the tariff, and a seat with neither reads the desk and nothing
+# more. A health authority's office has only the user list to hand out.
 MODULE_PRIVILEGES = {
     "facility": frozenset({MANAGE_USERS, PHARMACY_ADMIN}),
-    "scheme": frozenset({MANAGE_USERS}),
+    "scheme": frozenset({MANAGE_USERS, DECIDE_CLAIMS, EDIT_TARIFF}),
     "oversight": frozenset({MANAGE_USERS}),
 }
 ALL_PRIVILEGES = frozenset().union(*MODULE_PRIVILEGES.values())
@@ -433,8 +437,10 @@ class IsSchemePriceListEditor(BasePermission):
         if not user.is_authenticated:
             return False
         if user.role in INSURER_ROLES:
-            # A seat with no scheme has no list of its own to keep.
-            return user.hmo_id is not None and hmo_id in (None, user.hmo_id)
+            # A seat with no scheme has no list of its own to keep, and one
+            # without the grant reads the list its admin keeps.
+            return (user.hmo_id is not None and hmo_id in (None, user.hmo_id)
+                    and has_privilege(user, EDIT_TARIFF))
         return is_pharmacy_admin(user)
 
     def has_permission(self, request, view):

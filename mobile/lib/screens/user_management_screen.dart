@@ -18,11 +18,15 @@ const _licensedRoles = {'doctor', 'nurse', 'midwife', 'chew'};
 const _grantLabels = {
   'manage_users': 'User list',
   'pharmacy_admin': 'Pharmacy admin screens',
+  'decide_claims': 'Answer claims',
+  'edit_tariff': 'Price list',
 };
 
 const _grantHints = {
   'manage_users': 'Add and edit the people in this portal',
   'pharmacy_admin': 'Prices, stock corrections and claim settlement',
+  'decide_claims': "Approve or reject the scheme's pre-authorizations and claims",
+  'edit_tariff': "Add, move and drop drugs on the scheme's price list",
 };
 
 const _roles = [

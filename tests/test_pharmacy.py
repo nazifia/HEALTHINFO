@@ -702,10 +702,52 @@ def _scheme(tenant, patient, **hmo_kwargs):
     return hmo, enrollment
 
 
-def _insurer_seat(tenant, hmo, phone="08030000777"):
-    """A seat that signs in to the pharmacy and answers for one scheme only."""
+def _insurer_seat(tenant, hmo, phone="08030000777", **extra):
+    """A seat that signs in to the pharmacy and answers for one scheme only.
+
+    The scheme's admin by default: that seat holds every grant its desk can
+    hand out, so it answers claims and keeps the tariff without being told.
+    """
+    extra.setdefault("is_admin", True)
     return User.objects.create_user(phone=phone, password="x", tenant=tenant,
-                                    role=Role.HMO, hmo=hmo, username="insurer")
+                                    role=Role.HMO, hmo=hmo, username="insurer",
+                                    **extra)
+
+
+def test_the_scheme_admin_hands_out_the_desk_s_work(pharmacy):
+    """A clerk on the desk does what its admin granted and nothing more.
+
+    Ungranted, the seat reads the desk: a claim is not theirs to answer and
+    the tariff not theirs to move. Each grant opens exactly its own gate.
+    """
+    tenant, item = pharmacy["tenant"], pharmacy["item"]
+    patient = Patient.all_objects.create(tenant=tenant, first_name="Bisi",
+                                         last_name="Ade")
+    hmo, enrollment = _scheme(tenant, patient,
+                              coverage_percent=Decimal("100.00"))
+    sale = Sale.all_objects.create(tenant=tenant, reference="SL-DESK",
+                                   total=Decimal("50.00"),
+                                   hmo_payable=Decimal("50.00"))
+    claim = Claim.all_objects.create(tenant=tenant, hmo=hmo, sale=sale,
+                                     amount=Decimal("50.00"), reference="C-1",
+                                     status=Claim.Status.SUBMITTED)
+    reader = _insurer_seat(tenant, hmo, phone="08030000778", is_admin=False)
+    clerk = _client(reader, tenant)
+
+    approve = f"/api/pharmacy/claims/{claim.pk}/approve/"
+    rule = {"hmo": hmo.id, "item": item.id, "coverage_percent": "60.00"}
+    assert clerk.get("/api/pharmacy/claims/").status_code == 200
+    assert clerk.post(approve, {"amount": "50.00"}, format="json").status_code == 403
+    assert clerk.post("/api/pharmacy/item-rules/", rule, format="json").status_code == 403
+
+    reader.privileges = ["edit_tariff"]
+    reader.save()
+    assert clerk.post("/api/pharmacy/item-rules/", rule, format="json").status_code == 201
+    assert clerk.post(approve, {"amount": "50.00"}, format="json").status_code == 403
+
+    reader.privileges = ["decide_claims"]
+    reader.save()
+    assert clerk.post(approve, {"amount": "50.00"}, format="json").status_code == 200
 
 
 def test_tariff_caps_what_the_scheme_pays_for_a_line(pharmacy):

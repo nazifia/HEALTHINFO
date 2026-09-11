@@ -14,6 +14,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
 from apps.accounts.permissions import (
+    DECIDE_CLAIMS,
     INSURER_ROLES,
     IsPharmacyAdminOrReadOnly,
     IsPharmacyStaff,
@@ -22,6 +23,7 @@ from apps.accounts.permissions import (
     IsSchemePriceListEditor,
     IsSuperAdmin,
     IsTenantMember,
+    has_privilege,
     is_pharmacy_admin,
 )
 from apps.governance.models import AuditLog
@@ -64,13 +66,14 @@ def answers_for_insurer(user):
     said by phone.
 
     The insurer seat only ever reaches its own scheme's rows — the queryset is
-    fenced by ``insurer_scope`` — so being a seated insurer is the whole check
-    here. A seat with no scheme answers for nothing.
+    fenced by ``insurer_scope`` — so on that side the check is whether the
+    scheme's admin trusted this seat with the answer (DECIDE_CLAIMS; the admin
+    holds it by being the admin). A seat with no scheme answers for nothing.
     """
     if not user.is_authenticated:
         return False
     if user.role in INSURER_ROLES:
-        return user.hmo_id is not None
+        return user.hmo_id is not None and has_privilege(user, DECIDE_CLAIMS)
     return is_pharmacy_admin(user)
 
 
