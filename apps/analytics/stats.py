@@ -807,6 +807,14 @@ def consultation_stats(start=None, end=None, platform=False, jurisdiction=None):
         "by_age_group": _grouped(rows, "patient_age_group"),
         "by_sex": _by_sex(rows),
         "top_complaints": _grouped(rows, "chief_complaint", 20),
+        # Signs and symptoms live on the case report the visit was filed
+        # against; a consultation with no report (or one with no symptoms
+        # ticked) has nothing to add here, so it is left out rather than
+        # counted under a blank label.
+        "top_symptoms": _grouped(
+            rows.filter(case_report__symptoms__isnull=False),
+            "case_report__symptoms__name", 20,
+        ),
         "by_region": _grouped(rows, "region"),
         "trend": _series(rows, days=90),
     }

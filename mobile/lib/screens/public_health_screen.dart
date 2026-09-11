@@ -363,10 +363,10 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
                 labelKey: 'disposition',
               ),
               BreakdownCard(
-                heading: 'What patients came with',
+                heading: 'Signs and symptoms',
                 icon: Icons.sick_outlined,
-                rows: (visit['top_complaints'] as List?) ?? [],
-                labelKey: 'chief_complaint',
+                rows: (visit['top_symptoms'] as List?) ?? [],
+                labelKey: 'case_report__symptoms__name',
               ),
 
             ],

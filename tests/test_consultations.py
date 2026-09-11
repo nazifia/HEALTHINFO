@@ -9,7 +9,7 @@ from apps.accounts.models import Role, User
 
 from apps.analytics.models import Appointment, CaseReport, Consultation, VitalEvent
 from apps.analytics.stats import consultation_stats
-from apps.catalog.models import Disease, Medication
+from apps.catalog.models import Disease, Medication, Symptom
 from apps.patients.models import Patient
 from apps.tenants.current import clear_current_tenant, set_current_tenant
 from apps.tenants.models import Tenant
@@ -142,6 +142,30 @@ def test_consultation_stats_counts_only_closed_dispositions(patient):
     assert stats["open"] == 1
     assert stats["admission_rate"] == 1.0
     assert stats["by_disposition"] == [{"disposition": "admitted", "count": 1}]
+
+
+def test_consultation_stats_counts_symptoms_off_the_case_report(patient):
+    fever = Symptom.objects.create(name="Fever")
+    cough = Symptom.objects.create(name="Cough")
+    report = CaseReport.objects.create(patient=patient)
+    report.symptoms.set([fever, cough])
+    Consultation.objects.create(
+        patient=patient, chief_complaint="Hot", case_report=report
+    )
+    other = Patient.objects.create(first_name="Ba", last_name="Musa")
+    other_report = CaseReport.objects.create(patient=other)
+    other_report.symptoms.set([fever])
+    Consultation.objects.create(
+        patient=other, chief_complaint="Hot", case_report=other_report
+    )
+    # A visit with no report contributes nothing, not a blank row.
+    third = Patient.objects.create(first_name="Ce", last_name="Ade")
+    Consultation.objects.create(patient=third, chief_complaint="Sore")
+
+    assert consultation_stats()["top_symptoms"] == [
+        {"case_report__symptoms__name": "Fever", "count": 2},
+        {"case_report__symptoms__name": "Cough", "count": 1},
+    ]
 
 
 def test_child_cuff_band_follows_height(tenant):

@@ -342,6 +342,7 @@ and no print server.
 ```bash
 python manage.py seed_pharmacy            # demo pharmacy (idempotent)
 python manage.py seed_pharmacy --reset    # wipe this tenant's pharmacy first
+python manage.py seed_ops                 # roster, customers, stocktake, transfers, pre-auths, POS, prescribers
 ```
 
 ### Clients
