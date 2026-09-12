@@ -2173,9 +2173,12 @@ async function viewForm(slug, id, query) {
     // Where the form returns to when opened off a record — one of our own
     // pages only, so a link can't send the form anywhere else.
     if (prefill.back && !prefill.back.startsWith('#/')) delete prefill.back;
-    const [meta, current] = await Promise.all([
+    const [meta, current, terms] = await Promise.all([
       Api.options(metaPath),
       id ? Api.get(rdetail(slug, `${id}/`)) : Promise.resolve({ ...res.defaults, ...prefill }),
+      // The terms a prescriber agrees to before their seat is opened; the
+      // server refuses a licensed seat without the agreement.
+      isUserRes(slug) ? Api.public('/api/auth/register/terms/').catch(() => null) : null,
     ]);
     const fields = meta?.actions?.PUT || meta?.actions?.POST;
     if (!fields) return errorBox(new Error('You do not have permission to edit this resource.'));
@@ -2185,6 +2188,13 @@ async function viewForm(slug, id, query) {
       .filter(([name, f]) => !f.read_only && !res.hide?.includes(name))
       .map(([name, f]) => [name, fieldHtml(name,
         { ...f, label: labels[name] || f.label, help_text: f.help_text || hints[name] }, current[name])]));
+    if (parts.accept_terms && terms) {
+      parts.accept_terms = `<details class="card" data-field="accept_terms" open>
+        <summary><strong>${esc(terms.title)}</strong> <span class="muted">(v${esc(terms.version)})</span></summary>
+        <ol>${terms.clauses.map((c) => `<li>${esc(c)}</li>`).join('')}</ol>
+        <label><input type="checkbox" name="accept_terms"> ${esc(fields.accept_terms.label)}</label>
+        <em class="field-err"></em></details>`;
+    }
     // A visit rarely calls for one drug. Extra rows live outside the <form>
     // on purpose: inside it, a second field named `medication` would collide
     // with the first and collectForm would read neither.
@@ -2235,6 +2245,17 @@ async function viewForm(slug, id, query) {
     wireRelFields($('#f'), current);
     wireChoiceFields($('#f'));
     wireFormRules($('#f'), res.rules);
+    if (isUserRes(slug)) {
+      // Only a licensed cadre signs the terms, and only once: a seat already
+      // stamped is not asked again when edited.
+      wireFormRules($('#f'), (f) => {
+        const box = f.querySelector('[data-field="accept_terms"]');
+        if (!box) return;
+        const ask = CLINICAL_ROLES.has(f.elements.role?.value) && !current.terms_accepted_at;
+        box.hidden = !ask;
+        f.elements.accept_terms.required = ask;
+      });
+    }
     const drugRows = multiDrug ? wireExtraDrugs(fields, res) : null;
     $('#f').onsubmit = async (e) => {
       e.preventDefault();

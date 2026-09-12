@@ -87,6 +87,7 @@ def test_super_admin_creates_user_into_tenant(db, client):
             "role": Role.DOCTOR,
             "license_number": "MDCN/54321",  # licensed cadres must carry one
             "tenant": t.id,
+            "accept_terms": True,  # ...and agree to the prescriber terms
         },
         format="json",
     )
@@ -94,6 +95,24 @@ def test_super_admin_creates_user_into_tenant(db, client):
     u = User.objects.get(phone="08031112222")
     assert u.tenant_id == t.id and u.role == Role.DOCTOR
     assert u.check_password("Sup3r$ecret!")
+    assert u.terms_accepted_at is not None
+
+
+def test_prescriber_seat_needs_the_terms_agreed(db, client):
+    """A licensed cadre is refused until the Healthcare Terms are agreed; a
+    clerk is never asked. The terms themselves are public."""
+    t = Tenant.objects.create(name="Acme", slug="acme")
+    client.force_authenticate(_super(db))
+    seat = {"phone": "08031112223", "password": "Sup3r$ecret!", "tenant": t.id,
+            "role": Role.NURSE, "license_number": "NMCN/1"}
+    resp = client.post("/api/users/", seat, format="json")
+    assert resp.status_code == 400 and "accept_terms" in resp.json().get("errors", resp.json())
+    resp = client.post("/api/users/", {**seat, "role": Role.PUBLIC, "license_number": ""},
+                       format="json")
+    assert resp.status_code == 201
+    assert User.objects.get(phone="08031112223").terms_accepted_at is None
+    terms = APIClient().get("/api/auth/register/terms/").json()
+    assert terms["clauses"] and terms["version"]
 
 
 def test_member_cannot_create_user(db, client):

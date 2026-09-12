@@ -133,6 +133,10 @@ class User(AbstractUser):
     # come from accounts.permissions.MODULE_PRIVILEGES — one held outside the
     # seat's module counts for nothing, so a stale grant can't widen anyone.
     privileges = models.JSONField(default=list, blank=True)
+    # When a licensed cadre agreed to the Healthcare Terms and Conditions
+    # (accounts.terms). NULL on every other role, and on a prescriber row that
+    # predates the terms; a new prescriber seat is refused without it.
+    terms_accepted_at = models.DateTimeField(null=True, blank=True)
 
     USERNAME_FIELD = "phone"
     REQUIRED_FIELDS = []

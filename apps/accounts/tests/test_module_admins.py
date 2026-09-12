@@ -147,7 +147,7 @@ def test_grant_opens_the_user_list_to_a_pharmacist(world):
     resp = client_for(clerk).post(
         "/api/users/",
         {"phone": "08030000018", "password": PASSWORD, "role": "nurse",
-         "license_number": "NMCN/1234"},
+         "license_number": "NMCN/1234", "accept_terms": True},
         format="json",
     )
     assert resp.status_code == 201, resp.content

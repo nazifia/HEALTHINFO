@@ -23,6 +23,7 @@ from .serializers import (
     PasswordResetSerializer, RegisterSerializer, UserSerializer,
     send_reset_email,
 )
+from .terms import PRESCRIBER_TERMS
 
 
 class LoginView(TokenObtainPairView):
@@ -33,6 +34,11 @@ class LoginView(TokenObtainPairView):
 
 class RegisterViewSet(viewsets.ViewSet):
     permission_classes = [AllowAny]
+
+    @action(detail=False, methods=["get"])
+    def terms(self, request):
+        """The Healthcare Terms and Conditions a prescriber agrees to."""
+        return Response(PRESCRIBER_TERMS)
 
     @action(detail=False, methods=["get"])
     def organizations(self, request):

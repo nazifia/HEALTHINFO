@@ -254,6 +254,12 @@ class _UserFormState extends State<_UserForm> {
   // Runs its own portal's user list. Only means anything on the seats that sit
   // outside a facility — an insurer's desk, a health authority's office.
   late bool _isAdmin = widget.user?['is_admin'] == true;
+  // The Healthcare Terms and Conditions a prescriber agrees to before their
+  // seat is opened. Asked once: a seat already stamped is not asked on edit.
+  Map<String, dynamic>? _terms;
+  bool _acceptTerms = false;
+  bool get _asksTerms =>
+      _licensedRoles.contains(_role) && widget.user?['terms_accepted_at'] == null;
   // Grants on top of the role, offered from what the writer holds themselves.
   late final Set<String> _privileges = {
     ...?(widget.user?['privileges'] as List?)?.map((p) => '$p'),
@@ -283,6 +289,18 @@ class _UserFormState extends State<_UserForm> {
     super.initState();
     if (_role == 'hmo') _loadHmos();
     if (_role == 'government') _loadJurisdictions();
+    if (_asksTerms) _loadTerms();
+  }
+
+  Future<void> _loadTerms() async {
+    if (_terms != null) return;
+    try {
+      final t = await api.get('/api/auth/register/terms/');
+      if (mounted) setState(() => _terms = (t as Map).cast<String, dynamic>());
+    } catch (_) {
+      // The API refuses a licensed seat without the agreement, so this fails
+      // loudly on save rather than quietly here.
+    }
   }
 
   Future<void> _loadJurisdictions() async {
@@ -310,6 +328,11 @@ class _UserFormState extends State<_UserForm> {
 
   Future<void> _save() async {
     if (!(_form.currentState?.validate() ?? true)) return;
+    if (_asksTerms && !_acceptTerms) {
+      showError(context,
+          'The prescriber must agree to the Healthcare Terms and Conditions.');
+      return;
+    }
     setState(() => _busy = true);
     try {
       if (_isEdit) {
@@ -318,6 +341,7 @@ class _UserFormState extends State<_UserForm> {
           'role': _role,
           'is_active': _active,
           'license_number': _license.text.trim(),
+          if (_asksTerms) 'accept_terms': _acceptTerms,
           if (_role == 'hmo') 'hmo': _hmoId,
           if (_role == 'government') 'jurisdiction': _jurisdictionId,
           if (_seatsOutsideFacility) 'is_admin': _isAdmin,
@@ -332,6 +356,7 @@ class _UserFormState extends State<_UserForm> {
           'is_active': _active,
           if (_tenantId != null) 'tenant': _tenantId,
           'license_number': _license.text.trim(),
+          if (_asksTerms) 'accept_terms': _acceptTerms,
           if (_role == 'hmo') 'hmo': _hmoId,
           if (_role == 'government') 'jurisdiction': _jurisdictionId,
           if (_seatsOutsideFacility) 'is_admin': _isAdmin,
@@ -418,6 +443,7 @@ class _UserFormState extends State<_UserForm> {
                   setState(() => _role = v ?? _role);
                   if (_role == 'hmo') _loadHmos();
                   if (_role == 'government') _loadJurisdictions();
+                  if (_asksTerms) _loadTerms();
                 },
               ),
               if (_role == 'hmo' && _module != 'scheme')
@@ -463,6 +489,34 @@ class _UserFormState extends State<_UserForm> {
                       ? 'Required for this role'
                       : null,
                 ),
+              if (_asksTerms) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                      '${_terms?['title'] ?? 'Healthcare Terms and Conditions'}',
+                      style: TextStyle(
+                          color: context.hintColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700)),
+                ),
+                for (final (i, c) in ((_terms?['clauses'] as List?) ?? const [])
+                    .indexed)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text('${i + 1}. $c',
+                        style: TextStyle(color: context.hintColor, fontSize: 12)),
+                  ),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: const Text('The prescriber has read and agrees to '
+                      'the Healthcare Terms and Conditions'),
+                  value: _acceptTerms,
+                  onChanged: (v) => setState(() => _acceptTerms = v == true),
+                ),
+              ],
               if (_seatsOutsideFacility)
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,

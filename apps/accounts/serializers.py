@@ -6,6 +6,7 @@ from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
 from django.db import transaction
 from django.db.models import Q
+from django.utils import timezone
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from rest_framework import serializers
@@ -209,6 +210,14 @@ class UserSerializer(serializers.ModelSerializer):
         child=serializers.ChoiceField(choices=sorted(ALL_PRIVILEGES)),
         required=False,
     )
+    # A prescriber's agreement to the Healthcare Terms and Conditions
+    # (accounts.terms, served at /api/auth/register/terms/). Required to open
+    # a licensed seat; stamped on the row as ``terms_accepted_at``.
+    accept_terms = serializers.BooleanField(
+        write_only=True, required=False, default=False,
+        label="The prescriber has read and agrees to the Healthcare Terms "
+              "and Conditions",
+    )
 
     class Meta:
         model = User
@@ -216,8 +225,9 @@ class UserSerializer(serializers.ModelSerializer):
             "id", "username", "phone", "email", "role", "tenant", "tenant_name",
             "is_active", "password", "license_number", "idle_logout_minutes",
             "hmo", "jurisdiction", "is_admin", "privileges", "is_independent",
+            "accept_terms", "terms_accepted_at",
         )
-        read_only_fields = ("is_independent",)
+        read_only_fields = ("is_independent", "terms_accepted_at")
 
     def get_idle_logout_minutes(self, obj):
         if obj.tenant_id is None:
@@ -244,6 +254,15 @@ class UserSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({
                     "license_number":
                         f"A license number is required for the {role} role.",
+                })
+            # No seat for a prescriber who has not agreed to the terms. Asked
+            # once: a row already stamped is not asked again on edit.
+            agreed = getattr(self.instance, "terms_accepted_at", None)
+            if not agreed and not attrs.get("accept_terms"):
+                raise serializers.ValidationError({
+                    "accept_terms": "The prescriber must agree to the "
+                                    "Healthcare Terms and Conditions before "
+                                    "the account is opened.",
                 })
         tenant = attrs.get("tenant", getattr(self.instance, "tenant", None))
         if role in LICENSED_ROLES and tenant is None:
@@ -338,8 +357,16 @@ class UserSerializer(serializers.ModelSerializer):
         # consistently absent, not "" — the client renders absent as "—".
         return value.strip() or None
 
+    @staticmethod
+    def _stamp_terms(validated_data, instance=None):
+        # The flag is not a column; agreeing becomes a timestamp, once.
+        agreed = validated_data.pop("accept_terms", False)
+        if agreed and not getattr(instance, "terms_accepted_at", None):
+            validated_data["terms_accepted_at"] = timezone.now()
+
     def create(self, validated_data):
         password = validated_data.pop("password", None)
+        self._stamp_terms(validated_data)
         user = User(**validated_data)
         if password:
             user.set_password(password)
@@ -350,6 +377,7 @@ class UserSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         password = validated_data.pop("password", None)
+        self._stamp_terms(validated_data, instance)
         user = super().update(instance, validated_data)
         if password:
             user.set_password(password)
