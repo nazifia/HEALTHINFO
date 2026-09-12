@@ -36,6 +36,17 @@ from .serializers import (
 DISCLAIMER = _("This information is educational only and not medical advice.")
 
 
+def _with_relations(qs):
+    """Prefetch every M2M on the model so serializing N rows costs 1 + M queries, not 1 + N*M.
+
+    The serializer emits each M2M as a pk list and NamedRelationsMixin names
+    it; both call ``.all()`` per row, which is a query each unless prefetched.
+    Catalog models only relate through M2Ms (tenant FK is excluded), so this
+    covers the lot without listing fields per model.
+    """
+    return qs.prefetch_related(*(f.name for f in qs.model._meta.many_to_many))
+
+
 class TenantQuerysetMixin:
     """Re-run the manager per request.
 
@@ -45,7 +56,7 @@ class TenantQuerysetMixin:
     """
 
     def get_queryset(self):
-        return self.queryset.model.objects.all()
+        return _with_relations(self.queryset.model.objects.all())
 
 
 class DiseaseViewSet(
@@ -180,7 +191,7 @@ class SearchView(APIView):
 
         results, total = {}, 0
         for key, (model, serializer, order_field, fields) in self._TARGETS.items():
-            qs = model.objects.filter(status="published")
+            qs = _with_relations(model.objects.filter(status="published"))
             hits = self._search(qs, q, fields, order_field, limit)
             total += len(hits)
             results[key] = serializer(hits, many=True).data

@@ -23,6 +23,8 @@ class _CatalogListScreenState extends State<CatalogListScreen>
   final _search = TextEditingController();
   Timer? _debounce;
   late Future<List<dynamic>> _future;
+  // One list per query for the tab's lifetime: retyping a search is free.
+  final _cache = <String, Future<List<dynamic>>>{};
 
   @override
   bool get wantKeepAlive => true; // keep tab state when switching
@@ -40,13 +42,13 @@ class _CatalogListScreenState extends State<CatalogListScreen>
     super.dispose();
   }
 
-  Future<List<dynamic>> _load([String query = '']) {
-    final q = query.trim();
+  Future<List<dynamic>> _load([String query = '', bool fresh = false]) {
     // PharmApp-style: ignore 1-char noise — show the full list until 2+ chars.
-    return api.getList(
-      widget.resource.path,
-      q.length < 2 ? null : {'search': q},
-    );
+    final q = query.trim().length < 2 ? '' : query.trim();
+    if (fresh) _cache.remove(q);
+    return _cache[q] ??= api
+        .getList(widget.resource.path, q.isEmpty ? null : {'search': q})
+        .catchError((Object e) { _cache.remove(q); throw e; });
   }
 
   void _onSearch(String value) {
@@ -105,7 +107,7 @@ class _CatalogListScreenState extends State<CatalogListScreen>
         Expanded(
           child: RefreshIndicator(
             onRefresh: () async {
-              final f = _load(_search.text);
+              final f = _load(_search.text, true);
               setState(() {
                 _future = f;
               });

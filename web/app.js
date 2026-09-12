@@ -2980,12 +2980,20 @@ async function viewSearch() {
   render(`<h2>Global Search</h2>
     <form id="f" class="toolbar"><input name="q" placeholder="At least 2 characters…" required minlength="2" autofocus>
     <button>Search</button></form><div id="out"></div>`);
-  $('#f').onsubmit = async (e) => {
-    e.preventDefault();
-    const q = new FormData(e.target).get('q').trim();
-    $('#out').innerHTML = '<div class="loading">Searching…</div>';
+  // Results follow the typing (250ms after the last keystroke); Enter still
+  // works. Each query's answer is kept for the view's lifetime so backspacing
+  // repaints from memory, and only the newest reply may paint.
+  const cache = new Map();
+  let timer, latest = 0;
+  const search = async () => {
+    const q = $('#f').q.value.trim();
+    if (q.length < 2) return ($('#out').innerHTML = '');
+    const seq = ++latest;
+    if (!cache.has(q)) $('#out').innerHTML = '<div class="loading">Searching…</div>';
     try {
-      const data = await Api.get('/api/search/', { q });
+      if (!cache.has(q)) cache.set(q, Api.get('/api/search/', { q }));
+      const data = await cache.get(q);
+      if (seq !== latest) return;
       const links = { diseases: 'diseases', medications: 'medications', procedures: 'procedures', lab_tests: 'lab-tests', articles: 'articles' };
       let html = `<p class="muted">${esc(data.disclaimer || '')} · ${data.total} result(s)</p>`;
       for (const [key, slug] of Object.entries(links)) {
@@ -2994,8 +3002,13 @@ async function viewSearch() {
         html += `<h3>${esc(label(key))}</h3>` + tableHtml(rows, (r) => `#/r/${slug}/${r.id}`);
       }
       $('#out').innerHTML = html || '<p class="muted">No results.</p>';
-    } catch (err) { $('#out').innerHTML = `<p class="err">${esc(err.message)}</p>`; }
+    } catch (err) {
+      cache.delete(q);  // a failure is not an answer worth remembering
+      if (seq === latest) $('#out').innerHTML = `<p class="err">${esc(err.message)}</p>`;
+    }
   };
+  $('#f').q.oninput = () => { clearTimeout(timer); timer = setTimeout(search, 250); };
+  $('#f').onsubmit = (e) => { e.preventDefault(); clearTimeout(timer); search(); };
 }
 
 // Multi-pick over a searchable list endpoint; used by differential + interaction check.

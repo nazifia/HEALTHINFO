@@ -57,3 +57,27 @@ def test_a_patient_is_refused_the_catalog(env):
                  "/api/interactions/check/", "/api/differential/",
                  f"/api/graph/diseases/{disease.id}/"):
         assert client.get(path, HTTP_X_TENANT_ID=t.slug).status_code == 403, path
+
+
+def test_search_and_list_query_count_is_flat(env, django_assert_max_num_queries):
+    """Serializing 20 rows must not cost 20x the relation queries of 1 row.
+
+    Diseases carry two M2Ms (symptoms, medications); each used to be a query
+    per row from the pk-list field and again from NamedRelationsMixin. The
+    viewsets and SearchView now prefetch them, so the count stays flat.
+    """
+    t, _ = env
+    for i in range(20):
+        Disease.objects.create(name=f"Malaria type {i}", slug=f"malaria-{i}", status="published")
+    doctor = User.objects.create(phone="+2348039990009", tenant=t, role=Role.DOCTOR)
+    client = APIClient()
+    client.force_authenticate(doctor)
+
+    # Auth/tenant/throttle lookups plus one query per target model and per M2M;
+    # well under the 40+ an N+1 costs here.
+    with django_assert_max_num_queries(30):
+        r = client.get("/api/search/?q=malaria", HTTP_X_TENANT_ID=t.slug)
+    assert r.status_code == 200 and len(r.json()["diseases"]) == 20
+    with django_assert_max_num_queries(15):
+        r = _get(client, t.slug)
+    assert r.status_code == 200

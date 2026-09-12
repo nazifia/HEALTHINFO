@@ -34,6 +34,10 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
   Timer? _debounce;
   Future<Map<String, dynamic>>? _future;
   Map<String, dynamic>? _last; // keep showing prior hits while the next loads
+  // Answers per query, so backspacing to "mal" after "mala" paints at once
+  // instead of asking again. ponytail: unbounded for the screen's lifetime;
+  // a session types tens of queries, not thousands.
+  final _cache = <String, Future<Map<String, dynamic>>>{};
 
   @override
   void dispose() {
@@ -58,9 +62,12 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
     });
   }
 
-  Future<Map<String, dynamic>> _run(String q) async {
-    final data = await api.get('/api/search/', {'q': q});
-    return data as Map<String, dynamic>;
+  Future<Map<String, dynamic>> _run(String q) {
+    return _cache[q] ??= api
+        .get('/api/search/', {'q': q})
+        .then((data) => data as Map<String, dynamic>)
+        // A failed lookup must not be remembered as the answer.
+        .catchError((Object e) { _cache.remove(q); throw e; });
   }
 
   @override
