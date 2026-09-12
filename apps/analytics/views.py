@@ -92,10 +92,14 @@ def own_reports(qs, user):
 
     Rows with no reporter stay visible to all of them: the FK is SET_NULL, so
     that is what a report becomes when the staff member who filed it leaves,
-    and the clinical record has to outlive the person who wrote it.
+    and the clinical record has to outlive the person who wrote it. Not to an
+    independent prescriber, though: a visitor to the facility reads what they
+    wrote there and nothing else.
     """
     if sees_whole_tenant(user):
         return qs
+    if user.is_independent:
+        return qs.filter(reporter=user)
     return qs.filter(Q(reporter=user) | Q(reporter__isnull=True))
 
 

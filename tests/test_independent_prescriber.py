@@ -88,3 +88,23 @@ def test_the_facility_staff_directory_stays_shut(world):
     # Prescribing is what the state buys them, not the run of the facility.
     assert _client(doctor, here).get("/api/users/").status_code == 403
     assert _client(doctor, here).get("/api/users/me/").status_code == 200
+
+
+def test_sees_only_the_patients_they_registered_or_wrote_for(world):
+    """A visitor to the facility, not its staff: the registry's unclaimed rows
+    and other people's orders stay out of view."""
+    from apps.patients.models import Patient
+    doctor, here, _away, drug = world
+    other = Patient.objects.create(tenant=here, first_name="Ada", last_name="Obi")
+    theirs = Patient.objects.create(tenant=here, first_name="Bola",
+                                    last_name="Obi", registered_by=doctor)
+    Prescription.objects.create(tenant=here, patient=other, medication=drug)
+    c = _client(doctor, here)
+    ids = [r["id"] for r in c.get("/api/patients/").json()["results"]]
+    assert ids == [theirs.pk]
+    assert c.get(f"/api/patients/{other.pk}/").status_code == 404
+    assert c.get("/api/prescriptions/").json()["count"] == 0
+    # Writing for a patient is what brings them into view.
+    c.post("/api/prescriptions/", {"medication": drug.id, "dose": "80 mg",
+                                   "patient": other.pk}, format="json")
+    assert c.get(f"/api/patients/{other.pk}/").status_code == 200

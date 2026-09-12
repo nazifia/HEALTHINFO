@@ -48,10 +48,14 @@ def visible_patients(user):
     that run the facility rather than a caseload (see sees_whole_tenant) keep
     the full registry.
 
-    Unclaimed rows stay visible to everyone clinical. registered_by is NULL for
-    patients imported ahead of go-live and for those whose registering staff
-    member has since left (the FK is SET_NULL), and a patient nobody can open
-    is worse than one too many people can.
+    Unclaimed rows stay visible to the facility's own clinicians. registered_by
+    is NULL for patients imported ahead of go-live and for those whose
+    registering staff member has since left (the FK is SET_NULL), and a patient
+    nobody can open is worse than one too many people can.
+
+    An independent prescriber gets no such fallback: they are a visitor to the
+    facility, not its staff, so they see the patients they registered or wrote
+    for and nothing else in the registry.
 
     ponytail: one OR'd query across the record types, all indexed on the FK.
     Materialize the patient ids into a join table only if a clinician ever
@@ -60,7 +64,9 @@ def visible_patients(user):
     qs = Patient.objects.all()
     if sees_whole_tenant(user):
         return qs
-    scope = Q(registered_by=user) | Q(registered_by__isnull=True)
+    scope = Q(registered_by=user)
+    if not user.is_independent:
+        scope |= Q(registered_by__isnull=True)
     for model, _serializer in _history_sources().values():
         accessor = model._meta.get_field("patient").remote_field.get_accessor_name()
         scope |= Q(**{f"{accessor}__reporter": user})
