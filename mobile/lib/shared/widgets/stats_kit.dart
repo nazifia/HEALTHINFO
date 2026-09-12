@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/enhanced_theme.dart';
 import 'glass_card.dart';
 import 'icon_chip.dart';
+import 'motion.dart';
 
 /// Shared design kit for the stats screens (analytics, dashboard, facility
 /// metrics). One header treatment, one KPI tile, one section card, plus the
@@ -130,7 +131,7 @@ class KpiTile extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          Text(value,
+          CountUp(value,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.outfit(
@@ -172,7 +173,8 @@ class KpiRow extends StatelessWidget {
         spacing: gap,
         runSpacing: gap,
         children: [
-          for (final t in tiles) SizedBox(width: w, child: t),
+          for (final (i, t) in tiles.indexed)
+            SizedBox(width: w, child: Reveal(index: i, child: t)),
         ],
       );
     });
@@ -198,7 +200,8 @@ class StatSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return Reveal(
+        child: Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: GlassCard(
         padding: const EdgeInsets.all(16),
@@ -224,7 +227,7 @@ class StatSection extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ));
   }
 }
 
@@ -278,7 +281,7 @@ class KpiChip extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           if (icon != null) Icon(icon, color: color, size: 16),
-          Text(value,
+          CountUp(value,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.outfit(
@@ -317,7 +320,8 @@ class KpiStrip extends StatelessWidget {
         padding: EdgeInsets.zero,
         itemCount: tiles.length,
         separatorBuilder: (_, _) => const SizedBox(width: 10),
-        itemBuilder: (_, i) => SizedBox(width: 124, child: tiles[i]),
+        itemBuilder: (_, i) =>
+            SizedBox(width: 124, child: Reveal(index: i, child: tiles[i])),
       ),
     );
   }
@@ -340,7 +344,8 @@ class PanelCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return Reveal(
+        child: Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Container(
         padding: const EdgeInsets.all(16),
@@ -368,7 +373,7 @@ class PanelCard extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ));
   }
 }
 
@@ -433,7 +438,7 @@ class StatMetric extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(value,
+        CountUp(value,
             style: GoogleFonts.outfit(
               color: color ?? context.labelColor,
               fontWeight: FontWeight.w800,
@@ -478,30 +483,30 @@ class DonutChart extends StatelessWidget {
       child: Stack(
         alignment: Alignment.center,
         children: [
-          PieChart(PieChartData(
+          Grow(builder: (_, t) => PieChart(PieChartData(
             startDegreeOffset: -90,
             sectionsSpace: 0,
             centerSpaceRadius: size * 0.32,
             sections: [
               PieChartSectionData(
-                value: value.toDouble(),
+                value: value.toDouble() * t,
                 color: color,
                 radius: size * 0.18,
                 showTitle: false,
               ),
               PieChartSectionData(
                 // Avoid a zero-sum chart rendering nothing.
-                value: total <= 0 ? 1 : rest,
+                value: total <= 0 ? 1 : rest + value * (1 - t),
                 color: track,
                 radius: size * 0.18,
                 showTitle: false,
               ),
             ],
-          )),
+          ))),
           Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(centerLabel,
+              CountUp(centerLabel,
                   style: GoogleFonts.outfit(
                     color: context.labelColor,
                     fontWeight: FontWeight.w800,
@@ -531,7 +536,7 @@ class Sparkline extends StatelessWidget {
         FlSpot(i.toDouble(), values[i].toDouble()),
     ];
     final maxY = spots.map((s) => s.y).reduce((a, b) => a > b ? a : b);
-    return LineChart(LineChartData(
+    return Sweep(child: LineChart(LineChartData(
       minY: 0,
       maxY: (maxY <= 0 ? 1 : maxY) * 1.15,
       gridData: const FlGridData(show: false),
@@ -556,7 +561,7 @@ class Sparkline extends StatelessWidget {
           ),
         ),
       ],
-    ));
+    )));
   }
 }
 
@@ -614,8 +619,8 @@ class ComparisonBars extends StatelessWidget {
             child: Stack(
               children: [
                 Container(height: 8, color: track),
-                FractionallySizedBox(
-                  widthFactor: (r.value / denom).clamp(0.0, 1.0),
+                Grow(builder: (_, t) => FractionallySizedBox(
+                  widthFactor: (r.value / denom).clamp(0.0, 1.0) * t,
                   child: Container(
                     height: 8,
                     decoration: BoxDecoration(
@@ -625,7 +630,7 @@ class ComparisonBars extends StatelessWidget {
                       ]),
                     ),
                   ),
-                ),
+                )),
               ],
             ),
           ),
@@ -687,14 +692,15 @@ class MetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return Reveal(
+        child: Padding(
       padding: const EdgeInsets.only(top: 12),
       child: GlassCard(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(value,
+            CountUp(value,
                 style: GoogleFonts.outfit(
                   color: danger ? EnhancedTheme.errorRed : context.labelColor,
                   fontWeight: FontWeight.w800,
@@ -708,6 +714,6 @@ class MetricCard extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ));
   }
 }

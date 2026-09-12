@@ -1040,6 +1040,63 @@ function render(html) {
   setNav(false);
 }
 
+/* Below-the-fold cards, charts and numbers hold still until scrolled into
+ * view: the observer flips .seen (CSS runs the paused animation) and starts
+ * the count-up. Each element fires once. Anything that lands in #main — by
+ * render() or a later innerHTML (the stats screens fill #out after the
+ * form) — is handed over by the mutation observer, so nothing paused is
+ * ever left unwatched. */
+const SEEN_SEL = '.tiles, .hero, .viz, .viz-legend, .big-val';
+const seen = new IntersectionObserver((entries) => {
+  for (const e of entries) {
+    if (!e.isIntersecting) continue;
+    e.target.classList.add('seen');
+    countUp(e.target);
+    seen.unobserve(e.target);
+  }
+}, { rootMargin: '0px 0px -40px' });
+new MutationObserver((muts) => {
+  for (const m of muts) {
+    for (const n of m.addedNodes) {
+      if (n.nodeType !== 1) continue;
+      if (n.matches(SEEN_SEL)) seen.observe(n);
+      for (const el of n.querySelectorAll(SEEN_SEL)) seen.observe(el);
+    }
+  }
+}).observe($('#main'), { childList: true, subtree: true });
+
+/* Stat numbers count up from zero on paint, keeping their prefix, suffix,
+ * commas and decimals ("₦1,200.50", "42%"). Text that is not one number
+ * (dates, ranges, dashes) is left alone. Card/bar motion is CSS (styles.css). */
+const NUM_RE = /^(\D*?)(\d[\d,]*)(\.\d+)?(\D*)$/;
+function countFmt(src, n) {
+  const m = NUM_RE.exec(src);
+  if (!m) return src;
+  let s = n.toFixed(m[3] ? m[3].length - 1 : 0);
+  if (m[2].includes(',')) {
+    const [whole, frac] = s.split('.');
+    s = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (frac ? '.' + frac : '');
+  }
+  return m[1] + s + m[4];
+}
+function countUp(root) {
+  if (typeof requestAnimationFrame !== 'function' || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const els = root.matches('.big-val') ? [root] : root.querySelectorAll('.tile-val, .hero-stat strong');
+  for (const el of els) {
+    const src = el.textContent, m = NUM_RE.exec(src);
+    if (!m || el.dataset.counted) continue;
+    el.dataset.counted = '1';
+    const end = Number(m[2].replace(/,/g, '') + (m[3] || ''));
+    const t0 = performance.now(), D = 800;
+    const tick = (now) => {
+      const p = Math.min((now - t0) / D, 1);
+      el.textContent = countFmt(src, end * (1 - (1 - p) ** 3));
+      if (p < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+}
+
 const spinner = () => render('<div class="loading">Loading…</div>');
 
 function errorBox(e) {
@@ -1153,7 +1210,7 @@ function lineChartHtml(rows, { labelKey, numKeys }) {
     if (numKeys.length === 1) {
       s += `<polygon points="${padL},${py(0)} ${pts} ${px(rows.length - 1)},${py(0)}" fill="${VIZ.series[si]}" opacity="0.1"/>`;
     }
-    s += `<polyline points="${pts}" fill="none" stroke="${VIZ.series[si]}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    s += `<polyline points="${pts}" pathLength="1" fill="none" stroke="${VIZ.series[si]}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
     const last = rows[rows.length - 1][k] || 0;
     s += `<circle cx="${px(rows.length - 1)}" cy="${py(last)}" r="4" fill="${VIZ.series[si]}" stroke="${VIZ.surface}" stroke-width="2"/>`;
   });

@@ -1,6 +1,7 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import '../../core/theme/enhanced_theme.dart';
+import 'motion.dart';
 
 /// Vertical bar chart (fl_chart) with tap tooltips.
 /// One bar per row; full label + value shown in the tooltip since x-axis
@@ -48,7 +49,7 @@ class MiniBarChart extends StatelessWidget {
 
     return SizedBox(
       height: 190,
-      child: BarChart(
+      child: Sweep(child: BarChart(
         BarChartData(
           maxY: maxY.toDouble(),
           alignment: BarChartAlignment.spaceAround,
@@ -157,7 +158,7 @@ class MiniBarChart extends StatelessWidget {
               ),
           ],
         ),
-      ),
+      )),
     );
   }
 }
@@ -188,7 +189,7 @@ class TrendLineChart extends StatelessWidget {
     final maxY = (maxRaw <= 0 ? 1 : maxRaw) * 1.2;
     return SizedBox(
       height: 170,
-      child: LineChart(LineChartData(
+      child: Sweep(child: LineChart(LineChartData(
         minY: 0,
         maxY: maxY,
         gridData: FlGridData(
@@ -246,7 +247,7 @@ class TrendLineChart extends StatelessWidget {
             ),
           ),
         ],
-      )),
+      ))),
     );
   }
 }

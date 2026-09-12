@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/enhanced_theme.dart';
 import 'bar_chart.dart';
 import 'glass_card.dart';
+import 'motion.dart';
 
 /// A headed card holding one grouped-count bar chart — "by region", "by
 /// reporter", "by tenant". Every rollup screen draws the same card, so it
@@ -28,7 +29,8 @@ class BreakdownCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (rows.isEmpty) return const SizedBox.shrink();
-    return Padding(
+    return Reveal(
+        child: Padding(
       padding: const EdgeInsets.only(top: 12),
       child: GlassCard(
         padding: const EdgeInsets.all(16),
@@ -64,6 +66,6 @@ class BreakdownCard extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ));
   }
 }

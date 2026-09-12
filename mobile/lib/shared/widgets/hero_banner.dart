@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/theme/enhanced_theme.dart';
+import 'motion.dart';
 
 /// The welcome banner a user lands on: a greeting for the time of day, their
 /// name, one line of who they are, and a handful of facts. The patient and the
@@ -48,7 +49,8 @@ class HeroBanner extends StatelessWidget {
         .join()
         .toUpperCase();
     const white70 = Color(0xB3FFFFFF);
-    return Container(
+    return Reveal(
+        child: Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
@@ -115,7 +117,10 @@ class HeroBanner extends StatelessWidget {
           Wrap(
             spacing: 10,
             runSpacing: 10,
-            children: [for (final s in stats) _HeroStat(s.key, s.value)],
+            children: [
+              for (final (i, s) in stats.indexed)
+                Reveal(index: i + 1, child: _HeroStat(s.key, s.value)),
+            ],
           ),
           if (action != null) ...[
             const SizedBox(height: 16),
@@ -123,7 +128,7 @@ class HeroBanner extends StatelessWidget {
           ],
         ],
       ),
-    );
+    ));
   }
 }
 
@@ -147,7 +152,7 @@ class _HeroStat extends StatelessWidget {
         children: [
           Text(label,
               style: const TextStyle(color: Color(0xB3FFFFFF), fontSize: 11)),
-          Text(HeroBanner.text(value),
+          CountUp(HeroBanner.text(value),
               style: const TextStyle(
                   color: Colors.white,
                   fontSize: 15,
