@@ -411,6 +411,10 @@ class PrescriptionViewSet(_ReportViewSet):
     independent_ok = True
     filterset_fields = ("status", "medication", "case_report", "region", "patient",
                         "group", "patient_sex")
+    # By patient, the way the register is searched: an order is found through
+    # the person it was written for.
+    search_fields = ("patient__hospital_number", "patient__first_name",
+                     "patient__last_name", "patient__other_names")
     # Digits only: apps.prescriptions hangs hospitals/, prescribers/ and the
     # payout lists off the same /api/prescriptions/ prefix, and this detail
     # route is matched first — a catch-all pk would swallow them as ids.
@@ -421,6 +425,15 @@ class PrescriptionViewSet(_ReportViewSet):
         tenant = getattr(self.request, "tenant", None)
         if tenant is not None and tenant.kind == Tenant.Kind.PHARMACY:
             qs = qs.filter(patient__isnull=False)
+        # An independent prescriber gets no roster of who they wrote for, same
+        # as the register (apps.patients.views): a search or a patient filter
+        # opens their own orders one patient at a time, an unsearched list is
+        # empty.
+        params = self.request.query_params
+        if (self.action == "list" and self.request.user.is_independent
+                and not params.get("search", "").strip()
+                and not params.get("patient")):
+            qs = qs.none()
         return qs
 
     def get_serializer(self, *args, **kwargs):

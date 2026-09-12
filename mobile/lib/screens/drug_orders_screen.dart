@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../api.dart';
 import '../main.dart';
 import '../nigeria.dart';
 import '../core/theme/enhanced_theme.dart';
@@ -22,15 +23,24 @@ class DrugOrdersScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<String?>(
-      future: api.myRole(),
+    // An independent prescriber gets no roster of who they wrote for: the
+    // server answers an unsearched list with nothing, and a search with their
+    // own orders for that patient, so the empty state asks for a search.
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: api.me(),
       builder: (context, snap) => ReportListScreen(
         path: '/api/prescriptions/',
         fabLabel: 'Prescribe',
-        showFab: api.roleCanReport(snap.data),
+        showFab: api.roleCanReport(snap.data?['role']?.toString()),
         emptyIcon: Icons.medication_outlined,
-        emptyTitle: 'No drug orders yet',
-        emptyMessage: 'Tap "Prescribe" to write the first one.',
+        emptyTitle: Api.isIndependent(snap.data)
+            ? 'Search for a patient'
+            : 'No drug orders yet',
+        emptyMessage: Api.isIndependent(snap.data)
+            ? 'Type a patient name or hospital number to see the orders you '
+                'wrote for them under this facility.'
+            : 'Tap "Prescribe" to write the first one.',
+        searchHint: 'Search patient name or hospital number',
         savedMessage: 'Order written.',
         filters: const [
           ReportFilter(param: 'status', anyLabel: 'Any state', options: {
