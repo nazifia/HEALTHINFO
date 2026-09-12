@@ -25,8 +25,8 @@ class PatientsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // An independent prescriber is a visitor to the facility: the server
-    // answers them the patients they registered or wrote for and nobody else
-    // on its register, so the empty state says so rather than "no patients".
+    // answers an unsearched list with nothing, and a search with the patients
+    // they registered or wrote for, so the empty state asks for a search.
     return FutureBuilder<Map<String, dynamic>?>(
       future: api.me(),
       builder: (context, snap) => _list(context, Api.isIndependent(snap.data)),
@@ -38,10 +38,11 @@ class PatientsScreen extends StatelessWidget {
       path: '/api/patients/',
       fabLabel: 'Register patient',
       emptyIcon: Icons.people_outline,
-      emptyTitle: independent ? 'No patients of yours yet' : 'No patients yet',
+      emptyTitle: independent ? 'Search for a patient' : 'No patients yet',
       emptyMessage: independent
-          ? 'You see the patients you registered or wrote for under this '
-              'facility. Tap "Register patient" to add one.'
+          ? 'Type a name, hospital number or phone to open a patient you '
+              'registered or wrote for under this facility, or tap '
+              '"Register patient" to add one.'
           : 'Tap "Register patient" to add the first one.',
       savedMessage: 'Patient saved.',
       searchHint: 'Search name, hospital number or phone',

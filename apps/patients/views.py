@@ -122,6 +122,12 @@ class PatientViewSet(viewsets.ModelViewSet):
         # for ?status=merged, but out of the way of everyday lists and searches.
         if self.action == "list" and "status" not in self.request.query_params:
             qs = qs.exclude(status=Patient.Status.MERGED)
+        # An independent prescriber gets no roster at all: the register opens
+        # one patient at a time, to whoever types a name or number. By id and
+        # by search they see their own caseload; an unsearched list is empty.
+        if (self.action == "list" and self.request.user.is_independent
+                and not self.request.query_params.get("search", "").strip()):
+            qs = qs.none()
         return qs
 
     def perform_create(self, serializer):

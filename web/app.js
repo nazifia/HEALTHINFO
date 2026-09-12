@@ -1869,7 +1869,7 @@ async function viewList(slug) {
         ${res.signUp && ME?.role === 'super_admin' ? '<a class="btn" href="#/scheme-register">+ Register scheme</a>' : ''}
       </div>
       ${slug === 'patients' && isIndependent()
-        ? '<p class="muted">You see the patients you registered or wrote for under this facility, and nobody else on its register.</p>' : ''}
+        ? '<p class="muted">Search for a patient by name, hospital number or phone. You can open the patients you registered or wrote for under this facility, and nobody else on its register.</p>' : ''}
       <form id="search-form" class="toolbar">
         <input name="q" autocomplete="off"
                placeholder="${res.search ? 'Search…' : 'Filter by search…'}" value="${esc(st.search)}">

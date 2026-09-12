@@ -100,7 +100,9 @@ def test_sees_only_the_patients_they_registered_or_wrote_for(world):
                                     last_name="Obi", registered_by=doctor)
     Prescription.objects.create(tenant=here, patient=other, medication=drug)
     c = _client(doctor, here)
-    ids = [r["id"] for r in c.get("/api/patients/").json()["results"]]
+    # No roster without a search: the register opens one patient at a time.
+    assert c.get("/api/patients/").json()["results"] == []
+    ids = [r["id"] for r in c.get("/api/patients/?search=Obi").json()["results"]]
     assert ids == [theirs.pk]
     assert c.get(f"/api/patients/{other.pk}/").status_code == 404
     assert c.get("/api/prescriptions/").json()["count"] == 0
