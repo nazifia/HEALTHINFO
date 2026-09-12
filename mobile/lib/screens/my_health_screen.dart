@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../main.dart';
 import '../api.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/glass_card.dart';
+import '../shared/widgets/hero_banner.dart';
 import '../shared/widgets/snack.dart';
 
 /// A patient's home — GET /api/portal/*.
@@ -195,9 +195,8 @@ class _MyHealthScreenState extends State<MyHealthScreen>
   }
 }
 
-/// The welcome banner a patient lands on: a greeting for the time of day,
-/// their name, and the handful of facts a nurse asks for first. Same content
-/// as the web hero (web/app.js portalHeroHtml).
+/// The patient's banner: the handful of facts a nurse asks for first. The
+/// full record lives on Profile.
 class _HeroCard extends StatelessWidget {
   final Map<String, dynamic> me;
   final List<Map<String, dynamic>> meds;
@@ -206,19 +205,7 @@ class _HeroCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final h = DateTime.now().hour;
-    final greet = h < 12
-        ? 'Good morning'
-        : h < 17
-            ? 'Good afternoon'
-            : 'Good evening';
     final name = _text(me['full_name']) == '—' ? 'there' : _text(me['full_name']);
-    final initials = name
-        .split(RegExp(r'\s+'))
-        .take(2)
-        .map((w) => w.isEmpty ? '' : w[0])
-        .join()
-        .toUpperCase();
     final sex = me['sex'] == 'M'
         ? 'Male'
         : me['sex'] == 'F'
@@ -230,128 +217,25 @@ class _HeroCard extends StatelessWidget {
       if (_text(me['hospital_number']) != '—')
         'Hospital No. ${me['hospital_number']}',
     ].where((s) => s != '—').join(' · ');
-    const white70 = Color(0xB3FFFFFF);
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [EnhancedTheme.primaryTeal, EnhancedTheme.accentCyan],
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: EnhancedTheme.primaryTeal.withValues(alpha: 0.35),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 60,
-                height: 60,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: const Color(0x38FFFFFF),
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: const Color(0x66FFFFFF)),
-                ),
-                child: Text(initials,
-                    style: GoogleFonts.outfit(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800)),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('$greet,',
-                        style: const TextStyle(color: white70, fontSize: 14)),
-                    Text(name,
-                        style: GoogleFonts.outfit(
-                            color: Colors.white,
-                            fontSize: 24,
-                            fontWeight: FontWeight.w800,
-                            height: 1.15)),
-                    if (who.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(who,
-                            style: const TextStyle(
-                                color: white70, fontSize: 13)),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _HeroStat('Blood group', me['blood_group']),
-              _HeroStat('Genotype', me['genotype']),
-              _HeroStat('Scheme', me['patient_type_display']),
-              _HeroStat('NHIS number', me['nhis_number']),
-              _HeroStat('Medications collected', meds.length),
-              _HeroStat('Allergies', me['allergies']),
-            ],
-          ),
-          if (onOpenProfile != null) ...[
-            const SizedBox(height: 16),
-            OutlinedButton.icon(
+    return HeroBanner(
+      name: name,
+      subtitle: who,
+      stats: [
+        MapEntry('Blood group', me['blood_group']),
+        MapEntry('Genotype', me['genotype']),
+        MapEntry('Scheme', me['patient_type_display']),
+        MapEntry('NHIS number', me['nhis_number']),
+        MapEntry('Medications collected', meds.length),
+        MapEntry('Allergies', me['allergies']),
+      ],
+      action: onOpenProfile == null
+          ? null
+          : OutlinedButton.icon(
               onPressed: onOpenProfile,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white,
-                side: const BorderSide(color: Color(0x99FFFFFF)),
-              ),
+              style: HeroBanner.actionStyle,
               icon: const Icon(Icons.person_outline, size: 18),
               label: const Text('View full profile'),
             ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _HeroStat extends StatelessWidget {
-  final String label;
-  final Object? value;
-  const _HeroStat(this.label, this.value);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(minWidth: 96),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: const Color(0x2EFFFFFF),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(label,
-              style: const TextStyle(color: Color(0xB3FFFFFF), fontSize: 11)),
-          Text(_text(value),
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700)),
-        ],
-      ),
     );
   }
 }

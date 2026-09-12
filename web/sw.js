@@ -3,7 +3,7 @@
  * cached. Bump VERSION on any shell change to invalidate old caches. */
 'use strict';
 
-const VERSION = 'hi-web-v8';
+const VERSION = 'hi-web-v9';
 const SHELL = [
   './',
   'index.html',

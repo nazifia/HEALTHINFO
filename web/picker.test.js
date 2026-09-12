@@ -52,6 +52,14 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   box.oninput();
   await wait(320);
   assert.strictEqual(picked, null, 'an ambiguous lookup must not bind a patient');
+  // They drop down under the box; the arrow keys walk them and Enter links one.
+  assert.ok(out.innerHTML.includes('pick-menu') && out.innerHTML.includes('Ade Cole'));
+  const key = (k) => box.onkeydown({ key: k, preventDefault() {} });
+  key('ArrowDown'); key('ArrowDown');
+  assert.ok(/aria-selected="true"\s+data-hit="1"/.test(out.innerHTML), 'second row not highlighted');
+  key('Enter');
+  assert.strictEqual(picked.id, 8, 'Enter did not link the highlighted row');
+  assert.ok(!out.innerHTML.includes('pick-menu'), 'the menu stayed open after a pick');
 
   // A stale reply may not overwrite a newer one.
   let release;
@@ -83,6 +91,19 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   assert.strictEqual(form.elements.region.value, 'Ikeja, Lagos',
       'a value already on the form was overwritten');
   carryPatientFields({ elements: {} }, { region: 'Ikeja, Lagos' });  // no field: no throw
+  // A closed list lands on the row that names the place, however the record
+  // spelled it; a place the list lacks leaves the field blank.
+  const select = (rows) => {
+    let v = '';
+    return { tagName: 'SELECT', options: rows.map((value) => ({ value })),
+      get value() { return v; }, set value(x) { v = rows.includes(x) ? x : ''; } };
+  };
+  let sel = select(['', 'Apapa, Lagos', 'Daura, Katsina']);
+  carryPatientFields({ elements: { region: sel } }, { region: 'Daura' });
+  assert.strictEqual(sel.value, 'Daura, Katsina');
+  sel = select(['', 'Apapa, Lagos']);
+  carryPatientFields({ elements: { region: sel } }, { region: 'Daura LGA' });
+  assert.strictEqual(sel.value, '');
 
   // The hit line carries the details the form would otherwise ask for.
   const hit = patientHitHtml({

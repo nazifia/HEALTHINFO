@@ -110,6 +110,20 @@ lists what was prescribed with the drug on screen, and cancelling stops every
 drug on the prescription, bar anything already dispensed. `node prescription.test.js` self-checks the payload the form
 builds; `node picker.test.js` the patient type-ahead; `node columns.test.js` the table/detail column picker.
 
+Clinical records (Patients, Visits, Drug Orders) follow the app's screens: the
+register filters by patient type and status, checks the NHIA/NHIS rule before
+posting, and asks before registering a namesake with the same date of birth
+(`allow_duplicate`); a portal-account link only offers public accounts; merging
+takes the duplicate's hospital number. The visit list carries the diagnosis,
+the triage readings and the ones outside the band; a visit's or an order's page
+shows the patient's record, allergies first. The three forms are laid out as
+the app's sheets (`PATIENT_SHEET`, `VISIT_SHEET`, `ORDER_SHEET` in app.js):
+field order and pairs, the app's labels and helper lines, defaults, and what
+one field decides about another — NHIS number required for NHIA, date of death
+only for the deceased, severity only once there is a diagnosis. The diagnosis
+box drops the catalog's names down but takes any text. `node clinical.test.js`
+self-checks the pure parts.
+
 A stock check is raised over the items to count, counted on its detail page
 (`node stockcount.test.js` self-checks the sheet), then applied by the admin,
 which writes the corrections to stock.

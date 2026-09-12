@@ -119,6 +119,77 @@ window.addEventListener('online', () => Outbox.flush());
 const SEX_FILTER = { param: 'patient_sex', label: 'Sex', text: (r) => r.name,
   options: [{ id: 'F', name: 'Female' }, { id: 'M', name: 'Male' }, { id: 'other', name: 'Other' }] };
 
+// How the patient's care is paid for, mirroring Patient.PatientType — the
+// register filters on it, and the form checks an NHIA patient can be billed.
+const PATIENT_TYPES = {
+  regular: 'Regular', nhia: 'NHIA', private: 'Private Pay', insurance: 'Private Insurance',
+  corporate: 'Corporate', staff: 'Staff', dependant: 'Dependant', emergency: 'Emergency',
+  retainership: 'Retainership',
+};
+const choiceFilter = (param, label, map) => ({ param, label,
+  options: Object.entries(map).map(([id, name]) => ({ id, name })), text: (r) => r.name });
+const PATIENT_FILTERS = [
+  choiceFilter('patient_type', 'Type', PATIENT_TYPES),
+  choiceFilter('status', 'Status', { active: 'Active', inactive: 'Inactive', deceased: 'Deceased' }),
+];
+
+// The three clinical sheets as the app lays them out: the field order, which
+// pairs share a row, what the sheet calls itself, the defaults a new record
+// opens with, the helper lines, and what another field decides. Fields the
+// layout does not name still follow, in API order — nothing is lost.
+const PATIENT_SHEET = {
+  form: { title: 'Register patient', submit: 'Register' },
+  defaults: { sex: 'F', patient_type: 'regular', status: 'active' },
+  layout: [['first_name', 'last_name'], 'other_names', 'patient_type', ['sex', 'date_of_birth'], 'phone',
+    ['blood_group', 'genotype'], 'allergies', 'region', 'address', 'nhis_number', 'next_of_kin_name',
+    ['next_of_kin_phone', 'next_of_kin_relationship'], 'status', 'date_of_death', 'consent_given', 'user', 'notes'],
+  labels: { user: 'Portal account', nhis_number: 'NHIS number', consent_given: 'Consent given to store personal data',
+    next_of_kin_name: 'Next of kin', next_of_kin_phone: 'Kin phone', next_of_kin_relationship: 'Relationship' },
+  // The number is generated off the phone, and the duplicate opt-out is
+  // answered by the confirm on save (see viewForm), not typed.
+  hide: ['hospital_number', 'allow_duplicate'],
+  hints: { patient_type: 'Decides the billing route', phone: 'Becomes the hospital number when it is free',
+    user: 'Lets this patient sign in and read their own record' },
+  rules: (f) => {
+    // An NHIA patient is only NHIA if the scheme can be billed.
+    const nhia = f.elements.patient_type?.value === 'nhia';
+    const nhis = f.elements.nhis_number;
+    if (nhis) {
+      nhis.required = nhia;
+      const text = nhis.closest('label').firstChild;
+      text.textContent = text.textContent.replace(/ \*$/, '') + (nhia ? ' *' : '');
+    }
+    // Only a deceased patient carries a date of death.
+    const dod = f.querySelector('[data-field="date_of_death"]');
+    if (dod) dod.hidden = f.elements.status?.value !== 'deceased';
+  },
+};
+const VISIT_SHEET = {
+  form: { title: 'New consultation', submit: 'Start consultation' },
+  labels: { patient: 'Patient (optional)', case_report: 'Existing case (optional)', appointment: 'Appointment (optional)',
+    temperature_c: 'Temp C', pulse_bpm: 'Pulse', systolic_bp: 'Systolic', diastolic_bp: 'Diastolic',
+    respiratory_rate: 'Resp rate', oxygen_saturation: 'SpO2 %', weight_kg: 'Weight kg', height_cm: 'Height cm' },
+  layout: ['chief_complaint', 'patient', 'diagnosis', 'severity', 'case_report', 'appointment',
+    ['temperature_c', 'pulse_bpm'], ['systolic_bp', 'diastolic_bp'], ['respiratory_rate', 'oxygen_saturation'],
+    ['weight_kg', 'height_cm'], 'region', 'notes'],
+  // Age group and sex come off the patient's record; the follow-up date is
+  // set when the visit closes.
+  hide: ['patient_age_group', 'patient_sex', 'follow_up_on'],
+  // A severity only once there is a diagnosis to grade.
+  rules: (f) => {
+    const sev = f.querySelector('[data-field="severity"]');
+    if (sev) sev.hidden = !f.elements.diagnosis?.value.trim();
+  },
+};
+const ORDER_SHEET = {
+  form: { title: 'Prescribe', submit: 'Write orders' },
+  layout: ['patient', 'medication', 'dose', 'frequency', 'duration_days', 'region', 'notes'],
+  labels: { medication: 'Drug', duration_days: 'Duration in days', patient: 'Patient (optional)' },
+  // The counter moves the status and stamps the dispensing, not the prescriber.
+  hide: ['patient_age_group', 'patient_sex', 'status', 'dispensed_at'],
+  hints: { duration_days: 'Leave blank for an open-ended course' },
+};
+
 const ORG_FILTERS = [
   { param: 'tenant', label: 'Organization', path: '/api/tenants/', text: (r) => r.name },
   { param: 'hmo', label: 'Scheme', path: '/api/pharmacy/hmos/', text: (r) => r.name },
@@ -155,7 +226,10 @@ const RESOURCES = {
   'appointments':      { title: 'Appointments',       group: 'Reports', report: true, filters: [SEX_FILTER] },
   // Cancelling one drug stops the whole prescription it was written on — the
   // drugs on it are one decision, and a dispensed one is left alone.
-  'prescriptions':     { title: 'Prescriptions',      group: 'Reports', report: true, filters: [SEX_FILTER],
+  // The clinician's order — one row per drug — not the counter's script
+  // (/api/prescriptions/scripts/). Read by the whole tenant, written by the
+  // clinical cadres, same as the visit it came off.
+  'prescriptions':     { title: 'Drug Orders',        group: 'Clinical', report: true, filters: [SEX_FILTER], ...ORDER_SHEET,
                           actions: [{ name: 'cancel', label: 'Cancel prescription', danger: true,
                                       when: ['prescribed', 'partially_dispensed'] }] },
   'pharmacy-items':         { title: 'Stock Items',     group: 'Pharmacy', path: 'pharmacy/items',           roles: 'admin', search: true },
@@ -258,12 +332,16 @@ const RESOURCES = {
                               actions: [{ name: 'pay', label: 'Mark paid', adminOnly: true, when: ['pending'] }] },
   'pharmacy-commission-configs': { title: 'Staff Commission Rates', group: 'Pharmacy', path: 'reports/commission-configs', roles: 'admin' },
   'branches':          { title: 'Branches',           group: 'Pharmacy', roles: 'admin', search: true },
+  // Merging asks for the duplicate's hospital number — what reception has in
+  // front of them — and the detail page looks the record up before posting.
   'patients':          { title: 'Patients',           group: 'Clinical', roles: 'clinical', search: true, history: true,
+                          filters: PATIENT_FILTERS, ...PATIENT_SHEET,
                           fileFrom: ['consultations', 'case-reports', 'prescriptions', 'lab-results', 'appointments'],
-                          actions: [{ name: 'merge', label: 'Merge a duplicate into this record', ask: 'source', adminOnly: true }] },
+                          actions: [{ name: 'merge', label: 'Merge a duplicate into this record', ask: 'hospital_number', adminOnly: true }] },
   // The encounter itself. Closing settles the booking and the case report with
   // it, so it goes through the action rather than a PATCH of status.
   'consultations':     { title: 'Visits',             group: 'Clinical', report: true, filters: [SEX_FILTER], fileFrom: ['prescriptions', 'case-reports'],
+                          ...VISIT_SHEET,
                           actions: [{ name: 'diagnose', label: 'Record diagnosis', ask: 'diagnosis',
                                       choose: 'severity:mild,moderate,severe,critical', when: ['open'] },
                                     { name: 'close', label: 'Close visit', ask: 'follow_up_on,notes',
@@ -548,8 +626,9 @@ function navHtml() {
     if (r.adminOnly && !['super_admin', 'tenant_admin'].includes(ME?.role)
         && !(slug === 'users' && hasPriv('manage_users'))) continue;
     if (r.group === 'Pharmacy' && !PHARMACY_STAFF_ROLES.has(ME?.role)) continue;
-    // Patient data is clinical-staff only (apps.accounts.permissions.IsClinicalStaff).
-    if (r.group === 'Clinical' && !Api.roleCanReport(ME?.role)) continue;
+    // Patient data is clinical-staff only (apps.accounts.permissions.IsClinicalStaff);
+    // the visits and orders beside it are read by the whole tenant.
+    if (r.roles === 'clinical' && !Api.roleCanReport(ME?.role)) continue;
     // Insurance work is the pharmacy's, but it is its own desk — schemes,
     // members, prices, authorisations, claims — so it is read out of the
     // Pharmacy group into one of its own. ``group`` stays 'Pharmacy': it is
@@ -828,6 +907,8 @@ function makeSearchable(sel, { placeholder = 'Type to search…' } = {}) {
     for (const [label, id] of byLabel) {
       if (id === want) { hidden.value = id; box.value = label; break; }
     }
+    // Not an id it holds: the nearest label, for a place spelled another way.
+    if (!hidden.value && want) pick(nearestPlace(labels, want) || null);
     close();
   };
 
@@ -1792,7 +1873,7 @@ async function viewList(slug) {
         <button>Search</button>
       </form>
       ${res.report ? reportSummaryHtml(slug, rows) : ''}
-      ${rows.length ? tableHtml(slug === 'prescriptions' ? collapseByGroup(rows) : rows,
+      ${rows.length ? tableHtml(slug === 'prescriptions' ? collapseByGroup(rows) : slug === 'consultations' ? visitRows(rows) : rows,
         res.noLink ? null : (r) => `#/r/${slug}/${r.id}`,
         slug === 'prescriptions' && canWrite ? cancelButtonHtml : null,
         canWrite && res.inline ? { slug, fields: res.inline } : null) : '<p class="muted">Nothing here yet.</p>'}
@@ -1895,7 +1976,12 @@ async function viewDetail(slug, id) {
     const acts = visibleActions(res, obj);
     const actsHtml = acts.map((a) =>
       `<button class="btn${a.danger ? ' danger' : ''}" data-pa="${a.name}" data-ask="${a.ask || ''}" data-choose="${a.choose || ''}"
-        data-body="${a.body ? esc(JSON.stringify(a.body)) : ''}">${esc(a.label)}</button>`).join('');
+        data-body="${a.body ? esc(JSON.stringify(a.body)) : ''}">${
+          esc(a.name === 'diagnose' && obj.case_report_notes ? 'Change diagnosis' : a.label)}</button>`).join('');
+    // What the registry holds on the patient this was filed for — read off the
+    // record rather than asked again, with an allergy in front of whoever is
+    // about to prescribe (the app's _PatientDetails panel).
+    const withPatient = obj.patient && ['consultations', 'prescriptions'].includes(slug);
     if (res.receipt) actions += `<button id="receipt" class="btn ghost">Print receipt</button>`;
     // Filing a record against the one on screen. The links travel as query
     // params so the new-record form opens with them already filled in. A drug
@@ -1915,6 +2001,7 @@ async function viewDetail(slug, id) {
       ${tenantHtml}${workflowHtml}
       ${actsHtml ? `<div class="card"><h3>Actions</h3><div class="actions">${actsHtml}</div></div>` : ''}
       ${fileHtml}
+      ${withPatient ? '<div class="card"><h3>Patient</h3><div id="rec-patient"><p class="loading">Loading…</p></div></div>' : ''}
       <div class="card">${dlHtml(obj)}</div>
       ${slug === 'prescriptions' && obj.group ? `<div class="card"><h3>Prescribed together</h3>
         <div id="rx-group"><p class="loading">Loading…</p></div></div>` : ''}
@@ -1925,6 +2012,11 @@ async function viewDetail(slug, id) {
         + preauthTrailHtml() : ''}
       ${res.extra === 'statement' ? '<div id="statement"><p class="loading">Loading…</p></div>' : ''}`);
     if (res.receipt) $('#receipt').onclick = () => printReceipt(id);
+    if (withPatient) {
+      Api.get(`/api/patients/${obj.patient}/`).then(
+        (p) => { $('#rec-patient').innerHTML = `<a href="#/r/patients/${p.id}">${patientHitHtml(p)}</a>`; },
+        () => { $('#rec-patient').innerHTML = `<p class="muted">${esc(obj.patient_name || `#${obj.patient}`)}</p>`; });
+    }
     if (res.extra === 'purchase') wirePurchaseReceive(id, () => viewDetail(slug, id));
     if (res.extra === 'count') wireStockCount(id, () => viewDetail(slug, id));
     if (res.extra === 'statement') loadStatement(slug, id);
@@ -1937,11 +2029,12 @@ async function viewDetail(slug, id) {
       b.onclick = async () => {
         // ``body`` is what the action always sends — the half of the call the
         // label already states, so the user is not prompted for it.
-        const body = b.dataset.body ? JSON.parse(b.dataset.body) : {};
+        let body = b.dataset.body ? JSON.parse(b.dataset.body) : {};
         // ``ask`` is one key, or several comma-separated — an optional one
         // left blank (a drawer's closing note) stays out of the body.
         for (const key of (b.dataset.ask || '').split(',').filter(Boolean)) {
-          const answer = prompt(`${b.textContent} — ${key}:`);
+          // A diagnosis already on the note comes up to be changed, not retyped.
+          const answer = prompt(`${b.textContent} — ${key}:`, key === 'diagnosis' ? obj.case_report_notes || '' : '');
           if (answer === null) return;
           if (answer !== '') body[key] = answer;
         }
@@ -1955,9 +2048,31 @@ async function viewDetail(slug, id) {
           if (!options.includes(picked)) return toast(`${key} must be one of ${options.join(', ')}.`, true);
           body[key] = picked;
         }
+        // Say so before the round trip that would refuse it.
+        if (body.disposition === 'follow_up' && !body.follow_up_on) {
+          return toast('A follow-up disposition needs a follow-up date.', true);
+        }
         try {
+          // The duplicate is named by hospital number; the API wants its id.
+          if (slug === 'patients' && b.dataset.pa === 'merge') {
+            const wanted = String(body.hospital_number || '').trim();
+            if (!wanted) return;
+            const { rows } = await Api.list(rpath(slug), { search: wanted });
+            const twin = rows.find((r) => r.hospital_number === wanted && String(r.id) !== String(id));
+            if (!twin) return toast(`No other patient with hospital number ${wanted}.`, true);
+            if (!confirm(`Merge ${twin.full_name} (${wanted}) into this record? Its records move here. Cannot be undone.`)) return;
+            body = { source: twin.id };
+          }
           const r = await Api.post(rdetail(slug, `${id}/${b.dataset.pa}/`), body);
-          toast(r?.message || 'Done.');
+          if (r?.moved) {
+            const moved = Object.values(r.moved).reduce((sum, n) => sum + n, 0);
+            toast(`Merged — ${moved} record(s) moved here.`);
+            return viewDetail(slug, id);
+          }
+          // Most visits end with something to take home, so the toast carries
+          // the next step; the "+ Prescription" link is on the page below.
+          toast(r?.message || (slug === 'consultations' && b.dataset.pa === 'close'
+            ? 'Visit closed. Write the prescription under "File a record".' : 'Done.'));
           viewDetail(slug, id);
         } catch (e) { toast(e.message, true); }
       };
@@ -2047,48 +2162,124 @@ async function viewForm(slug, id, query) {
   try {
     const metaPath = id ? rdetail(slug, `${id}/`) : rpath(slug);
     const prefill = Object.fromEntries(new URLSearchParams(query || ''));
+    // Where the form returns to when opened off a record — one of our own
+    // pages only, so a link can't send the form anywhere else.
+    if (prefill.back && !prefill.back.startsWith('#/')) delete prefill.back;
     const [meta, current] = await Promise.all([
       Api.options(metaPath),
-      id ? Api.get(rdetail(slug, `${id}/`)) : Promise.resolve(prefill),
+      id ? Api.get(rdetail(slug, `${id}/`)) : Promise.resolve({ ...res.defaults, ...prefill }),
     ]);
     const fields = meta?.actions?.PUT || meta?.actions?.POST;
     if (!fields) return errorBox(new Error('You do not have permission to edit this resource.'));
     if (isUserRes(slug)) narrowUserFields(fields);
-    const inputs = Object.entries(fields)
-      .filter(([, f]) => !f.read_only)
-      .map(([name, f]) => fieldHtml(name, f, current[name])).join('');
+    const { hints = {}, labels = {} } = res;
+    const parts = Object.fromEntries(Object.entries(fields)
+      .filter(([name, f]) => !f.read_only && !res.hide?.includes(name))
+      .map(([name, f]) => [name, fieldHtml(name,
+        { ...f, label: labels[name] || f.label, help_text: f.help_text || hints[name] }, current[name])]));
     // A visit rarely calls for one drug. Extra rows live outside the <form>
     // on purpose: inside it, a second field named `medication` would collide
     // with the first and collectForm would read neither.
     const multiDrug = slug === 'prescriptions' && !id;
-    render(`<div class="page-head"><h2>${id ? 'Edit' : 'New'} — ${esc(res.title)}</h2></div>
-      <form id="f" class="card form-card">${inputs}
-        <div class="actions">
-          <button type="submit" class="btn">${id ? 'Save' : 'Create'}</button>
-          <a class="btn ghost" href="#/r/${slug}${id ? '/' + id : ''}">Cancel</a>
-        </div>
-      </form>
+    // A new visit takes its diagnosis here, in the clinician's own words, and
+    // files it through the diagnose action once the visit exists — the server
+    // matches the text to the catalog and files the case report (same as the
+    // mobile form). Neither name is a serializer field, so collectForm skips
+    // them. A visit that reached no diagnosis is still a visit.
+    const withDx = slug === 'consultations' && !id;
+    if (withDx) {
+      // The catalog's names are offered as the list drops down; a diagnosis
+      // the catalog has never heard of is still typed and still filed.
+      parts.diagnosis = `<label data-field="diagnosis">Diagnosis (optional)
+        <input name="diagnosis" maxlength="255" list="dx-list" placeholder="Not diagnosed yet" autocomplete="off">
+        <datalist id="dx-list"></datalist>
+        <small class="muted">Filed as a case report for this visit; matched to the catalog where it can be.</small></label>`;
+      parts.severity = `<label data-field="severity">Severity
+        <select name="severity">${['mild', 'moderate', 'severe', 'critical'].map((v) =>
+          `<option value="${v}">${v}</option>`).join('')}</select></label>`;
+    }
+    const sheet = !id && res.form;
+    render(`<div class="sheet">
+      <div class="page-head"><h2>${sheet ? esc(sheet.title) : `${id ? 'Edit' : 'New'} — ${esc(res.title)}`}</h2></div>
+      <form id="f" class="card form-card">${layoutHtml(res.layout, parts)}</form>
       ${multiDrug ? `<div id="drugs"></div>
       <div class="actions">
-        <button type="button" id="add-drug" class="btn ghost">Add another drug</button>
-      </div>` : ''}`);
-    wirePickerFields($('#f'));
+        <button type="button" id="add-drug" class="btn ghost">+ Add another drug</button>
+      </div>` : ''}
+      <div class="actions">
+        <button type="submit" form="f" class="btn">${id ? 'Save' : sheet ? esc(sheet.submit) : 'Create'}</button>
+        ${prefill.back ? `<a class="btn ghost" href="${esc(prefill.back)}">Skip — nothing to prescribe</a>`
+          : `<a class="btn ghost" href="#/r/${slug}${id ? '/' + id : ''}">Cancel</a>`}
+      </div></div>`);
+    if (withDx) {
+      // ponytail: the first 100 names; the server matches whatever is typed.
+      Api.list('/api/diseases/', { page_size: 100 }).then(({ rows }) => {
+        $('#dx-list').innerHTML = rows.map((d) => `<option value="${esc(d.name)}"></option>`).join('');
+      }).catch(() => {});
+    }
+    // A patient signs in on the public role; a doctor's account is nobody's
+    // portal. The account already linked still resolves by id, whatever it is.
+    // The place list is filled before the patient is resolved, so the region
+    // carried off their record has a row to land on.
+    await wireRegionField($('#f'), current);
+    wirePickerFields($('#f'), slug === 'patients' ? { user: { role: 'public' } } : {}, current);
     wireItemField($('#f'), current.item);
     wireRelFields($('#f'), current);
-    wireRegionField($('#f'), current);
     wireChoiceFields($('#f'));
-    const drugRows = multiDrug ? wireExtraDrugs(fields) : null;
+    wireFormRules($('#f'), res.rules);
+    const drugRows = multiDrug ? wireExtraDrugs(fields, res) : null;
     $('#f').onsubmit = async (e) => {
       e.preventDefault();
       const body = prescriptionPayload(collectForm(e.target, fields),
         drugRows ? [...drugRows.children].map((row) => collectRow(row, fields)) : []);
+      if (slug === 'patients') {
+        const problem = patientFormError(body);
+        if (problem) return toast(problem, true);
+        // Only a deceased patient carries one; anything else clears it, which
+        // is how the backend lets a wrongly-marked patient come back.
+        if (body.status !== 'deceased') body.date_of_death = null;
+      }
+      const send = () => id ? Api.patch(rdetail(slug, `${id}/`), body) : Api.post(rpath(slug), body);
       try {
-        const saved = id ? await Api.patch(rdetail(slug, `${id}/`), body)
-          : await Api.post(rpath(slug), body);
-        toast('Saved.');
+        let saved;
+        try { saved = await send(); }
+        catch (err) {
+          // The registry already holds this name and date of birth. Namesakes
+          // are common, so reception decides; only they can see both people.
+          const twin = err.errors?.allow_duplicate;
+          if (!twin) throw err;
+          if (!confirm(`${Array.isArray(twin) ? twin[0] : twin}\n\nRegister anyway?`)) return;
+          body.allow_duplicate = true;
+          saved = await send();
+        }
         // A prescription of several drugs comes back as the rows it wrote.
         const first = Array.isArray(saved) ? saved[0] : saved;
-        location.hash = `#/r/${slug}/${first?.id ?? id ?? ''}`;
+        const dx = withDx ? e.target.elements.diagnosis.value.trim() : '';
+        let visit = first;
+        if (dx && first?.id) {
+          try {
+            visit = await Api.post(rdetail(slug, `${first.id}/diagnose/`),
+              { diagnosis: dx, severity: e.target.elements.severity.value });
+          } catch (err) {
+            // The visit is saved; the diagnosis can be recorded off its page.
+            toast(`Visit saved, but the diagnosis was not: ${err.message}`, true);
+            location.hash = `#/r/${slug}/${first.id}`;
+            return;
+          }
+        }
+        // Most visits end with something to take home, so a new visit goes
+        // straight on to the prescription — patient and case already linked —
+        // with a way past it for the visit that needs none.
+        if (withDx && visit?.id) {
+          const link = new URLSearchParams({ back: `#/r/${slug}/${visit.id}` });
+          if (visit.patient) link.set('patient', visit.patient);
+          if (visit.case_report) link.set('case_report', visit.case_report);
+          toast('Visit started. Prescribe, or skip if there is nothing to take home.');
+          location.hash = `#/r/prescriptions/new?${link}`;
+          return;
+        }
+        toast('Saved.');
+        location.hash = prefill.back || `#/r/${slug}/${first?.id ?? id ?? ''}`;
       } catch (err) {
         if (!id && res.report && !(err instanceof Api.ApiError)) {
           // Network failure on a new report: queue it instead of losing it.
@@ -2137,18 +2328,25 @@ function narrowUserFields(fields) {
 }
 
 /* Repeat the drug fields on demand, so one visit's drugs are prescribed in one
- * go. Returns the container the rows are added to. */
-function wireExtraDrugs(fields) {
+ * go: a formset of numbered drug cards under the first, each reading the way
+ * the sheet does — same labels, hints and type-ahead drug pick. Returns the
+ * container the rows are added to. */
+function wireExtraDrugs(fields, { labels = {}, hints = {} }) {
   const box = $('#drugs');
+  const renumber = () => [...box.children].forEach((row, i) => { row.querySelector('h3').textContent = `Drug ${i + 2}`; });
   $('#add-drug').onclick = () => {
     const row = document.createElement('div');
     row.className = 'card form-card';
-    row.innerHTML = RX_DRUG_FIELDS
+    row.innerHTML = '<h3></h3>' + RX_DRUG_FIELDS
       .filter((n) => fields[n] && !fields[n].read_only)
-      .map((n) => fieldHtml(n, { ...fields[n], required: false }, '')).join('')
+      .map((n) => fieldHtml(n, { ...fields[n], required: false,
+        label: labels[n] || fields[n].label, help_text: fields[n].help_text || hints[n] }, '')).join('')
       + '<div class="actions"><button type="button" class="btn ghost">Remove</button></div>';
-    row.querySelector('button').onclick = () => row.remove();
+    row.querySelector('.actions button').onclick = () => { row.remove(); renumber(); };
     box.append(row);
+    wireChoiceFields(row);
+    renumber();
+    row.querySelector('input, select')?.focus();
   };
   return box;
 }
@@ -2237,6 +2435,52 @@ function drugLabel(drug) {
   ].filter((v) => v != null && String(v).trim() !== '').join(' ');
 }
 
+/* The rules the API enforces on a patient, checked before the round trip so
+ * the message sits next to the fields (the app's patientFormError). Null when
+ * the form is submittable. */
+function patientFormError(body) {
+  if (!String(body.first_name || '').trim() || !String(body.last_name || '').trim()) {
+    return 'First and last name are required.';
+  }
+  // An NHIA patient is only NHIA if the scheme can be billed.
+  if (body.patient_type === 'nhia' && !String(body.nhis_number || '').trim()) {
+    return 'NHIS number is required for NHIA patients.';
+  }
+  return null;
+}
+
+/* Vital field name as the API sends it -> what a clinician calls it. The
+ * abnormal-vitals list names fields, not labels. */
+const VITAL_LABELS = {
+  temperature_c: 'Temp', pulse_bpm: 'Pulse', systolic_bp: 'Systolic', diastolic_bp: 'Diastolic',
+  respiratory_rate: 'Resp rate', oxygen_saturation: 'SpO2', weight_kg: 'Weight',
+  height_cm: 'Height', bmi: 'BMI',
+};
+
+/* A visit row as the app's card reads it: the diagnosis off the linked case
+ * (the catalog name where the text matched one, the written text either way),
+ * the triage readings on one line, and the readings outside the triage band
+ * named — a list the table would otherwise drop as an object column. */
+function visitRows(rows) {
+  return rows.map((r) => {
+    const vitals = [
+      r.temperature_c != null ? `${r.temperature_c} C` : '',
+      r.pulse_bpm != null ? `P ${r.pulse_bpm}` : '',
+      String(r.blood_pressure || '').trim() ? `BP ${r.blood_pressure}` : '',
+      r.oxygen_saturation != null ? `SpO2 ${r.oxygen_saturation}%` : '',
+      r.bmi != null ? `BMI ${r.bmi}` : '',
+    ].filter(Boolean).join(' · ');
+    const abnormal = (r.abnormal_vitals || []).map((v) => VITAL_LABELS[v] || v).join(', ');
+    return {
+      id: r.id, status: r.status, patient_name: r.patient_name,
+      chief_complaint: r.chief_complaint,
+      diagnosis: String(r.case_report_disease || '').trim() || r.case_report_notes || '',
+      vitals, outside_band: abnormal ? `\u26a0 ${abnormal}` : '',
+      disposition: r.disposition, follow_up_on: r.follow_up_on,
+    };
+  });
+}
+
 /* Whether a field takes several values. OPTIONS says so for a relation (see
  * config/metadata.py); M2M_FIELDS still names the ones an older backend can't,
  * and privileges is a list of strings, not of ids. */
@@ -2288,6 +2532,30 @@ function makeMultiPicker(sel) {
     paint();
   });
   paint();
+}
+
+/* The form in the order the app's sheet asks it, two to a row where the
+ * sheet pairs them (see PATIENT_SHEET); whatever the layout does not name
+ * follows in API order. `parts` maps field name -> its rendered label. */
+function layoutHtml(layout, parts) {
+  const rest = { ...parts };
+  const out = [];
+  for (const slot of layout || []) {
+    const names = [].concat(slot).filter((n) => rest[n]);
+    if (!names.length) continue;
+    out.push(names.length > 1 ? `<div class="row2">${names.map((n) => rest[n]).join('')}</div>` : rest[names[0]]);
+    for (const n of names) delete rest[n];
+  }
+  return out.join('') + Object.values(rest).join('');
+}
+
+/* What one field decides about another — shown, hidden, required — applied
+ * now and on every keystroke, same as the sheet rebuilding itself. */
+function wireFormRules(form, rules) {
+  if (!rules) return;
+  rules(form);
+  form.addEventListener('input', () => rules(form));
+  form.addEventListener('change', () => rules(form));
 }
 
 function fieldHtml(name, f, value) {
@@ -2442,39 +2710,111 @@ function picker(box, out, cfg, onPick) {
   const bind = (r) => { out.innerHTML = cfg.hit(r); onPick(r); };
   let timer;
   let latest = 0;  // only the newest reply may paint
+  let shown = [];  // the rows the menu under the box is listing
+  let active = -1; // the one the arrow keys are on
+  out.classList?.add('pick-out');
+  // The matches drop down under the box as the search comes back, the way
+  // the app's search sheet lists them: click or arrow-and-Enter to link one.
+  const menu = () => {
+    out.innerHTML = `<div class="pick-menu" role="listbox">${shown.map((r, i) =>
+      `<div class="search-opt${i === active ? ' active' : ''}" role="option" aria-selected="${i === active}"
+        data-hit="${i}">${cfg.hit(r)}</div>`).join('')}</div>`;
+  };
+  const pick = (i) => {
+    const r = shown[i];
+    if (!r) return;
+    ++latest; shown = []; active = -1;
+    box.value = cfg.name(r);  // the box reads as the pick, not the fragment typed
+    bind(r);
+  };
   const lookup = async () => {
     onPick(null);
     const q = box.value.trim();
+    shown = []; active = -1;
     if (!q) return (out.textContent = '');
     const seq = ++latest;
     out.textContent = 'Searching…';
     try {
-      const { rows } = await Api.list(cfg.path, { search: q, page_size: 5 });
+      const { rows } = await Api.list(cfg.path, { search: q, page_size: 5, ...cfg.query });
       if (seq !== latest) return;  // a later keystroke already asked
       if (!rows.length) return (out.textContent = cfg.none);
       if (rows.length === 1) return bind(rows[0]);
-      out.innerHTML = `<span class="muted">${esc(cfg.which)}</span><div class="chips">`
-        + rows.map((r, i) => `<button type="button" class="chip pick" data-hit="${i}">${cfg.hit(r)}</button>`).join('')
-        + '</div>';
-      for (const b of out.querySelectorAll('[data-hit]')) {
-        b.onclick = () => { ++latest; bind(rows[Number(b.dataset.hit)]); };
-      }
+      shown = rows;
+      menu();
     } catch (e) { if (seq === latest) out.textContent = e.message; }
   };
   box.oninput = () => { clearTimeout(timer); timer = setTimeout(lookup, 250); };
+  box.onkeydown = (e) => {
+    if (!shown.length) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      active = (active + (e.key === 'ArrowDown' ? 1 : -1) + shown.length) % shown.length;
+      menu();
+    } else if (e.key === 'Enter' && active >= 0) {
+      e.preventDefault();
+      pick(active);
+    } else if (e.key === 'Escape') {
+      shown = []; out.textContent = cfg.which;
+    }
+  };
+  // mousedown runs before the box's blur, so the row is picked before the
+  // menu is taken down.
+  out.onmousedown = (e) => {
+    const opt = e.target.closest?.('[data-hit]');
+    if (!opt) return;
+    e.preventDefault();
+    pick(Number(opt.dataset.hit));
+  };
+  box.onblur = () => { if (shown.length) { shown = []; out.textContent = cfg.which; } };
   return { bind };
 }
 
+/* The rows a visit can hang off are the patient's own: their cases, and their
+ * bookings still to be kept. OPTIONS lists the whole tenant's, so once a
+ * patient is linked each select narrows to theirs — what the mobile form's
+ * _LinkedRowPicker does. A case picked earlier stays picked if it is theirs. */
+const LINKED_ROWS = {
+  case_report: ['/api/case-reports/', {},
+    (c) => `${c.disease_name || 'Case'} · ${c.outcome || ''}`],
+  appointment: ['/api/appointments/', { status: 'scheduled' },
+    (a) => `${String(a.reason || '').trim() || 'Appointment #' + a.id} · ${a.mode === 'telemedicine' ? 'tele' : 'in-person'}`],
+};
+
+async function narrowLinkedRows(form, patientId, current = {}) {
+  for (const [name, [path, query, text]] of Object.entries(LINKED_ROWS)) {
+    const field = form.querySelector(`label[data-field="${name}"]`);
+    if (!field) continue;
+    // A case the form was opened with (a visit's, just filed) may be newer
+    // than the cached option list, so the record's own value still counts.
+    const keep = form.elements[name]?.value || String(current[name] ?? '');
+    let rows;
+    try { rows = (await Api.list(path, { ...query, patient: patientId, page_size: 100 })).rows; }
+    catch { continue; }  // the tenant-wide list still stands
+    // A short list of theirs replaces whatever control the tenant-wide list
+    // came up as (a select, or the type-ahead a long one turns into).
+    const sel = document.createElement('select');
+    sel.name = name;
+    sel.innerHTML = '<option value="">Not linked</option>' + rows.map((r) =>
+      `<option value="${r.id}"${String(r.id) === keep ? ' selected' : ''}>${esc(text(r))}</option>`).join('');
+    const title = field.firstChild?.nodeType === Node.TEXT_NODE ? field.firstChild.textContent : label(name);
+    field.replaceChildren(title, sel, Object.assign(document.createElement('em'), { className: 'field-err' }));
+  }
+}
+
 /* Whichever type-ahead fields the generated form has. */
-function wirePickerFields(form) {
-  for (const [name, cfg] of Object.entries(PICKERS)) {
+function wirePickerFields(form, queries = {}, current = {}) {
+  for (const [name, base] of Object.entries(PICKERS)) {
     const box = form.querySelector(`#${name}-q`);
     if (!box) continue;
+    const cfg = queries[name] ? { ...base, query: queries[name] } : base;
     const hidden = form.elements[name];
     const out = form.querySelector(`#${name}-hit`);
     const bound = picker(box, out, cfg, (row) => {
       hidden.value = row ? row.id : '';
-      if (row && name === 'patient') carryPatientFields(form, row);
+      if (row && name === 'patient') {
+        carryPatientFields(form, row);
+        narrowLinkedRows(form, row.id, current);
+      }
     });
     // A record that already names one — an edit, or a form opened from that
     // record — shows who it is rather than an id nobody can read.
@@ -2590,14 +2930,29 @@ async function wireRelFields(form, current) {
 /* Fields the patient's own record already answers, so linking a patient fills
  * them instead of asking again. A value already typed stands: the visit can be
  * somewhere other than where the patient lives. */
+/* The row of a closed place list that a record's spelling of the place names:
+ * "Daura" for "Daura, Katsina", "Ikeja LGA" for "Ikeja, Lagos". '' when none
+ * does — a wrong place is worse than a blank one. */
+function nearestPlace(rows, value) {
+  const want = String(value).trim().toLowerCase();
+  if (!want) return '';
+  const exact = rows.find((r) => r.toLowerCase() === want);
+  if (exact) return exact;
+  return rows.find((r) => r && (r.toLowerCase().startsWith(want)
+    || want.startsWith(r.toLowerCase().split(',')[0]))) || '';
+}
+
 function carryPatientFields(form, patient) {
   for (const name of ['region']) {
     const elm = form.elements[name];
     const value = String(patient[name] ?? '').trim();
     if (!elm || !value || String(elm.value ?? '').trim() !== '') continue;
     elm.value = value;
-    // A <select> ignores a value it has no option for; leave it blank then.
-    if (elm.tagName === 'SELECT' && elm.value !== value) elm.value = '';
+    // A <select> ignores a value it has no option for; the nearest row that
+    // names the place stands in, or the field stays blank.
+    if (elm.tagName === 'SELECT' && elm.value !== value) {
+      elm.value = nearestPlace([...elm.options].map((o) => o.value), value);
+    }
     // A searchable picker keeps its value in a hidden input and shows the label
     // in the box beside it, so both have to move together.
     elm.showPick?.(value);
@@ -2881,9 +3236,10 @@ const CLINICAL_WORK = {
   chew:    ['chw-reports', 'prescriptions', 'immunizations', 'case-reports', 'adverse-reactions'],
 };
 
-/* The ward's own home: how much of each report exists, and the latest few of
-   the one this cadre files most. Counts come from the list endpoints' own
-   pagination — no dashboard endpoint to keep in step with the registry. */
+/* The ward's own home: the same banner a patient lands on, with the day's
+   workload as the facts; a box to find a patient by phone or name; and three quick
+   actions: new consultation, medication order, patient register. Counts come from the list endpoints'
+   own pagination — no dashboard endpoint to keep in step with the registry. */
 async function viewClinical() {
   if (!await ensureChrome()) return;
   if (!isClinicalStaff() && ME?.role !== 'super_admin') {
@@ -2891,25 +3247,42 @@ async function viewClinical() {
   }
   spinner();
   const slugs = CLINICAL_WORK[ME.role] || CLINICAL_WORK.nurse;
-  const lists = await Promise.all(slugs.map((slug) =>
-    Api.list(rpath(slug), { ordering: '-created_at' }).catch(() => null)));
-  const tile = (slug, list) => `<a class="tile linktile kpi-tile" href="#/r/${slug}">
-    <span class="tile-label">${esc(RESOURCES[slug].title)}</span>
-    <span class="tile-val">${esc(list ? fmtVal(list.count ?? list.rows.length) : '—')}</span></a>`;
+  const count = (list) => (list ? fmtVal(list.count ?? list.rows.length) : '—');
+  const [open, latest, ...lists] = await Promise.all([
+    Api.list(rpath('consultations'), { status: 'open', ordering: '-created_at' }).catch(() => null),
+    Api.list(rpath('consultations'), { ordering: '-created_at', page_size: 100 }).catch(() => null),
+    ...slugs.map((slug) => Api.list(rpath(slug), { ordering: '-created_at' }).catch(() => null)),
+  ]);
   const [primary] = slugs;
-  const recent = lists[0]?.rows?.slice(0, 5) || [];
-  render(`
-    <div class="page-head"><h2>Clinical</h2>
-      <a class="btn" href="#/r/${primary}/new">+ ${esc(RESOURCES[primary].title.replace(/s$/, ''))}</a></div>
-    <div class="tiles">${slugs.map((slug, i) => tile(slug, lists[i])).join('')}</div>
-    <div class="card"><h3>Latest ${esc(RESOURCES[primary].title.toLowerCase())}</h3>
-      ${recent.length ? tableHtml(recent, (r) => `#/r/${primary}/${r.id}`)
-        : '<p class="muted">Nothing filed yet.</p>'}
+  // The API has no date filter, so today's visits are counted off the newest
+  // page. ponytail: 100 rows caps it; add a created_after filter past that.
+  const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  const now = new Date();
+  const seenToday = latest ? latest.rows.filter((r) => sameDay(new Date(r.created_at), now)).length : '—';
+  const stats = [['Open visits', count(open)], ['Visits today', seenToday],
+    ...slugs.map((slug, i) => [RESOURCES[slug].title, count(lists[i])])];
+  render(`${heroHtml(ME.username || 'there', [label(ME.role), ME.tenant_name].filter(Boolean).join(' · '), stats,
+      `<a class="btn hero-link" href="#/r/${primary}/new">+ ${esc(RESOURCES[primary].title.replace(/s$/, ''))}</a>`)}
+    <div class="card"><h3>Find a patient</h3>
+      <input id="patient-q" placeholder="${PICKERS.patient.placeholder}" inputmode="tel" autocomplete="off">
+      <div id="patient-hit"></div>
+      <div id="patient-go" class="actions" hidden></div>
     </div>
-    <h3>File a report</h3>
-    <div class="tiles">${slugs.map((slug) =>
+    <h3>Quick actions</h3>
+    <div class="tiles">${[['consultations', 'New consultation'], ['prescriptions', 'Medication order'], ['patients', 'Patient register']].map(([slug, title]) =>
       `<a class="tile linktile" href="#/r/${slug}/new"><span class="tile-label">New</span>
-        <span class="tile-val">${esc(RESOURCES[slug].title)}</span></a>`).join('')}</div>`);
+        <span class="tile-val">${title}</span></a>`).join('')}</div>`);
+  // One patient found: open the record, or go straight to a visit or a
+  // prescription with them already filled in.
+  const go = $('#patient-go');
+  picker($('#patient-q'), $('#patient-hit'), PICKERS.patient, (p) => {
+    go.hidden = !p;
+    if (!p) return;
+    go.innerHTML = `<a class="btn" href="#/r/consultations/new?patient=${p.id}">+ Start visit</a>
+      <a class="btn ghost" href="#/r/prescriptions/new?patient=${p.id}">+ Prescribe</a>
+      <a class="btn ghost" href="#/r/patients/${p.id}">Open record</a>`;
+  });
+  $('#patient-q').focus();
 }
 
 /* -------------------------------------------------------------- insurer */
@@ -3870,41 +4243,49 @@ const portalDetails = (me) => Object.fromEntries(
   PORTAL_FIELDS.filter((k) => me[k] !== undefined).map((k) => [k, me[k]])
 );
 
-// The welcome banner a patient lands on: their name, a greeting for the time
-// of day, and the handful of facts a nurse asks for first. The full record
-// lives under Profile.
-function portalHeroHtml(me, meds) {
+// The welcome banner: a name, a greeting for the time of day, one line of
+// who they are, and a handful of facts. The patient and the clinician land on
+// the same shape; only the facts differ.
+function heroHtml(name, sub, stats, link) {
   const h = new Date().getHours();
   const greet = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
-  const name = me.full_name || ME.username || 'there';
   const initials = name.split(/\s+/).slice(0, 2).map((w) => w[0] || '').join('').toUpperCase();
-  const who = [me.sex === 'M' ? 'Male' : me.sex === 'F' ? 'Female' : me.sex,
-    me.age != null ? `${me.age} yrs` : ''].filter(Boolean).join(' · ');
-  const stat = (label, v) => `<div class="hero-stat"><span>${esc(label)}</span><strong>${esc(fmtVal(v))}</strong></div>`;
   return `<section class="hero">
     <div class="hero-top">
       <div class="hero-avatar" aria-hidden="true">${esc(initials)}</div>
       <div>
         <p class="hero-greet">${greet},</p>
         <h2 class="hero-name">${esc(name)}</h2>
-        <p class="hero-sub">${esc(who)}${who && me.hospital_number ? ' · ' : ''}${me.hospital_number ? 'Hospital No. ' + esc(me.hospital_number) : ''}</p>
+        <p class="hero-sub">${esc(sub)}</p>
       </div>
-      <a href="#/profile" class="btn hero-link">View full profile</a>
+      ${link}
     </div>
-    <div class="hero-stats">
-      ${stat('Blood group', me.blood_group)}
-      ${stat('Genotype', me.genotype)}
-      ${stat('Scheme', me.patient_type_display)}
-      ${stat('NHIS number', me.nhis_number)}
-      ${stat('Medications collected', meds.length)}
-      ${stat('Allergies', me.allergies)}
+    <div class="hero-stats">${stats.map(([label, v]) =>
+      `<div class="hero-stat"><span>${esc(label)}</span><strong>${esc(fmtVal(v))}</strong></div>`).join('')}
     </div>
   </section>`;
 }
 
+// The patient's banner: the handful of facts a nurse asks for first. The
+// full record lives under Profile.
+function portalHeroHtml(me, meds) {
+  const name = me.full_name || ME.username || 'there';
+  const who = [me.sex === 'M' ? 'Male' : me.sex === 'F' ? 'Female' : me.sex,
+    me.age != null ? `${me.age} yrs` : '',
+    me.hospital_number ? 'Hospital No. ' + me.hospital_number : ''].filter(Boolean).join(' · ');
+  return heroHtml(name, who, [
+    ['Blood group', me.blood_group],
+    ['Genotype', me.genotype],
+    ['Scheme', me.patient_type_display],
+    ['NHIS number', me.nhis_number],
+    ['Medications collected', meds.length],
+    ['Allergies', me.allergies],
+  ], '<a href="#/profile" class="btn hero-link">View full profile</a>');
+}
+
 /* The people on the principal's card. A dependent is named here and waits
    on the scheme; its answer shows as the status, and can change later. A
-   patient on no scheme has nobody to ask, so the form stays hidden. */
+   patient on no scheme has nobody to ask, so the button stays hidden. */
 function dependentsHtml(cards, rows) {
   const list = !rows.length
     ? '<p class="muted">Nobody added yet.</p>'
@@ -3921,8 +4302,8 @@ function dependentsHtml(cards, rows) {
     return list + '<p class="muted">You are not on a scheme yet, so there is nobody to ask.</p>';
   }
   return `${list}
+    <details class="add-dependent"><summary class="btn">Add a dependent</summary>
     <form id="dependent-form" class="form-card">
-      <h4>Add a dependent</h4>
       ${cards.length > 1 ? `<label>Under which membership
         <select name="enrollment">${cards.map((c) =>
           `<option value="${c.id}">${esc(c.hmo_name)} · ${esc(c.member_number)}</option>`).join('')}</select></label>` : ''}
@@ -3935,7 +4316,7 @@ function dependentsHtml(cards, rows) {
       <label>Date of birth<input name="date_of_birth" type="date"></label>
       <label>Phone (optional)<input name="phone" maxlength="20"></label>
       <button type="submit" class="btn">Send for approval</button>
-    </form>`;
+    </form></details>`;
 }
 
 async function viewPortal() {

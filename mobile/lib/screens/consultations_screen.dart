@@ -613,12 +613,15 @@ class _CloseSheetState extends State<_CloseSheet> {
 }
 
 /// The new-visit sheet, for callers outside this screen — the ward's FAB
-/// files into the register a cadre files most, and this is one of them.
-Widget consultationForm() => const _Form();
+/// files into the register a cadre files most, and this is one of them. Pass
+/// [patient] (their row) when the visit is started off a found record.
+Widget consultationForm({Map<String, dynamic>? patient}) =>
+    _Form(patient: patient);
 
 class _Form extends StatefulWidget {
   final Map<String, dynamic>? existing;
-  const _Form({this.existing});
+  final Map<String, dynamic>? patient;
+  const _Form({this.existing, this.patient});
 
   @override
   State<_Form> createState() => _FormState();
@@ -694,10 +697,16 @@ class _FormState extends State<_Form> {
         if (e[key] != null) c.text = '${e[key]}';
       });
     }
+    final p = widget.patient;
+    if (e == null && p != null) {
+      _patientId = p['id'] as int?;
+      _patientLabel = '${p['full_name']} · ${p['hospital_number']}';
+      _applyPatient(p);
+    }
     _loadDiseases();
     if (_patientId != null) {
       _loadCases(_patientId!);
-      _loadPatient(_patientId!);
+      if (_patient == null) _loadPatient(_patientId!);
     }
   }
 

@@ -2,13 +2,17 @@ import 'package:flutter/material.dart';
 
 import '../main.dart';
 import '../core/theme/enhanced_theme.dart';
+import '../config.dart';
 import '../shared/widgets/empty_state.dart';
+import '../shared/widgets/hero_banner.dart';
 import '../shared/widgets/skeleton_cards.dart';
 import '../shared/widgets/snack.dart';
 import '../shared/widgets/stats_kit.dart';
 import 'cases_screen.dart';
 import 'chw_reports_screen.dart';
 import 'consultations_screen.dart';
+import 'drug_orders_screen.dart';
+import 'report_scaffold.dart';
 import 'vital_events_screen.dart';
 
 /// The ward: a clinical cadre's own landing screen. How much of each register
@@ -80,10 +84,14 @@ final _forms = <String, Widget Function()>{
 };
 
 class _WardData {
+  final Map<String, dynamic> me;
   final List<_Register> registers;
   final List<int?> counts;
   final List<dynamic> latest;
-  const _WardData(this.registers, this.counts, this.latest);
+  final int? openVisits;
+  final int? visitsToday;
+  const _WardData(this.me, this.registers, this.counts, this.latest,
+      this.openVisits, this.visitsToday);
 }
 
 class WardScreen extends StatefulWidget {
@@ -111,7 +119,8 @@ class _WardScreenState extends State<WardScreen>
   }
 
   Future<_WardData> _load() async {
-    final registers = _work[await api.myRole()] ?? _work['nurse']!;
+    final me = await api.me() ?? const <String, dynamic>{};
+    final registers = _work['${me['role']}'] ?? _work['nurse']!;
     // One row asked for per register: the page is thrown away, the count is
     // the answer. A register that refuses shows a dash rather than taking the
     // whole screen down with it.
@@ -128,7 +137,102 @@ class _WardScreenState extends State<WardScreen>
       latest = await api.getList(
           registers.first.path, {'ordering': '-created_at', 'page_size': '5'});
     } catch (_) {}
-    return _WardData(registers, counts, latest);
+    int? open;
+    int? today;
+    try {
+      final r = await api
+          .get(_consultations.path, {'status': 'open', 'page_size': '1'});
+      open = r is Map ? r['count'] as int? : null;
+      // The API has no date filter, so today's visits are counted off the
+      // newest page. ponytail: 100 rows caps it; add a created_after filter
+      // past that.
+      final rows = await api.getList(
+          _consultations.path, {'ordering': '-created_at', 'page_size': '100'});
+      final now = DateTime.now();
+      today = rows.where((r) {
+        final at = DateTime.tryParse('${r['created_at'] ?? ''}')?.toLocal();
+        return at != null &&
+            at.year == now.year &&
+            at.month == now.month &&
+            at.day == now.day;
+      }).length;
+    } catch (_) {}
+    return _WardData(me, registers, counts, latest, open, today);
+  }
+
+  /// Find a patient by phone, name or hospital number, then start a visit or
+  /// write an order for them without going through the register.
+  Future<void> _findPatient() async {
+    final picked = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => SearchSheet(
+        path: '/api/patients/',
+        title: 'Find a patient',
+        hint: 'Phone, name or hospital number',
+        errorTitle: 'Could not load patients',
+        emptyIcon: Icons.person_search_outlined,
+        emptyTitle: 'No patients found',
+        emptyMessage: 'Register the patient first, or search again.',
+        label: (r) => '${r['full_name']}',
+        sub: (r) => [
+          '${r['hospital_number'] ?? ''}',
+          if ('${r['sex'] ?? ''}'.isNotEmpty) '${r['sex']}',
+          if (r['age'] != null) '${r['age']}y',
+          if ('${r['phone'] ?? ''}'.isNotEmpty) '${r['phone']}',
+          if ('${r['allergies'] ?? ''}'.trim().isNotEmpty)
+            'Allergies: ${r['allergies']}',
+        ].join(' · '),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    final what = await showModalBottomSheet<String>(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            title: Text('${picked['full_name']}',
+                style: const TextStyle(fontWeight: FontWeight.w800)),
+            subtitle: Text('${picked['hospital_number'] ?? ''}'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.medical_information_outlined),
+            title: const Text('Start visit'),
+            onTap: () => Navigator.of(context).pop('visit'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.medication_outlined),
+            title: const Text('Prescribe'),
+            onTap: () => Navigator.of(context).pop('prescribe'),
+          ),
+        ]),
+      ),
+    );
+    if (what == null || !mounted) return;
+    if (what == 'prescribe') {
+      final written = await prescribeFor(context, picked);
+      if (written && mounted) showSuccess(context, 'Order written.');
+      return;
+    }
+    final saved = await showModalBottomSheet<Object?>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => consultationForm(patient: picked),
+    );
+    if (saved == null || saved == false) return;
+    _reload();
+    // Most visits end with something to take home, so the next step rides on
+    // the toast rather than a second search for the same patient.
+    if (mounted) {
+      showSuccess(context, 'Visit filed.',
+          action: SnackBarAction(
+            label: 'Prescribe',
+            textColor: Colors.white,
+            onPressed: () => prescribeFor(context, picked),
+          ));
+    }
   }
 
   void _reload() {
@@ -202,11 +306,24 @@ class _WardScreenState extends State<WardScreen>
           final list = ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              const StatsHeader(
-                icon: Icons.local_hospital_outlined,
-                title: 'Ward',
-                subtitle: 'What you file, and what you filed last',
+              HeroBanner(
+                name: '${data.me['username'] ?? 'there'}',
+                subtitle: [
+                  _roleLabel('${data.me['role'] ?? ''}'),
+                  tenantLabel,
+                ].where((s) => s.isNotEmpty).join(' · '),
+                stats: [
+                  MapEntry('Open visits', data.openVisits),
+                  MapEntry('Visits today', data.visitsToday),
+                ],
+                action: OutlinedButton.icon(
+                  onPressed: _findPatient,
+                  style: HeroBanner.actionStyle,
+                  icon: const Icon(Icons.person_search_outlined, size: 18),
+                  label: const Text('Find a patient'),
+                ),
               ),
+              const SizedBox(height: 16),
               _tiles(data),
               const SizedBox(height: 16),
               StatSection(
@@ -246,6 +363,10 @@ class _WardScreenState extends State<WardScreen>
       ),
     );
   }
+
+  static String _roleLabel(String role) => role.isEmpty
+      ? ''
+      : role[0].toUpperCase() + role.substring(1).replaceAll('_', ' ');
 
   /// "Case reports" is what the register is called; one of them is a case
   /// report. Every label here is a plain plural.

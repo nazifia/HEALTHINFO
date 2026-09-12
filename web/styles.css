@@ -414,6 +414,9 @@ button.chip.pick:hover { background: var(--brand); color: #fff; }
 .viz-legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 8px 0 0; font-size: 13px; color: var(--muted); }
 .viz-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
 details.tbl { margin: 4px 0 14px; }
+.add-dependent { margin-top: 10px; }
+.add-dependent > summary { display: inline-block; list-style: none; }
+.add-dependent > summary::-webkit-details-marker { display: none; }
 details.tbl summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 #viz-tip {
   position: fixed; z-index: 20; pointer-events: none;
@@ -509,3 +512,26 @@ details.tbl summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .hero-stat span { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; opacity: .8; }
 .hero-stat strong { font-size: 17px; overflow-wrap: anywhere; }
 @media (max-width: 600px) { .hero { padding: 20px; } .hero-link { margin-left: 0; } }
+
+/* The clinical sheets: one narrow column with the app's drag-handle, and the
+   fields the sheet pairs side by side. */
+.sheet { max-width: 660px; margin: 0 auto; }
+.sheet .form-card::before {
+  content: ''; display: block; width: 40px; height: 4px; border-radius: 2px;
+  background: var(--border); margin: -4px auto 10px;
+}
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+@media (max-width: 480px) { .row2 { grid-template-columns: 1fr; } }
+
+/* A type-ahead's matches, dropped down under the box until one is picked. */
+.pick-out { position: relative; }
+.pick-menu {
+  position: absolute; z-index: 30; top: 0; left: 0; right: 0;
+  max-height: 44vh; overflow-y: auto;
+  background: var(--card); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18);
+}
+.pick-menu .search-opt { white-space: normal; line-height: 1.35; border-bottom: 1px solid var(--border); }
+.pick-menu .search-opt:last-child { border-bottom: 0; }
+.pick-menu .search-opt:hover *, .pick-menu .search-opt.active * { color: inherit; }
