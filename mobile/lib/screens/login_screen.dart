@@ -206,6 +206,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 const SizedBox(height: 12),
                                 DropdownButtonFormField<String>(
                                   initialValue: _orgSlug,
+                                  isExpanded: true,
                                   decoration: const InputDecoration(
                                     labelText: 'Organization',
                                     prefixIcon: Icon(Icons.apartment_outlined),
@@ -215,7 +216,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                       DropdownMenuItem(
                                         value: o['slug'] as String,
                                         child: Text(
-                                            '${o['name']} (${o['kind']})'),
+                                          '${o['name']} (${o['kind']})',
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
                                   ],
                                   onChanged: _busy
