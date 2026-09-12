@@ -417,7 +417,7 @@ class PrescriptionViewSet(_ReportViewSet):
     lookup_value_regex = r"[0-9]+"
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = super().get_queryset().select_related("reporter")
         tenant = getattr(self.request, "tenant", None)
         if tenant is not None and tenant.kind == Tenant.Kind.PHARMACY:
             qs = qs.filter(patient__isnull=False)

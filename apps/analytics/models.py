@@ -592,6 +592,14 @@ class Prescription(PatientLinkedModel, TenantOwnedModel):
     def __str__(self):
         return f"Rx #{self.pk} ({self.medication_id}: {self.status})"
 
+    @property
+    def prescriber(self):
+        """Who wrote it, as a script names them: display name, licence beside it."""
+        user = self.reporter
+        if user is None:
+            return ""
+        return f"{user} ({user.license_number})" if user.license_number else str(user)
+
     def save(self, *args, **kwargs):
         # Dispensing stamps its own time so the two can't disagree; a time
         # already on file was entered deliberately and stands.

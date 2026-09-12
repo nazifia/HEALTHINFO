@@ -123,8 +123,7 @@ class OutsideOrderSerializer(serializers.ModelSerializer):
 
     medication_name = serializers.CharField(source="medication.generic_name",
                                             read_only=True)
-    prescriber_name = serializers.CharField(source="reporter.username",
-                                            read_only=True)
+    prescriber_name = serializers.CharField(source="prescriber", read_only=True)
     facility = serializers.CharField(source="tenant.name", read_only=True)
 
     class Meta:

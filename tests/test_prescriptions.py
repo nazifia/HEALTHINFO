@@ -28,7 +28,8 @@ def test_write_then_dispense(db_clean):
     a = Tenant.objects.create(name="A", slug="a")
     b = Tenant.objects.create(name="B", slug="b")
     doctor = User.objects.create_user(phone="08030000101", password="x",
-                                      tenant=a, role=Role.DOCTOR)
+                                      tenant=a, role=Role.DOCTOR,
+                                      username="Dr Obi", license_number="MDCN/1234")
     pharmacist = User.objects.create_user(phone="08030000102", password="x",
                                           tenant=a, role=Role.PHARMACIST)
     outsider = User.objects.create_user(phone="08030000103", password="x",
@@ -46,6 +47,10 @@ def test_write_then_dispense(db_clean):
     assert written.status_code == 201, written.content
     rx = Prescription.all_objects.get(pk=written.json()["id"])
     assert rx.reporter_id == doctor.id and rx.tenant_id == a.id
+    # The order names who wrote it, licence beside the name, and carries no
+    # bare user id for a reader to look up.
+    assert written.json()["prescriber"] == "Dr Obi (MDCN1234)"
+    assert "reporter" not in written.json()
     assert rx.status == Prescription.Status.PRESCRIBED and rx.dispensed_at is None
 
     dispensed = _client(pharmacist, a).patch(

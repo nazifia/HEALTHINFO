@@ -149,16 +149,18 @@ class PrescriptionSerializer(
     RegionValidatedMixin, NamedRelationsMixin, serializers.ModelSerializer
 ):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
-    reporter_name = serializers.CharField(source="reporter.username", read_only=True)
+    # The writer is named the way a script names them — with their licence —
+    # and the bare user pk behind that is not carried.
+    prescriber = serializers.CharField(read_only=True)
     medication_name = serializers.CharField(
         source="medication.generic_name", read_only=True
     )
 
     class Meta:
         model = Prescription
-        exclude = ("tenant",)
+        exclude = ("tenant", "reporter")
         # source_ref is provenance written by capture, never by a client.
-        read_only_fields = ("reporter", "source_ref", "created_at", "updated_at")
+        read_only_fields = ("source_ref", "created_at", "updated_at")
 
 
 class ConsultationSerializer(
