@@ -63,6 +63,25 @@ for (const shut of ['labs', 'immunizations', 'vitals', 'chw', 'facility', 'appoi
   assert.ok(platformFor('super_admin').includes(shut), `super admin lost ${shut}`);
 }
 
+// The tenant's analytics narrow to the profession: a pharmacist reads stock
+// and insurance, a midwife births and vaccines, the administrator all of it.
+const tenantFor = (role) => load(
+  slice('const PRESCRIBERS = [', 'const PLATFORM = ['),
+  'tenantMetrics().map((m) => m.key)', { ME: { role } });
+assert.deepStrictEqual(tenantFor('tenant_admin'), tenantFor('super_admin'));
+assert.ok(tenantFor('tenant_admin').includes('funnel'));
+for (const [role, yes, no] of [
+  ['pharmacist', ['dashboard', 'stock', 'insurance', 'prescriptions'], ['cases', 'labs', 'funnel']],
+  ['doctor', ['dashboard', 'consultations', 'labs', 'cases'], ['stock', 'chw', 'funnel']],
+  ['midwife', ['vitals', 'immunizations'], ['labs', 'stock', 'chw']],
+  ['chew', ['chw', 'immunizations'], ['labs', 'appointments', 'stock']],
+]) {
+  const keys = tenantFor(role);
+  assert.strictEqual(keys[0], 'dashboard', `${role} index has no dashboard first`);
+  for (const k of yes) assert.ok(keys.includes(k), `${role} lost ${k}`);
+  for (const k of no) assert.ok(!keys.includes(k), `${role} offered ${k}`);
+}
+
 // An insurer never gets the pharmacy's own screens in their sidebar.
 const insurerHrefs = SEAT_NAV.hmo[2].map(([h]) => h).join(' ');
 for (const shut of ['pharmacy-items', 'pharmacy-sales', 'patients', 'users']) {

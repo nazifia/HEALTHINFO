@@ -150,15 +150,17 @@ List<_Group> get _baseGroups =>
     [_catalogGroup, _recordsGroup, _toolsGroup, _reportsGroup, _accountGroup];
 
 /// The same groups with the clinical records first — a prescriber's own desk
-/// ahead of the references (same order as web/app.js navHtml). The roster and
-/// the tenant's analytics are the administrator's, so neither is in here.
+/// ahead of the references (same order as web/app.js navHtml). The roster is
+/// the administrator's, so it is not in here; the dashboard and analytics are,
+/// narrowed by each screen to the cadre's own work.
 List<_Group> get _prescriberGroups => [
       _recordsGroup,
       for (final g in _baseGroups.where((g) => g != _recordsGroup))
         g == _reportsGroup
             ? _Group(g.label, [
+                _dashboard,
                 for (final s in g.sections)
-                  if (s.label != 'Staff roster' && s.label != 'Analytics') s,
+                  if (s.label != 'Staff roster') s,
               ])
             : g,
     ];

@@ -412,28 +412,37 @@ const TRANSITIONS = {
 };
 
 // Analytics endpoints. dates => from/to inputs; days => days input.
+// ``who`` is the cadres the metric is about, on top of the administrators who
+// read all of it: a midwife's dashboard is births and vaccines, not stock.
+const PRESCRIBERS = ['doctor', 'nurse', 'midwife', 'chew'];
 const ANALYTICS = [
-  { key: 'dashboard',     label: 'Tenant Dashboard',  path: '/api/analytics/tenant/' },
-  { key: 'prescriptions', label: 'Prescribing Stats', path: '/api/analytics/prescriptions/', dates: true },
-  { key: 'cases',         label: 'Case Stats',        path: '/api/analytics/cases/', dates: true, exportPath: '/api/analytics/cases/export/' },
-  { key: 'surveillance',  label: 'Outbreak Alerts',   path: '/api/analytics/surveillance/' },
-  { key: 'idsr',          label: 'IDSR Report',       path: '/api/analytics/idsr/', days: true, csv: true },
+  { key: 'dashboard',     label: 'Tenant Dashboard',  path: '/api/analytics/tenant/', who: [...PRESCRIBERS, 'pharmacist'] },
+  { key: 'prescriptions', label: 'Prescribing Stats', path: '/api/analytics/prescriptions/', dates: true, who: [...PRESCRIBERS, 'pharmacist'] },
+  { key: 'cases',         label: 'Case Stats',        path: '/api/analytics/cases/', dates: true, exportPath: '/api/analytics/cases/export/', who: PRESCRIBERS },
+  { key: 'surveillance',  label: 'Outbreak Alerts',   path: '/api/analytics/surveillance/', who: PRESCRIBERS },
+  { key: 'idsr',          label: 'IDSR Report',       path: '/api/analytics/idsr/', days: true, csv: true, who: PRESCRIBERS },
   { key: 'sources',       label: 'Report Sources',    path: '/api/analytics/sources/' },
   { key: 'on-duty',       label: 'On Duty Now',       path: '/api/shifts/on_duty/' },
-  { key: 'adr',           label: 'ADR Stats',         path: '/api/analytics/adr/', dates: true },
-  { key: 'labs',          label: 'Lab Stats',         path: '/api/analytics/labs/', dates: true },
-  { key: 'immunizations', label: 'Immunization Stats', path: '/api/analytics/immunizations/', dates: true },
-  { key: 'vitals',        label: 'Vital Stats',       path: '/api/analytics/vitals/', dates: true },
-  { key: 'stock',         label: 'Stock Stats',       path: '/api/analytics/stock/', dates: true },
-  { key: 'chw',           label: 'CHW Stats',         path: '/api/analytics/chw/', dates: true },
+  { key: 'adr',           label: 'ADR Stats',         path: '/api/analytics/adr/', dates: true, who: [...PRESCRIBERS, 'pharmacist'] },
+  { key: 'labs',          label: 'Lab Stats',         path: '/api/analytics/labs/', dates: true, who: ['doctor', 'nurse'] },
+  { key: 'immunizations', label: 'Immunization Stats', path: '/api/analytics/immunizations/', dates: true, who: ['nurse', 'midwife', 'chew'] },
+  { key: 'vitals',        label: 'Vital Stats',       path: '/api/analytics/vitals/', dates: true, who: ['nurse', 'midwife', 'chew'] },
+  { key: 'stock',         label: 'Stock Stats',       path: '/api/analytics/stock/', dates: true, who: ['pharmacist'] },
+  { key: 'chw',           label: 'CHW Stats',         path: '/api/analytics/chw/', dates: true, who: ['chew'] },
   { key: 'facility',      label: 'Facility Stats',    path: '/api/analytics/facility/', dates: true },
-  { key: 'insurance',     label: 'Insurance Stats',   path: '/api/analytics/insurance/', dates: true },
-  { key: 'appointments',  label: 'Appointment Stats', path: '/api/analytics/appointments/', dates: true },
-  { key: 'consultations', label: 'Visit Stats',       path: '/api/analytics/consultations/', dates: true },
+  { key: 'insurance',     label: 'Insurance Stats',   path: '/api/analytics/insurance/', dates: true, who: ['pharmacist'] },
+  { key: 'appointments',  label: 'Appointment Stats', path: '/api/analytics/appointments/', dates: true, who: ['doctor', 'nurse', 'midwife'] },
+  { key: 'consultations', label: 'Visit Stats',       path: '/api/analytics/consultations/', dates: true, who: PRESCRIBERS },
   { key: 'funnel',        label: 'Funnel',            path: '/api/analytics/funnel/' },
   { key: 'retention',     label: 'Retention',         path: '/api/analytics/retention/' },
   { key: 'benchmark',     label: 'Benchmark',         path: '/api/analytics/benchmark/' },
 ];
+
+/* The tenant's analytics as one profession reads them. An administrator runs
+   the whole facility and reads all of it; everyone else gets the metrics on
+   their own work. */
+const tenantMetrics = () => (['super_admin', 'tenant_admin'].includes(ME?.role)
+  ? ANALYTICS : ANALYTICS.filter((m) => m.who?.includes(ME?.role)));
 
 const PLATFORM = [
   { key: 'dashboard',     label: 'Platform Dashboard', path: '/api/analytics/platform/' },
@@ -621,8 +630,8 @@ function navHtml() {
     : r.group === 'Clinical' ? 'activity' : slug.startsWith('tenants') ? 'shield'
     : r.group === 'Reports' ? 'file' : r.group === 'Pharmacy' ? 'pill' : 'book';
   const groups = {};
-  // A prescriber's desk is their caseload: the roster and the tenant's
-  // analytics are the administrator's, so neither is in their menu.
+  // A prescriber's desk is their caseload: the roster is the administrator's,
+  // so it is not in their menu.
   const prescriber = isClinicalStaff() || isIndependent();
   for (const [slug, r] of Object.entries(RESOURCES)) {
     if (r.superOnly && ME?.role !== 'super_admin') continue;
@@ -685,7 +694,7 @@ function navHtml() {
     analytics += `<a href="#/platform" data-route="/platform">${ico('chart')}Platform Analytics</a>`
       + (groups.Analytics || []).join('');
   }
-  if (!prescriber) html += navGroup('Analytics', analytics);
+  html += navGroup('Analytics', analytics);
   if (groups.Admin?.length) html += navGroup('Admin', groups.Admin.join(''));
   // The only route the sidebar did not reach: the topbar badge opens it, which
   // is not obvious on a phone where the badge is a username and nothing else.
@@ -3270,7 +3279,14 @@ function statIndex(title, registry, prefix) {
 async function viewAnalytics(registry, prefix, key) {
   if (!await ensureChrome()) return;
   // The search trend stays in the payload for the mobile super-admin dashboard; the web platform dashboard skips it.
-  const noSearchTrend = (d) => { if (prefix === '/platform') delete d.search_trend; return d; };
+  // On the tenant dashboard the engagement numbers are the administrator's:
+  // a clinician or a pharmacist reads the prescribing half and nothing else.
+  const admin = ['super_admin', 'tenant_admin'].includes(ME?.role);
+  const noSearchTrend = (d) => {
+    if (prefix === '/platform') delete d.search_trend;
+    if (prefix === '/analytics' && !admin) for (const k of ['content_gaps', 'active_users', 'search_trend']) delete d[k];
+    return d;
+  };
   if (!key) {
     // Index page shows the dashboard inline plus links to every metric.
     spinner();
@@ -4558,7 +4574,7 @@ const routes = [
   [/^\/pharmacy$/, viewPharmacy],
   [/^\/hmo$/, viewHmo],
   [/^\/pharmacy\/sell$/, viewSell],
-  [/^\/analytics(?:\/([a-z-]+))?$/, (m) => viewAnalytics(ANALYTICS, '/analytics', m[1])],
+  [/^\/analytics(?:\/([a-z-]+))?$/, (m) => viewAnalytics(tenantMetrics(), '/analytics', m[1])],
   [/^\/platform(?:\/([a-z-]+))?$/, (m) => viewAnalytics(platformMetrics(), '/platform', m[1])],
   [/^\/trading(?:\/([a-z-]+))?$/, (m) => viewAnalytics(PHARMACY_REPORTS, '/trading', m[1])],
 ];

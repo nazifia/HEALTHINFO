@@ -6,6 +6,7 @@ import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/bar_chart.dart';
 import '../shared/widgets/skeleton_cards.dart';
 import '../shared/widgets/stats_kit.dart';
+import '../shared/stats_rows.dart';
 
 /// Secondary analytics dashboards in one scroll: conversion funnel, peer
 /// benchmark, daily retention, and adverse-reaction signal.
@@ -38,12 +39,17 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   }
 
   Future<_Bundle> _load() async {
+    // Only the panels this profession reads are fetched; a null hides its
+    // card and its KPI chip exactly as a failed call would.
+    final role = (await api.me())?['role']?.toString();
+    Future<dynamic> want(String panel, String path) =>
+        readsPanel(role, panel) ? _one(path) : Future.value(null);
     final r = await Future.wait([
-      _one('/api/analytics/funnel/'),
-      _one('/api/analytics/benchmark/'),
-      _one('/api/analytics/retention/'),
-      _one('/api/analytics/adr/'),
-      _one('/api/analytics/consultations/'),
+      want('engagement', '/api/analytics/funnel/'),
+      want('engagement', '/api/analytics/benchmark/'),
+      want('engagement', '/api/analytics/retention/'),
+      want('adr', '/api/analytics/adr/'),
+      want('consultations', '/api/analytics/consultations/'),
     ]);
     Map<String, dynamic>? m(int i) => (r[i] as Map?)?.cast<String, dynamic>();
     return _Bundle(
@@ -91,36 +97,40 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 accent: EnhancedTheme.accentPurple,
               ),
               KpiStrip(tiles: [
-                KpiChip(
-                  icon: Icons.search,
-                  label: 'Searches',
-                  value: '${bn(b.funnel, 'searches') ?? 0}',
-                  color: EnhancedTheme.primaryTeal,
-                ),
-                KpiChip(
-                  icon: Icons.visibility_outlined,
-                  label: 'Views',
-                  value: '${bn(b.funnel, 'views') ?? 0}',
-                  color: EnhancedTheme.accentCyan,
-                ),
-                KpiChip(
-                  icon: Icons.assignment_outlined,
-                  label: 'Case Reports',
-                  value: '${bn(b.funnel, 'case_reports') ?? 0}',
-                  color: EnhancedTheme.accentPurple,
-                ),
-                KpiChip(
-                  icon: Icons.medication_liquid_outlined,
-                  label: 'Adverse Rxns',
-                  value: '${bn(b.adr, 'total') ?? 0}',
-                  color: EnhancedTheme.accentOrange,
-                ),
-                KpiChip(
-                  icon: Icons.pending_actions_outlined,
-                  label: 'Open Visits',
-                  value: '${bn(b.consultations, 'open') ?? 0}',
-                  color: EnhancedTheme.infoBlue,
-                ),
+                if (b.funnel != null) ...[
+                  KpiChip(
+                    icon: Icons.search,
+                    label: 'Searches',
+                    value: '${bn(b.funnel, 'searches') ?? 0}',
+                    color: EnhancedTheme.primaryTeal,
+                  ),
+                  KpiChip(
+                    icon: Icons.visibility_outlined,
+                    label: 'Views',
+                    value: '${bn(b.funnel, 'views') ?? 0}',
+                    color: EnhancedTheme.accentCyan,
+                  ),
+                  KpiChip(
+                    icon: Icons.assignment_outlined,
+                    label: 'Case Reports',
+                    value: '${bn(b.funnel, 'case_reports') ?? 0}',
+                    color: EnhancedTheme.accentPurple,
+                  ),
+                ],
+                if (b.adr != null)
+                  KpiChip(
+                    icon: Icons.medication_liquid_outlined,
+                    label: 'Adverse Rxns',
+                    value: '${bn(b.adr, 'total') ?? 0}',
+                    color: EnhancedTheme.accentOrange,
+                  ),
+                if (b.consultations != null)
+                  KpiChip(
+                    icon: Icons.pending_actions_outlined,
+                    label: 'Open Visits',
+                    value: '${bn(b.consultations, 'open') ?? 0}',
+                    color: EnhancedTheme.infoBlue,
+                  ),
               ]),
               const SizedBox(height: 14),
               if (b.consultations != null)

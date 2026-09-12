@@ -59,3 +59,20 @@ List<dynamic> pairsFor(dynamic pairs, String? diagnosis, {int limit = 10}) {
       if ('${p['diagnosis']}' == diagnosis) p
   ];
 }
+
+/// Which analytics panels one profession reads (mirrors ANALYTICS.who in
+/// web/app.js). An administrator runs the whole facility and reads all of
+/// it; everyone else gets the panels on their own work: a midwife's
+/// dashboard is births and vaccines, not the search funnel.
+const _prescribers = {'doctor', 'nurse', 'midwife', 'chew'};
+const _panelReaders = <String, Set<String>>{
+  'engagement': {}, // active users, search volume, funnel, retention, gaps
+  'prescribing': {..._prescribers, 'pharmacist'},
+  'adr': {..._prescribers, 'pharmacist'},
+  'consultations': _prescribers,
+};
+
+bool readsPanel(String? role, String panel) =>
+    role == 'super_admin' ||
+    role == 'tenant_admin' ||
+    (_panelReaders[panel] ?? const {}).contains(role);

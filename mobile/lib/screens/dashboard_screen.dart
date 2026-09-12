@@ -38,7 +38,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ? ''
         : '?from=${_d(_range!.start)}&to=${_d(_range!.end)}';
     final r = await api.get('/api/analytics/tenant/$q');
-    return (r as Map).cast<String, dynamic>();
+    // The role rides on the payload so the panels below can narrow to it.
+    final role = (await api.me())?['role']?.toString();
+    return {...(r as Map).cast<String, dynamic>(), '_role': role};
   }
 
   Future<void> _pickRange() async {
@@ -87,6 +89,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           final searchTotal =
               trend.fold<num>(0, (a, r) => a + ((r['count'] as num?) ?? 0));
           final diagnoses = (d['top_diagnoses'] as List?) ?? [];
+          // Each profession reads its own half: the engagement numbers are
+          // the administrator's, the prescribing panels every clinician's
+          // and the pharmacist's.
+          final role = d['_role'] as String?;
+          final engagement = readsPanel(role, 'engagement');
+          final prescribing = readsPanel(role, 'prescribing');
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             children: [
@@ -102,7 +110,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   tooltip: 'Date range',
                 ),
               ),
-              KpiStrip(tiles: [
+              if (engagement) KpiStrip(tiles: [
                 KpiChip(
                   icon: Icons.group_outlined,
                   label: 'Active Users 30d',
@@ -134,7 +142,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               // The clinical half of the dashboard: what was treated, and what
               // was written for it. Each label carries its dispensed count,
               // because a bar counts orders written, not orders handed over.
-              _RankList(
+              if (prescribing) _RankList(
                 heading: 'Top diagnoses (prescribing)',
                 color: EnhancedTheme.accentCyan,
                 rows: diagnosisRows(diagnoses),
@@ -147,7 +155,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   _diagnosis = _diagnosis == name ? null : name;
                 }),
               ),
-              _RankList(
+              if (prescribing) _RankList(
                 heading: _diagnosis == null
                     ? 'Prescribed for each diagnosis'
                     : 'Prescribed for $_diagnosis',
@@ -163,7 +171,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         child: const Text('Show all'),
                       ),
               ),
-              _RankList(
+              if (engagement) _RankList(
                 heading: 'Content gaps (no results)',
                 color: EnhancedTheme.errorRed,
                 rows: (d['content_gaps'] as List?) ?? [],
