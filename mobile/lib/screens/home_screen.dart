@@ -150,9 +150,18 @@ List<_Group> get _baseGroups =>
     [_catalogGroup, _recordsGroup, _toolsGroup, _reportsGroup, _accountGroup];
 
 /// The same groups with the clinical records first — a prescriber's own desk
-/// ahead of the references (same order as web/app.js navHtml).
-List<_Group> get _prescriberGroups =>
-    [_recordsGroup, ..._baseGroups.where((g) => g != _recordsGroup)];
+/// ahead of the references (same order as web/app.js navHtml). The roster and
+/// the tenant's analytics are the administrator's, so neither is in here.
+List<_Group> get _prescriberGroups => [
+      _recordsGroup,
+      for (final g in _baseGroups.where((g) => g != _recordsGroup))
+        g == _reportsGroup
+            ? _Group(g.label, [
+                for (final s in g.sections)
+                  if (s.label != 'Staff roster' && s.label != 'Analytics') s,
+              ])
+            : g,
+    ];
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});

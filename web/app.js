@@ -621,8 +621,12 @@ function navHtml() {
     : r.group === 'Clinical' ? 'activity' : slug.startsWith('tenants') ? 'shield'
     : r.group === 'Reports' ? 'file' : r.group === 'Pharmacy' ? 'pill' : 'book';
   const groups = {};
+  // A prescriber's desk is their caseload: the roster and the tenant's
+  // analytics are the administrator's, so neither is in their menu.
+  const prescriber = isClinicalStaff() || isIndependent();
   for (const [slug, r] of Object.entries(RESOURCES)) {
     if (r.superOnly && ME?.role !== 'super_admin') continue;
+    if (slug === 'shifts' && prescriber) continue;
     if (r.adminOnly && !['super_admin', 'tenant_admin'].includes(ME?.role)
         && !(slug === 'users' && hasPriv('manage_users'))) continue;
     if (r.group === 'Pharmacy' && !PHARMACY_STAFF_ROLES.has(ME?.role)) continue;
@@ -660,7 +664,6 @@ function navHtml() {
   const clinical = (isClinicalStaff() ? `<a href="#/clinical" data-route="/clinical">${ico('activity')}Ward</a>` : '')
     + (groups.Clinical || []).join('');
   // A prescriber's own desk sits first; everyone else finds it after the references.
-  const prescriber = isClinicalStaff() || isIndependent();
   if (clinical && prescriber) html += navGroup('Clinical', clinical);
   html += navGroup('Tools', tools.join(''));
   html += navGroup('Catalog', groups.Catalog.join(''));
@@ -682,7 +685,7 @@ function navHtml() {
     analytics += `<a href="#/platform" data-route="/platform">${ico('chart')}Platform Analytics</a>`
       + (groups.Analytics || []).join('');
   }
-  html += navGroup('Analytics', analytics);
+  if (!prescriber) html += navGroup('Analytics', analytics);
   if (groups.Admin?.length) html += navGroup('Admin', groups.Admin.join(''));
   // The only route the sidebar did not reach: the topbar badge opens it, which
   // is not obvious on a phone where the badge is a username and nothing else.
