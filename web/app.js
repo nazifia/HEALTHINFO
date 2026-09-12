@@ -169,7 +169,7 @@ const VISIT_SHEET = {
   labels: { patient: 'Patient (optional)', case_report: 'Existing case (optional)', appointment: 'Appointment (optional)',
     temperature_c: 'Temp C', pulse_bpm: 'Pulse', systolic_bp: 'Systolic', diastolic_bp: 'Diastolic',
     respiratory_rate: 'Resp rate', oxygen_saturation: 'SpO2 %', weight_kg: 'Weight kg', height_cm: 'Height cm' },
-  layout: ['chief_complaint', 'patient', 'diagnosis', 'severity', 'case_report', 'appointment',
+  layout: ['patient', 'chief_complaint', 'diagnosis', 'severity', 'case_report', 'appointment',
     ['temperature_c', 'pulse_bpm'], ['systolic_bp', 'diastolic_bp'], ['respiratory_rate', 'oxygen_saturation'],
     ['weight_kg', 'height_cm'], 'region', 'notes'],
   // Age group and sex come off the patient's record; the follow-up date is
@@ -657,6 +657,11 @@ function navHtml() {
     return `<a href="#/portal" data-route="/portal" class="nav-home">${ico('activity')}My Health</a>`
       + navGroup('Account', `<a href="#/profile" data-route="/profile">${ico('users')}Profile</a>`);
   }
+  const clinical = (isClinicalStaff() ? `<a href="#/clinical" data-route="/clinical">${ico('activity')}Ward</a>` : '')
+    + (groups.Clinical || []).join('');
+  // A prescriber's own desk sits first; everyone else finds it after the references.
+  const prescriber = isClinicalStaff() || isIndependent();
+  if (clinical && prescriber) html += navGroup('Clinical', clinical);
   html += navGroup('Tools', tools.join(''));
   html += navGroup('Catalog', groups.Catalog.join(''));
   html += navGroup('Reports', groups.Reports.join(''));
@@ -671,9 +676,7 @@ function navHtml() {
     html += navGroup('HMO',
       `<a href="#/hmo" data-route="/hmo">${ico('shield')}Insurance Desk</a>` + groups.HMO.join(''));
   }
-  const clinical = (isClinicalStaff() ? `<a href="#/clinical" data-route="/clinical">${ico('activity')}Ward</a>` : '')
-    + (groups.Clinical || []).join('');
-  if (clinical) html += navGroup('Clinical', clinical);
+  if (clinical && !prescriber) html += navGroup('Clinical', clinical);
   let analytics = `<a href="#/analytics" data-route="/analytics">${ico('chart')}Tenant Analytics</a>`;
   if (isPlatformScope()) {
     analytics += `<a href="#/platform" data-route="/platform">${ico('chart')}Platform Analytics</a>`
@@ -1862,6 +1865,8 @@ async function viewList(slug) {
         ${(canWrite || res.createOnly) && !slug.startsWith('tenants') ? `<a class="btn" href="#/r/${slug}/new${res.query ? '?' + new URLSearchParams(res.query) : ''}">+ New</a>` : ''}
         ${res.signUp && ME?.role === 'super_admin' ? '<a class="btn" href="#/scheme-register">+ Register scheme</a>' : ''}
       </div>
+      ${slug === 'patients' && isIndependent()
+        ? '<p class="muted">You see the patients you registered or wrote for under this facility, and nobody else on its register.</p>' : ''}
       <form id="search-form" class="toolbar">
         <input name="q" autocomplete="off"
                placeholder="${res.search ? 'Search…' : 'Filter by search…'}" value="${esc(st.search)}">

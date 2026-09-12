@@ -149,6 +149,11 @@ const _accountGroup = _Group('Account', [
 List<_Group> get _baseGroups =>
     [_catalogGroup, _recordsGroup, _toolsGroup, _reportsGroup, _accountGroup];
 
+/// The same groups with the clinical records first — a prescriber's own desk
+/// ahead of the references (same order as web/app.js navHtml).
+List<_Group> get _prescriberGroups =>
+    [_recordsGroup, ..._baseGroups.where((g) => g != _recordsGroup)];
+
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -449,7 +454,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       // Picked one: the clinical menu, read as that facility. They are a
       // licensed cadre, so the API narrows every register to their own
       // caseload exactly as it does the facility's own doctors.
-      _setGroups([..._baseGroups.where((g) => g != _accountGroup),
+      _setGroups([..._prescriberGroups.where((g) => g != _accountGroup),
         _facilityAccountGroup,
       ], home: _Section('Ward', Icons.local_hospital_outlined,
           WardScreen(onOpen: _openSection)));
@@ -500,7 +505,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // same ward landing the web client gives them. Its tiles jump the drawer,
     // so it is built here where the drawer's index lives.
     if (_wardRoles.contains(role)) {
-      _setGroups(_baseGroups,
+      _setGroups(_prescriberGroups,
           home: _Section('Ward', Icons.local_hospital_outlined,
               WardScreen(onOpen: _openSection)));
     }
