@@ -2544,11 +2544,13 @@ function makeMultiPicker(sel) {
 
 /* The form in the order the app's sheet asks it, two to a row where the
  * sheet pairs them (see PATIENT_SHEET); whatever the layout does not name
- * follows in API order. `parts` maps field name -> its rendered label. */
+ * follows in API order. The patient, where a form has one, always heads it —
+ * everything else on the form is about them. `parts` maps field name -> its
+ * rendered label. */
 function layoutHtml(layout, parts) {
   const rest = { ...parts };
   const out = [];
-  for (const slot of layout || []) {
+  for (const slot of ['patient', ...(layout || [])]) {
     const names = [].concat(slot).filter((n) => rest[n]);
     if (!names.length) continue;
     out.push(names.length > 1 ? `<div class="row2">${names.map((n) => rest[n]).join('')}</div>` : rest[names[0]]);

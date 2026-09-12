@@ -238,6 +238,12 @@ class _FormState extends State<_Form> {
       submitLabel: _isEdit ? 'Save changes' : 'Submit',
       onSubmit: _submit,
       children: [
+        PatientPicker(
+          initialId: _patientId,
+          initialLabel: _patientLabel,
+          onChanged: (id) => _patientId = id,
+        ),
+        const SizedBox(height: 12),
         Row(children: [
           Expanded(
             child: SearchableDropdown<String>(
@@ -269,12 +275,6 @@ class _FormState extends State<_Form> {
         TextField(
           controller: _reason,
           decoration: const InputDecoration(labelText: 'Reason'),
-        ),
-        const SizedBox(height: 12),
-        PatientPicker(
-          initialId: _patientId,
-          initialLabel: _patientLabel,
-          onChanged: (id) => _patientId = id,
         ),
         const SizedBox(height: 12),
         RegionPicker(

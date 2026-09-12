@@ -489,6 +489,16 @@ class _DrugOrderFormState extends State<DrugOrderForm> {
           : 'Write order${written == 1 ? '' : 's'}',
       onSubmit: _submit,
       children: [
+        // Prescribing off a patient's record fixes who it is for; the picker
+        // is only for an order written from the list.
+        if (widget.patient == null) ...[
+          PatientPicker(
+            initialId: _patientId,
+            initialLabel: _patientLabel,
+            onChanged: (id) => _patientId = id,
+          ),
+          const SizedBox(height: 12),
+        ],
         for (var i = 0; i < _drugs.length; i++)
           ListTile(
             dense: true,
@@ -558,16 +568,6 @@ class _DrugOrderFormState extends State<DrugOrderForm> {
               label: const Text('Add another drug'),
             ),
           ),
-        // Prescribing off a patient's record fixes who it is for; the picker
-        // is only for an order written from the list.
-        if (widget.patient == null) ...[
-          PatientPicker(
-            initialId: _patientId,
-            initialLabel: _patientLabel,
-            onChanged: (id) => _patientId = id,
-          ),
-          const SizedBox(height: 12),
-        ],
         RegionPicker(
             initial: _region.isEmpty ? null : _region,
             onChanged: (r) => _region = r),

@@ -47,5 +47,8 @@ const { layoutHtml } = new Function(`${src.slice(src.indexOf('function layoutHtm
 assert.strictEqual(layoutHtml([['a', 'b'], 'zz', ['c', 'missing']], { c: '<c>', a: '<a>', b: '<b>', d: '<d>' }),
   '<div class="row2"><a><b></div><c><d>');
 assert.strictEqual(layoutHtml(undefined, { a: '<a>' }), '<a>');
+// The patient heads every form that has one, named in the layout or not.
+assert.strictEqual(layoutHtml(['a', 'patient'], { a: '<a>', patient: '<p>' }), '<p><a>');
+assert.strictEqual(layoutHtml(undefined, { a: '<a>', patient: '<p>' }), '<p><a>');
 
 console.log('clinical.test.js OK');

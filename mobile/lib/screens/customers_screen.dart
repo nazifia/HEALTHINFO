@@ -467,6 +467,14 @@ class _CustomerFormState extends State<_CustomerForm> {
       submitLabel: _isEdit ? 'Save changes' : 'Add customer',
       onSubmit: _submit,
       children: [
+        // Linking a patient is how insurance and clinical history reach this
+        // buyer; without it they are just a name at the counter.
+        PatientPicker(
+          initialId: _patientId,
+          initialLabel: _patientLabel,
+          onChanged: (id) => _patientId = id,
+        ),
+        const SizedBox(height: 12),
         TextField(
           controller: _name,
           decoration: const InputDecoration(labelText: 'Name'),
@@ -493,13 +501,6 @@ class _CustomerFormState extends State<_CustomerForm> {
           decoration: const InputDecoration(labelText: 'Address (optional)'),
         ),
         const SizedBox(height: 12),
-        // Linking a patient is how insurance and clinical history reach this
-        // buyer; without it they are just a name at the counter.
-        PatientPicker(
-          initialId: _patientId,
-          initialLabel: _patientLabel,
-          onChanged: (id) => _patientId = id,
-        ),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           title: const Text('Wholesale'),

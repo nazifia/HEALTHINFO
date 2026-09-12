@@ -325,6 +325,7 @@ class _DispenseSheetState extends State<DispenseSheet> {
               onPressed: _finding ? null : _find,
               child: Text(_finding ? 'Finding…' : 'Find')),
         ]),
+        const SizedBox(height: 12),
         if (_orders != null) ...[
           const SizedBox(height: 8),
           if (_orders!.isEmpty)
@@ -356,6 +357,13 @@ class _DispenseSheetState extends State<DispenseSheet> {
                 'sale completes.',
                 style: TextStyle(color: context.hintColor, fontSize: 12)),
         ],
+        const SizedBox(height: 12),
+        PatientPicker(
+          onChanged: (id) {
+            _patientId = id;
+            _loadEnrollments(id);
+          },
+        ),
         const SizedBox(height: 12),
         TextField(
           controller: _barcode,
@@ -436,13 +444,6 @@ class _DispenseSheetState extends State<DispenseSheet> {
                     fontWeight: FontWeight.w800)),
           ),
         ],
-        const SizedBox(height: 12),
-        PatientPicker(
-          onChanged: (id) {
-            _patientId = id;
-            _loadEnrollments(id);
-          },
-        ),
         const SizedBox(height: 12),
         SearchableDropdown<String>(
           initialValue: _method,

@@ -850,11 +850,6 @@ class _FormState extends State<_Form> {
       submitLabel: _isEdit ? 'Save changes' : 'Start consultation',
       onSubmit: _submit,
       children: [
-        TextField(
-          controller: _complaint,
-          decoration: const InputDecoration(labelText: 'Chief complaint'),
-        ),
-        const SizedBox(height: 12),
         PatientPicker(
           initialId: _patientId,
           initialLabel: _patientLabel,
@@ -874,6 +869,11 @@ class _FormState extends State<_Form> {
           const SizedBox(height: 12),
           _PatientDetails(patient: _patient!),
         ],
+        const SizedBox(height: 12),
+        TextField(
+          controller: _complaint,
+          decoration: const InputDecoration(labelText: 'Chief complaint'),
+        ),
         const SizedBox(height: 12),
         // The diagnosis. Saving it files a case report — the row the outcome,
         // the prescriptions and the surveillance rollups all hang off.

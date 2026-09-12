@@ -398,6 +398,12 @@ class _ReportFormState extends State<_ReportForm> {
                       fontSize: 18,
                       fontWeight: FontWeight.w800)),
               const SizedBox(height: 16),
+              PatientPicker(
+                initialId: _patientId,
+                initialLabel: _patientLabel,
+                onChanged: (id) => _patientId = id,
+              ),
+              const SizedBox(height: 12),
               SearchableDropdown<int?>(
                 initialValue: _diseaseId,
                 isExpanded: true,
@@ -445,12 +451,6 @@ class _ReportFormState extends State<_ReportForm> {
                 controller: _age,
                 decoration: const InputDecoration(
                     labelText: 'Patient age group (e.g. 0-5, 60+)'),
-              ),
-              const SizedBox(height: 12),
-              PatientPicker(
-                initialId: _patientId,
-                initialLabel: _patientLabel,
-                onChanged: (id) => _patientId = id,
               ),
               const SizedBox(height: 12),
               RegionPicker(

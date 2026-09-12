@@ -219,6 +219,12 @@ class _FormState extends State<_Form> {
       submitLabel: _isEdit ? 'Save changes' : 'Submit dose',
       onSubmit: _submit,
       children: [
+        PatientPicker(
+          initialId: _patientId,
+          initialLabel: _patientLabel,
+          onChanged: (id) => _patientId = id,
+        ),
+        const SizedBox(height: 12),
         TextField(
           controller: _vaccine,
           decoration: const InputDecoration(labelText: 'Vaccine (e.g. BCG, Measles, OPV)'),
@@ -233,12 +239,6 @@ class _FormState extends State<_Form> {
         TextField(
           controller: _age,
           decoration: const InputDecoration(labelText: 'Patient age group (e.g. 0-5)'),
-        ),
-        const SizedBox(height: 12),
-        PatientPicker(
-          initialId: _patientId,
-          initialLabel: _patientLabel,
-          onChanged: (id) => _patientId = id,
         ),
         const SizedBox(height: 12),
         RegionPicker(
