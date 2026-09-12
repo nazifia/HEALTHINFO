@@ -12,7 +12,10 @@ const Api = (() => {
     : 'https://healthinfo.pythonanywhere.com';
 
   let base = DEV ? DEFAULT_BASE : (localStorage.getItem('api_base') || DEFAULT_BASE);
-  let tenant = localStorage.getItem('tenant_slug') || 'demo';
+  // ?? not ||: a government or super-admin seat stores an empty slug on
+  // sign-in (they belong to no organization), and a reload must keep it
+  // empty — 'demo' would put every platform rollup behind a 403.
+  let tenant = localStorage.getItem('tenant_slug') ?? 'demo';
   // The organization's display name, kept beside the slug so the chrome can
   // name it without another call. Empty until a sign-in or a switch names it.
   let tenantName = localStorage.getItem('tenant_name') || '';
