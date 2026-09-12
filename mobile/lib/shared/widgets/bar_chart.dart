@@ -49,7 +49,10 @@ class MiniBarChart extends StatelessWidget {
 
     return SizedBox(
       height: 190,
-      child: Sweep(child: BarChart(
+      // Bars grow up from the axis (Grow ticks t); fl_chart's own tween is
+      // off so it doesn't lag a frame behind.
+      child: Grow(builder: (_, t) => BarChart(
+        duration: Duration.zero,
         BarChartData(
           maxY: maxY.toDouble(),
           alignment: BarChartAlignment.spaceAround,
@@ -136,7 +139,7 @@ class MiniBarChart extends StatelessWidget {
                 x: i,
                 barRods: [
                   BarChartRodData(
-                    toY: rows[i].value.toDouble(),
+                    toY: rows[i].value.toDouble() * t,
                     width: 18,
                     borderRadius:
                         const BorderRadius.vertical(top: Radius.circular(6)),

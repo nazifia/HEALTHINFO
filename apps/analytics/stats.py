@@ -944,7 +944,6 @@ def prescription_stats(start=None, end=None, platform=False, jurisdiction=None):
         "by_status": _grouped(rx, "status"),
         "by_sex": _by_sex(rx),
         "by_region": _grouped(rx, "region"),
-        "trend": _series(rx, days=90),
     }
     if platform:
         out["by_tenant"] = _grouped(rx, "tenant__name", 20)

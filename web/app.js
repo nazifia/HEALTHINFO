@@ -26,7 +26,7 @@ function fmtVal(v) {
   return String(v);
 }
 
-const label = (k) => k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+const label = (k) => k === 'by_diagnosis_medication' ? 'Medication By Diagnosis' : k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
 /* ------------------------------------------------------------------ theme */
 
@@ -1042,17 +1042,18 @@ function render(html) {
 
 /* Below-the-fold cards, charts and numbers hold still until scrolled into
  * view: the observer flips .seen (CSS runs the paused animation) and starts
- * the count-up. Each element fires once. Anything that lands in #main — by
+ * the count-up. Scrolling out (either way) rewinds it, so it replays on the
+ * next entry. Anything that lands in #main — by
  * render() or a later innerHTML (the stats screens fill #out after the
  * form) — is handed over by the mutation observer, so nothing paused is
  * ever left unwatched. */
 const SEEN_SEL = '.tiles, .hero, .viz, .viz-legend, .big-val';
 const seen = new IntersectionObserver((entries) => {
   for (const e of entries) {
-    if (!e.isIntersecting) continue;
-    e.target.classList.add('seen');
-    countUp(e.target);
-    seen.unobserve(e.target);
+    if (e.isIntersecting) { e.target.classList.add('seen'); countUp(e.target); continue; }
+    e.target.classList.remove('seen');
+    for (const a of e.target.getAnimations({ subtree: true })) a.currentTime = 0;
+    for (const el of [e.target, ...e.target.querySelectorAll('[data-counted]')]) delete el.dataset.counted;
   }
 }, { rootMargin: '0px 0px -40px' });
 new MutationObserver((muts) => {
@@ -1083,11 +1084,12 @@ function countUp(root) {
   if (typeof requestAnimationFrame !== 'function' || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const els = root.matches('.big-val') ? [root] : root.querySelectorAll('.tile-val, .hero-stat strong');
   for (const el of els) {
-    const src = el.textContent, m = NUM_RE.exec(src);
+    // the first text is the truth; a replay must not count up to a half-counted value
+    const src = el.dataset.src || (el.dataset.src = el.textContent), m = NUM_RE.exec(src);
     if (!m || el.dataset.counted) continue;
     el.dataset.counted = '1';
     const end = Number(m[2].replace(/,/g, '') + (m[3] || ''));
-    const t0 = performance.now(), D = 800;
+    const t0 = performance.now(), D = 1700;
     const tick = (now) => {
       const p = Math.min((now - t0) / D, 1);
       el.textContent = countFmt(src, end * (1 - (1 - p) ** 3));
@@ -3267,11 +3269,13 @@ function statIndex(title, registry, prefix) {
 
 async function viewAnalytics(registry, prefix, key) {
   if (!await ensureChrome()) return;
+  // The search trend stays in the payload for the mobile super-admin dashboard; the web platform dashboard skips it.
+  const noSearchTrend = (d) => { if (prefix === '/platform') delete d.search_trend; return d; };
   if (!key) {
     // Index page shows the dashboard inline plus links to every metric.
     spinner();
     let dash = '';
-    try { dash = renderData(await Api.get(registry[0].path)); }
+    try { dash = renderData(noSearchTrend(await Api.get(registry[0].path))); }
     catch (e) { dash = `<p class="err">${esc(e.message)}</p>`; }
     const indexTitle = prefix === '/platform' ? 'Platform Analytics'
       : prefix === '/trading' ? 'Trading Reports' : 'Tenant Analytics';
@@ -3310,6 +3314,9 @@ async function viewAnalytics(registry, prefix, key) {
     $('#out').innerHTML = '<div class="loading">Loading…</div>';
     try {
       const data = await Api.get(m.path, params());
+      // The prescribing rates stay in the payload for the mobile app; the web screen shows counts only.
+      if (key === 'prescriptions') for (const k of Object.keys(data)) if (k.endsWith('_rate')) delete data[k];
+      if (key === 'dashboard') noSearchTrend(data);
       // The money report leads with its totals; the tables under it are the grain.
       const headline = key === 'sales' ? salesHeadline
         : key === 'controlled' ? controlledHeadline : null;

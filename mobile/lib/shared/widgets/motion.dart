@@ -12,20 +12,21 @@ import 'package:flutter/material.dart';
 /// - [Grow]: tween 0→1 for callers that scale a value themselves (donut
 ///   fill, comparison bars).
 ///
-/// [Reveal] and [CountUp] wait until they are scrolled into view: the stat
-/// screens are non-lazy ListViews, so everything builds at once and a card
-/// below the fold would otherwise have finished before anyone saw it.
+/// Everything waits until it is scrolled into view: the stat screens are
+/// non-lazy ListViews, so everything builds at once and a card below the
+/// fold would otherwise have finished before anyone saw it. Scrolling out
+/// (either way) snaps it back to the start so it replays on the next entry.
 
-const _reveal = Duration(milliseconds: 380);
-const _stagger = Duration(milliseconds: 55);
-const _count = Duration(milliseconds: 800);
-const _sweep = Duration(milliseconds: 700);
+const _reveal = Duration(milliseconds: 1000);
+const _stagger = Duration(milliseconds: 110);
+const _count = Duration(milliseconds: 1700);
+const _sweep = Duration(milliseconds: 1600);
 
 bool _still(BuildContext c) => MediaQuery.disableAnimationsOf(c);
 
-/// Flips [shown] the first time this widget's box is inside the screen.
+/// Tracks whether this widget's box is inside the screen in [shown].
 /// Listens to every enclosing scrollable (a KPI strip scrolls sideways inside
-/// a page that scrolls down) and stops listening once shown.
+/// a page that scrolls down).
 mixin _WhenVisible<T extends StatefulWidget> on State<T> {
   bool shown = false;
   final _positions = <ScrollPosition>[];
@@ -52,16 +53,14 @@ mixin _WhenVisible<T extends StatefulWidget> on State<T> {
       WidgetsBinding.instance.addPostFrameCallback((_) => _check());
 
   void _check() {
-    if (shown || !mounted) return;
+    if (!mounted) return;
     final ro = context.findRenderObject();
     if (ro is! RenderBox || !ro.hasSize || !ro.attached) return;
     final top = ro.localToGlobal(Offset.zero).dy;
     final screen = MediaQuery.sizeOf(context).height;
     // ponytail: vertical test only; a sideways strip builds its chips lazily
-    if (top < screen && top + ro.size.height > 0) {
-      setState(() => shown = true);
-      _dropListeners();
-    }
+    final now = top < screen && top + ro.size.height > 0;
+    if (now != shown) setState(() => shown = now);
   }
 
   void _dropListeners() {
@@ -98,7 +97,7 @@ class _RevealState extends State<Reveal> with _WhenVisible {
     final total = _reveal + delay;
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: shown ? 1 : 0),
-      duration: total,
+      duration: shown ? total : Duration.zero,
       curve: Interval(
         delay.inMilliseconds / total.inMilliseconds,
         1,
@@ -113,18 +112,23 @@ class _RevealState extends State<Reveal> with _WhenVisible {
   }
 }
 
-class Sweep extends StatelessWidget {
+class Sweep extends StatefulWidget {
   final Widget child;
   const Sweep({super.key, required this.child});
 
   @override
+  State<Sweep> createState() => _SweepState();
+}
+
+class _SweepState extends State<Sweep> with _WhenVisible {
+  @override
   Widget build(BuildContext context) {
-    if (_still(context)) return child;
+    if (_still(context)) return widget.child;
     return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: _sweep,
+      tween: Tween(begin: 0, end: shown ? 1 : 0),
+      duration: shown ? _sweep : Duration.zero,
       curve: Curves.easeOutCubic,
-      child: child,
+      child: widget.child,
       builder: (_, t, c) => ClipRect(clipper: _Left(t), child: c),
     );
   }
@@ -139,18 +143,23 @@ class _Left extends CustomClipper<Rect> {
   bool shouldReclip(_Left old) => old.t != t;
 }
 
-class Grow extends StatelessWidget {
+class Grow extends StatefulWidget {
   final Widget Function(BuildContext, double t) builder;
   const Grow({super.key, required this.builder});
 
   @override
+  State<Grow> createState() => _GrowState();
+}
+
+class _GrowState extends State<Grow> with _WhenVisible {
+  @override
   Widget build(BuildContext context) {
-    if (_still(context)) return builder(context, 1);
+    if (_still(context)) return widget.builder(context, 1);
     return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: _count,
+      tween: Tween(begin: 0, end: shown ? 1 : 0),
+      duration: shown ? _count : Duration.zero,
       curve: Curves.easeOutCubic,
-      builder: (c, t, _) => builder(c, t),
+      builder: (c, t, _) => widget.builder(c, t),
     );
   }
 }
@@ -211,7 +220,7 @@ class _CountUpState extends State<CountUp> with _WhenVisible {
     final target = double.parse(m[2]!.replaceAll(',', '') + (m[3] ?? ''));
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: shown ? target : 0),
-      duration: _count,
+      duration: shown ? _count : Duration.zero,
       curve: Curves.easeOutCubic,
       builder: (_, n, _) => text(CountUp.format(value, n)),
     );
