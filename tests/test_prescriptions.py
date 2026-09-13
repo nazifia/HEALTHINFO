@@ -707,3 +707,119 @@ def test_the_counter_asks_for_what_is_still_owed(db_clean):
 
     count = client.get("/api/prescriptions/scripts/pending-count/")
     assert count.json() == {"pending": 1, "partial": 1, "total": 2}
+
+
+def test_a_counter_script_written_at_one_pharmacy_fills_at_another(db_clean):
+    """A pharmacy with no stock writes the script up; the patient fills it
+    down the road — on the phone it was written under, with no patient record
+    anywhere. The sale ticks the writing pharmacy's lines, charges the filling
+    pharmacy's fee for the band and books that pharmacy's dues to the writer.
+    """
+    from decimal import Decimal
+
+    from apps.inventory.models import StockItem, Store, receive_stock
+    from apps.pos.models import Sale
+    from apps.prescriptions.models import (
+        ConsultationPayout, Prescriber, PrescriberCommission, Prescription as Script,
+    )
+
+    first = Tenant.objects.create(name="Corner Pharmacy", slug="corner",
+                                  kind=Tenant.Kind.PHARMACY)
+    other = Tenant.objects.create(name="Bola Pharmacy", slug="bola",
+                                  kind=Tenant.Kind.PHARMACY)
+    writer = User.objects.create_user(phone="08030000601", password="x",
+                                      tenant=first, role=Role.PHARMACIST)
+    filler = User.objects.create_user(phone="08030000602", password="x",
+                                      tenant=other, role=Role.PHARMACIST)
+    Prescriber.all_objects.create(tenant=first, name="Dr Ada",
+                                  license_number="MDCN9", consult_fee_b=Decimal("500"))
+    written = _client(writer, first).post("/api/prescriptions/scripts/", {
+        "customer_name": "Ada Obi", "customer_phone": "+234 803 123 4567",
+        "prescriber": Prescriber.all_objects.get(tenant=first).pk,
+        "consultation_category": "B",
+        "medications": [{"name": "Amoxicillin", "quantity": 10},
+                        {"name": "Paracetamol", "quantity": 6}],
+    }, format="json")
+    assert written.status_code == 201, written.content
+    script = Script.all_objects.get(pk=written.json()["id"])
+
+    drug = Medication.objects.create(generic_name="Amoxicillin")
+    item = StockItem.all_objects.create(
+        tenant=other, name="Amoxicillin 250mg", sku="AMOX250", unit="capsule",
+        cost_price=Decimal("10.00"), unit_price=Decimal("25.00"),
+        store=Store.RETAIL, medication=drug,
+    )
+    receive_stock(item, 50, batch_number="AM-1", cost_price=Decimal("10.00"))
+    client = _client(filler, other)
+
+    found = client.get("/api/prescriptions/scripts/by-number/",
+                       {"number": "08031234567", "undispensed": "1"}).json()
+    assert found["scripts"] == [] and found["orders_elsewhere"] == []
+    [outside] = found["scripts_elsewhere"]
+    assert outside["id"] == script.pk and outside["facility"] == "Corner Pharmacy"
+    assert outside["prescriber_license"] == "MDCN9"
+    assert [l["name"] for l in outside["lines"]] == ["Amoxicillin", "Paracetamol"]
+    assert "customer_name" not in outside and "customer_phone" not in outside
+    # A fragment finds nothing at another pharmacy.
+    assert client.get("/api/prescriptions/scripts/by-number/",
+                      {"number": "80312345"}).json()["scripts_elsewhere"] == []
+
+    refused = client.post("/api/pos/sales/", {
+        "items": [{"item": item.pk, "quantity": 10}], "rx": script.pk,
+    }, format="json")
+    assert refused.status_code == 400 and "patient_number" in refused.json()["errors"]
+
+    # This pharmacy's own terms with the writer price the band and the share.
+    Prescriber.all_objects.create(tenant=other, name="Dr Ada", license_number="mdcn9",
+                                  commission_rate=Decimal("10.00"),
+                                  consult_fee_b=Decimal("300"))
+    sold = client.post("/api/pos/sales/", {
+        "items": [{"item": item.pk, "quantity": 10}], "rx": script.pk,
+        "patient_number": "0803 123 4567",
+    }, format="json")
+    assert sold.status_code == 201, sold.content
+    sale = Sale.all_objects.get(pk=sold.json()["id"])
+    assert sale.consultation_fee == Decimal("300.00")   # the filler's fee, not 500
+    assert sale.total == Decimal("550.00")
+
+    script.refresh_from_db()
+    assert script.status == Script.Status.PARTIAL
+    assert [l.is_dispensed for l in script._lines()] == [True, False]
+    [commission] = PrescriberCommission.all_objects.filter(prescription=script)
+    [payout] = ConsultationPayout.all_objects.filter(prescription=script)
+    assert commission.tenant_id == payout.tenant_id == other.id
+    assert commission.commission_amount == Decimal("25.00")
+    assert payout.consultation_fee == Decimal("300.00")
+    # The writing pharmacy owes nothing, and its own listing still finds the
+    # script but no longer offers it as pending.
+    assert not PrescriberCommission.all_objects.filter(tenant=first).exists()
+    mine = _client(writer, first).get("/api/prescriptions/scripts/by-number/",
+                                      {"number": "08031234567"}).json()
+    assert mine["scripts"][0]["status"] == "partial"
+
+
+def test_a_sale_off_a_counter_script_ticks_its_lines(db_clean):
+    """Inside one pharmacy too: selling the drug is what fills the script."""
+    from decimal import Decimal
+
+    from apps.inventory.models import StockItem, Store, receive_stock
+    from apps.prescriptions.models import Prescription as Script
+
+    a = Tenant.objects.create(name="A", slug="a", kind=Tenant.Kind.PHARMACY)
+    pharmacist = User.objects.create_user(phone="08030000701", password="x",
+                                          tenant=a, role=Role.PHARMACIST)
+    item = StockItem.all_objects.create(
+        tenant=a, name="Paracetamol 500mg", sku="PCM", unit="tab",
+        cost_price=Decimal("1.00"), unit_price=Decimal("2.00"), store=Store.RETAIL,
+    )
+    receive_stock(item, 50, batch_number="P-1", cost_price=Decimal("1.00"))
+    client = _client(pharmacist, a)
+    script_id = client.post("/api/prescriptions/scripts/", {
+        "customer_name": "Walk-in",
+        "medications": [{"name": "Paracetamol", "quantity": 6, "item": item.pk}],
+    }, format="json").json()["id"]
+    sold = client.post("/api/pos/sales/", {
+        "items": [{"item": item.pk, "quantity": 6}], "rx": script_id,
+    }, format="json")
+    assert sold.status_code == 201, sold.content
+    assert Script.all_objects.get(pk=script_id).status == Script.Status.DISPENSED

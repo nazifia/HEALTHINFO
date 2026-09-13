@@ -17,6 +17,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.accounts.models import normalize_phone
 from apps.accounts.permissions import (
     IsPharmacyAdminOrReadOnly,
     IsPharmacyStaff,
@@ -44,8 +45,9 @@ from .models import (
 )
 from .serializers import (
     ConsultationPayoutSerializer,
-    OutsideOrderSerializer,
     HospitalSerializer,
+    OutsideOrderSerializer,
+    OutsideScriptSerializer,
     PrescriberCommissionSerializer,
     PrescriberSerializer,
     PrescriptionSerializer,
@@ -198,7 +200,9 @@ class PrescriptionViewSet(PharmacyViewSet):
           at whichever pharmacy they reach. Whole numbers only, and carrying
           the prescription alone (see OutsideOrderSerializer): the number the
           patient hands over is the key to their prescriptions, never to their
-          record.
+          record;
+        * ``scripts_elsewhere`` — counter scripts written up under that number
+          at *another* pharmacy (one with no stock, say), on the same terms.
 
         ponytail: a query per list. Fold them together only if a tenant's
         script table ever makes this show up in a plan.
@@ -221,11 +225,20 @@ class PrescriptionViewSet(PharmacyViewSet):
             | Q(customer_phone__contains=term)
         )
         orders = DrugOrder.objects.filter(patient__in=here)
+        holders = patients_by_number(number)
+        tenant_id = getattr(request.tenant, "id", None)
         elsewhere = DrugOrder.all_objects.filter(
-            patient__in=patients_by_number(number)
-        ).exclude(tenant_id=getattr(request.tenant, "id", None)).select_related(
+            patient__in=holders
+        ).exclude(tenant_id=tenant_id).select_related(
             "medication", "reporter", "tenant"
         )
+        # A script written up for a walk-in names them by phone alone, so a
+        # whole phone number (never a fragment) reaches it too.
+        phone = normalize_phone(number)
+        by_phone = Q(customer_phone=phone) if len(phone) >= 11 else Q(pk__in=[])
+        scripts_elsewhere = Prescription.all_objects.filter(
+            Q(patient__in=holders) | by_phone
+        ).exclude(tenant_id=tenant_id).select_related("prescriber", "tenant")
         # ``?undispensed=1`` — what the patient standing there can still be
         # handed. The counter asks this far more often than it asks for
         # everything ever written to a number.
@@ -233,11 +246,14 @@ class PrescriptionViewSet(PharmacyViewSet):
             scripts = scripts.filter(status__in=OPEN)
             orders = orders.filter(status__in=OPEN_ORDERS)
             elsewhere = elsewhere.filter(status__in=OPEN_ORDERS)
+            scripts_elsewhere = scripts_elsewhere.filter(status__in=OPEN)
         body = {
             "number": number,
             "scripts": PrescriptionSerializer(scripts, many=True).data,
             "orders": DrugOrderSerializer(orders, many=True).data,
             "orders_elsewhere": OutsideOrderSerializer(elsewhere, many=True).data,
+            "scripts_elsewhere": OutsideScriptSerializer(scripts_elsewhere,
+                                                         many=True).data,
         }
         # Logged like a patient read and for the same reason: this says a
         # number is registered somewhere and what was written for it, and it
@@ -247,7 +263,8 @@ class PrescriptionViewSet(PharmacyViewSet):
             user=request.user if request.user.is_authenticated else None,
             action=PatientAccessLog.Action.LOOKUP, query=number[:255],
             result_count=sum(len(body[k]) for k in
-                             ("scripts", "orders", "orders_elsewhere")),
+                             ("scripts", "orders", "orders_elsewhere",
+                              "scripts_elsewhere")),
         )
         return Response(body)
 

@@ -3,12 +3,13 @@ from decimal import Decimal
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
+from apps.accounts.models import normalize_phone
 from apps.accounts.serializers import TenantUserField
 from apps.analytics.models import Prescription as DrugOrder
 from apps.inventory.models import OutOfStock, StockItem, Supplier
 from apps.patients.models import patients_by_number
 from apps.prescriptions.models import (
-    ConsultationPayout,
+    Prescription as CounterScript,
     order_consultation_fee,
     raise_order_dues,
 )
@@ -119,9 +120,14 @@ class SaleSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     prescription = serializers.PrimaryKeyRelatedField(
         queryset=DrugOrder.all_objects.all(), required=False, allow_null=True
     )
+    # Likewise a counter script written up at another pharmacy: the one that
+    # had no stock, or the one nearer home.
+    rx = serializers.PrimaryKeyRelatedField(
+        queryset=CounterScript.all_objects.all(), required=False, allow_null=True
+    )
     # Proof the patient is standing there: the number they handed over. Only
-    # asked for when the order belongs to another facility — inside one tenant
-    # the staff can read the order anyway.
+    # asked for when the order or script belongs to another facility — inside
+    # one tenant the staff can read it anyway.
     patient_number = serializers.CharField(write_only=True, required=False,
                                            allow_blank=True)
 
@@ -186,32 +192,48 @@ class SaleSerializer(NamedRelationsMixin, serializers.ModelSerializer):
         return attrs
 
     def _check_outside_order(self, attrs):
-        """Let a sale fill another facility's order, on the patient's number.
+        """Let a sale fill another facility's order or script, on the number.
 
-        Selling the drug is what marks the order dispensed (see
-        analytics.capture.capture_dispense), so this is the point where one
-        tenant writes to another's record — and the only thing that entitles
-        it is the number the patient handed over. Without that the id of an
-        order is enough to mark a stranger's prescription filled.
+        Selling the drug is what marks the prescription dispensed (see
+        analytics.capture.capture_dispense and Prescription.fill_from), so
+        this is the point where one tenant writes to another's record — and
+        the only thing that entitles it is the number the patient handed
+        over. Without that the id of an order is enough to mark a stranger's
+        prescription filled.
         """
         number = attrs.pop("patient_number", "")
+        tenant_id = getattr(getattr(self.context.get("request"), "tenant", None),
+                            "id", None)
         order = attrs.get("prescription")
-        tenant = getattr(self.context.get("request"), "tenant", None)
-        if order is None or order.tenant_id == getattr(tenant, "id", None):
-            return
-        if order.status in (DrugOrder.Status.DISPENSED,
-                            DrugOrder.Status.CANCELLED):
+        if order is not None and order.tenant_id != tenant_id:
+            closed = order.status in (DrugOrder.Status.DISPENSED,
+                                      DrugOrder.Status.CANCELLED)
+            holder = (order.patient_id is not None
+                      and patients_by_number(number).filter(pk=order.patient_id))
+            self._require_holder("prescription", closed, holder, number)
+        rx = attrs.get("rx")
+        if rx is not None and rx.tenant_id != tenant_id:
+            closed = rx.status in (CounterScript.Status.DISPENSED,
+                                   CounterScript.Status.CANCELLED)
+            # The script names its patient by record, or by the phone it was
+            # written up under — a walk-in has no record anywhere.
+            holder = (rx.patient_id is not None
+                      and patients_by_number(number).filter(pk=rx.patient_id)
+                      ) or (rx.customer_phone
+                            and rx.customer_phone == normalize_phone(number))
+            self._require_holder("rx", closed, holder, number)
+
+    @staticmethod
+    def _require_holder(field, closed, holder, number):
+        if closed:
             raise serializers.ValidationError(
-                {"prescription": "That order has already been filled or stopped."}
+                {field: "That prescription has already been filled or stopped."}
             )
-        matched = (order.patient_id is not None and number
-                   and patients_by_number(number).filter(
-                       pk=order.patient_id).exists())
-        if not matched:
+        if not (number and holder):
             raise serializers.ValidationError(
                 {"patient_number": "Give the number the prescription was written "
-                                   "for — an order from another facility is only "
-                                   "dispensable to the patient holding it."}
+                                   "for — a prescription from another facility is "
+                                   "only dispensable to the patient holding it."}
             )
 
     @staticmethod
@@ -224,11 +246,7 @@ class SaleSerializer(NamedRelationsMixin, serializers.ModelSerializer):
         pharmacy's terms with its writer (order_consultation_fee).
         """
         if sale.rx_id:
-            rx = sale.rx
-            if rx.consultation_fee > 0 and not ConsultationPayout.all_objects.filter(
-                    prescription=rx).exists():
-                return rx.consultation_fee
-            return ZERO
+            return sale.rx.consultation_fee_at(sale.tenant_id)
         if sale.prescription_id:
             return order_consultation_fee(sale.tenant_id, sale.prescription)
         return ZERO
@@ -270,8 +288,10 @@ class SaleSerializer(NamedRelationsMixin, serializers.ModelSerializer):
             sale.authorization.mark_used()
         claim_for_sale(sale)
         if sale.rx_id:
-            # The prescriber earns on what their script actually sold, so this
-            # is raised from the sale rather than when the script was written.
+            # The sale is what fills the script — this pharmacy's own or
+            # another's — and the prescriber earns on what it actually sold,
+            # so both follow the sale rather than the writing of the script.
+            sale.rx.fill_from(sale)
             sale.rx.raise_prescriber_dues(sale)
         elif sale.prescription_id:
             # A clinician's order filled here — another facility's included —

@@ -315,9 +315,9 @@ named patient's claims are commercial and clinical data both.
   names the drawer it left, so the till still counts correctly at close.
 - `GET/POST /api/prescriptions/scripts/` — scripts written up at the counter,
   with lines ticked off by `POST .../{id}/dispense/` and the status following
-  what was ticked. A sale that names the script (`rx`) raises the prescriber's
-  commission (a share of the drugs on that sale) and, once, their consultation
-  payout — the band fee the script carries, folded into the sale's total
+  what was ticked. A sale that names the script (`rx`) ticks the lines its
+  items are the drug for and raises the prescriber's commission (a share of
+  the drugs on that sale) and, once, their consultation payout — the band fee the script carries, folded into the sale's total
   silently (never itemised, never typed at the till); the second sale off a
   part-filled script carries no fee. `/api/prescriptions/commissions/` and
   `/api/prescriptions/consultation-payouts/` settle them.
@@ -333,20 +333,25 @@ reach, and the pharmacy that fills it pays the writer.
    visit is charged at, not a price.
 2. **The counter finds it** on the number the patient hands over — `GET
    /api/prescriptions/scripts/by-number/?number=&undispensed=1` — which
-   returns this pharmacy's own `scripts`, its facility's `orders`, and
+   returns this pharmacy's own `scripts`, its facility's `orders`,
    `orders_elsewhere`: orders written at another facility for that number,
-   carrying the drug, the directions, the band, the writer and where it was
-   written, and nothing about the patient.
+   and `scripts_elsewhere`: counter scripts written up under that number at
+   another pharmacy (one with no stock, say) — each carrying the drug, the
+   directions, the band, the writer and where it was written, and nothing
+   about the patient. A whole number only: a fragment never reaches another
+   facility's records.
 3. **The sale fills it** — `POST /api/pos/sales/` with `prescription: <order
-   id>` and `patient_number` (the proof the patient is standing there; not
-   asked for inside the writing facility), or `rx: <script id>` for a counter
-   script. The basket lines mark the matching drugs of the prescription
-   dispensed. If this pharmacy has terms with the writer — a `Prescriber` row
-   whose `license_number` matches the writer's licence — the band's fee from
-   that row rides on the sale's total silently, once per prescription, and
-   the sale raises the writer's commission (that pharmacy's rate on the drugs
-   sold) and their consultation payout. A pharmacy with no terms with the
-   writer charges no fee and owes nothing.
+   id>` or `rx: <script id>`, and `patient_number` (the proof the patient is
+   standing there — the number the order's patient is registered under, or
+   the phone a walk-in's script was written up with; not asked for inside the
+   writing facility). The basket lines mark the matching drugs of the
+   prescription dispensed, wherever it was written. If this pharmacy has
+   terms with the writer — a `Prescriber` row whose `license_number` matches
+   the writer's licence — the band's fee from that row rides on the sale's
+   total silently, once per prescription, and the sale raises the writer's
+   commission (that pharmacy's rate on the drugs sold) and their consultation
+   payout. A pharmacy with no terms with the writer charges no fee and owes
+   nothing.
 4. **The writer reads their statement** — `GET /api/prescriptions/my-dues/`,
    no tenant header — every pharmacy's commissions and consultation payouts
    carrying their licence, with `pharmacy_name` and what each was earned on,

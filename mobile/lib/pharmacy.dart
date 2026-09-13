@@ -168,13 +168,11 @@ double basketTotal(List<BasketLine> lines) =>
 /// the membership; every other method must not, and the API rejects it if it
 /// does — so the caller's payment method decides whether the card travels.
 ///
-/// A sale that fills a prescription names it, and carries the number the
-/// patient handed over: an order written at another facility is dispensed on
-/// that number alone, and the API asks for it as the proof the patient is
-/// standing there.
-///
-/// A counter script — this pharmacy's own write-up — fills through `rx`
-/// instead, and needs no number: its staff can read it anyway.
+/// A sale that fills a prescription names it — a clinician's drug order in
+/// `prescription`, a counter script in `rx` — and carries the number the
+/// patient handed over: one written at another facility is dispensed on that
+/// number alone, and the API asks for it as the proof the patient is
+/// standing there. Inside the writing facility the number is ignored.
 Map<String, dynamic> saleBody({
   required List<BasketLine> lines,
   required String paymentMethod,
@@ -194,8 +192,9 @@ Map<String, dynamic> saleBody({
     // Only an insured sale can spend a clearance, so it travels with the card.
     if (insured && authorizationId != null) 'authorization': authorizationId,
     'prescription': ?prescriptionId,
-    if (prescriptionId != null && number.isNotEmpty) 'patient_number': number,
     'rx': ?rxId,
+    if ((prescriptionId ?? rxId) != null && number.isNotEmpty)
+      'patient_number': number,
     'items': [
       for (final l in lines)
         {
@@ -518,10 +517,10 @@ List<String> paymentRequestActions(String? status, String? role,
 
 /// What a patient's number turned up, as one list the counter fills from.
 ///
-/// Each row carries a `key` — `script:<id>` for this pharmacy's own counter
-/// script, `order:<id>` for a clinician's drug order written here or at
-/// another facility — so the sale knows which API field to carry it in (see
-/// [fillFor]). The lookup asks for ?undispensed=1, so what comes back is
+/// Each row carries a `key` — `script:<id>` for a counter script written up
+/// here or at another pharmacy, `order:<id>` for a clinician's drug order
+/// written here or at another facility — so the sale knows which API field
+/// to carry it in (see [fillFor]). The lookup asks for ?undispensed=1, so what comes back is
 /// already only what can still be handed over.
 List<Map<String, dynamic>> fillableRows(Map<String, dynamic> found) {
   Map<String, dynamic> row(Object? o, String kind, [String? facility]) {
@@ -539,6 +538,7 @@ List<Map<String, dynamic>> fillableRows(Map<String, dynamic> found) {
       row(s, 'script', 'Counter script'),
     for (final o in (found['orders'] ?? []) as List) row(o, 'order', 'Here'),
     for (final o in (found['orders_elsewhere'] ?? []) as List) row(o, 'order'),
+    for (final s in (found['scripts_elsewhere'] ?? []) as List) row(s, 'script'),
   ];
 }
 

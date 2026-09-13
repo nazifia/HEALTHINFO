@@ -215,24 +215,79 @@ class Prescription(TenantOwnedModel):
             self.save(update_fields=["status", "dispensed_at", "updated_at"])
         return self
 
+    def prescriber_at(self, tenant_id):
+        """Whoever this pharmacy pays for the script, or None.
+
+        The script's own pharmacy pays the prescriber it wrote up. Another
+        pharmacy filling it pays on its own terms with the writer, matched by
+        licence — the way a clinician's drug order is (prescriber_for_order).
+        """
+        if not self.prescriber_id:
+            return None
+        if tenant_id == self.tenant_id:
+            return self.prescriber
+        return prescriber_by_licence(tenant_id, self.prescriber.license_number)
+
+    def consultation_fee_at(self, tenant_id):
+        """What a sale at this pharmacy charges for the script's band, once.
+
+        The writing pharmacy charges the fee it snapshotted; another pharmacy
+        charges its own fee for the band. A script whose fee has been charged
+        anywhere carries no second one — the patient was consulted once.
+        """
+        if ConsultationPayout.all_objects.filter(prescription=self).exists():
+            return ZERO
+        if tenant_id == self.tenant_id:
+            return _money(self.consultation_fee)
+        prescriber = self.prescriber_at(tenant_id)
+        if prescriber is None:
+            return ZERO
+        return prescriber.fee_for(self.consultation_category)
+
+    def fill_from(self, sale):
+        """Tick off the lines a sale's items are the drug for.
+
+        The till is where the drug leaves the shelf, so a sale naming the
+        script is what marks it filled — at the pharmacy that wrote it up, or
+        at any other. A line matches a sold item by stock item, by catalog
+        drug, or failing both by name: another pharmacy's shelf never carries
+        this one's item ids.
+        """
+        from apps.analytics.capture import medication_for
+
+        sold = [(s.item_id, medication_for(sale.tenant_id, s.item, s.name),
+                 (s.name or "").strip().lower())
+                for s in sale.lines.select_related("item")]
+        for line in self._lines().filter(is_dispensed=False).select_related("item"):
+            drug = medication_for(self.tenant_id, line.item, line.name)
+            if any(line.item_id == item_id
+                   or (drug is not None and drug == med)
+                   or line.name.strip().lower() == name
+                   for item_id, med, name in sold):
+                line.mark_dispensed(user=sale.served_by)
+        return self
+
     def raise_prescriber_dues(self, sale):
         """Book what the prescriber earned on this sale. Idempotent.
 
         Commission is a share of what was actually sold, so it is raised per
         sale. The consultation fee is a flat charge for the script, so it is
-        raised once however many times the script is part-filled.
+        raised once however many times the script is part-filled. Both are
+        owed by the pharmacy that made the sale, which need not be the one
+        that wrote the script up.
         """
-        if not self.prescriber_id:
+        prescriber = self.prescriber_at(sale.tenant_id)
+        if prescriber is None:
             return None, None
-        prescriber = self.prescriber
         commission = None
         rate = Decimal(prescriber.commission_rate)
         sold = drugs_sold(sale)
         if rate > 0 and sold > 0:
             commission, _created = PrescriberCommission.all_objects.get_or_create(
-                tenant=self.tenant, prescriber=prescriber, prescription=self,
-                sale=sale,
+                prescription=self, sale=sale,
                 defaults={
+                    "tenant_id": sale.tenant_id,
+                    "prescriber": prescriber,
                     "patient_name": self.customer_name,
                     "sales_amount": sold,
                     "commission_rate": rate,
@@ -240,14 +295,15 @@ class Prescription(TenantOwnedModel):
                 },
             )
         payout = None
-        if self.consultation_fee > 0:
+        if sale.consultation_fee > 0:
             payout, _created = ConsultationPayout.all_objects.get_or_create(
-                tenant=self.tenant, prescription=self,
+                prescription=self,
                 defaults={
+                    "tenant_id": sale.tenant_id,
                     "prescriber": prescriber,
                     "patient_name": self.customer_name,
                     "consultation_category": self.consultation_category,
-                    "consultation_fee": self.consultation_fee,
+                    "consultation_fee": sale.consultation_fee,
                 },
             )
         return commission, payout
@@ -374,20 +430,28 @@ def drugs_sold(sale):
     return _money(Decimal(sale.total) - Decimal(sale.consultation_fee))
 
 
-def prescriber_for_order(tenant_id, order):
-    """This pharmacy's terms with whoever wrote ``order``, matched by licence.
+def prescriber_by_licence(tenant_id, licence):
+    """This pharmacy's terms with the holder of ``licence``, or None.
 
-    The order names its writer by licence; the pharmacy names the prescribers
-    it pays by licence too. Where the two meet, this pharmacy owes that doctor
-    what its own row says — whichever facility the order was written at. A
-    writer this pharmacy has no terms with earns nothing here.
+    A pharmacy names the prescribers it pays by licence; where a prescription
+    from anywhere names its writer by the same licence, this pharmacy owes
+    that doctor what its own row says. A writer this pharmacy has no terms
+    with earns nothing here.
     """
-    licence = (getattr(order.reporter, "license_number", "") or "").strip()
+    licence = (licence or "").strip()
     if not licence:
         return None
     return Prescriber.all_objects.filter(
         tenant_id=tenant_id, license_number__iexact=licence, is_active=True,
     ).first()
+
+
+def prescriber_for_order(tenant_id, order):
+    """This pharmacy's terms with whoever wrote ``order``, matched by licence —
+    whichever facility the order was written at."""
+    return prescriber_by_licence(
+        tenant_id, getattr(order.reporter, "license_number", "")
+    )
 
 
 def order_consultation_fee(tenant_id, order):

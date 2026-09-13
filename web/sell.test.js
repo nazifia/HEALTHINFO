@@ -1,7 +1,8 @@
 /* Self-check for the dispense screen's prescription helpers in app.js: what a
  * patient's number turns up is one list the counter fills from, and the sale
  * carries a counter script in `rx` and a clinician's drug order in
- * `prescription` with the number as proof. Run with: node sell.test.js
+ * `prescription`, either from another facility, with the number as proof.
+ * Run with: node sell.test.js
  *
  * ponytail: source sliced out of app.js, same as sales.test.js. */
 'use strict';
@@ -22,17 +23,23 @@ const found = {
   orders: [{ id: 7, medication_name: 'Artemether', dose: '80 mg', frequency: 'twice daily' }],
   orders_elsewhere: [{ id: 9, medication_name: 'Amoxicillin', dose: '500 mg',
     duration_days: 5, facility: 'Ikeja Clinic', consultation_category: 'B' }],
+  scripts_elsewhere: [{ id: 4, prescriber_name: 'Dr Bala', facility: 'Corner Pharmacy',
+    lines: [{ name: 'ORS', quantity: 3 }] }],
 };
 const rows = sellRxRows(found);
-assert.deepStrictEqual(rows.map((r) => r.key), ['script:3', 'order:7', 'order:9']);
-assert.deepStrictEqual(rows.map((r) => r.facility), ['Counter script', 'Here', 'Ikeja Clinic']);
+assert.deepStrictEqual(rows.map((r) => r.key), ['script:3', 'order:7', 'order:9', 'script:4']);
+assert.deepStrictEqual(rows.map((r) => r.facility),
+  ['Counter script', 'Here', 'Ikeja Clinic', 'Corner Pharmacy']);
 
 assert.strictEqual(sellRxLabel(rows[0]), 'Amoxicillin ×10, Paracetamol ×6 — Dr Ada');
 assert.strictEqual(sellRxLabel(rows[1]), 'Artemether · 80 mg · twice daily');
 assert.strictEqual(sellRxLabel(rows[2]), 'Amoxicillin · 500 mg · 5 days');
 
 assert.deepStrictEqual(sellFillBody(null, '0803'), {});
-assert.deepStrictEqual(sellFillBody(rows[0], '0803'), { rx: 3 });
+assert.strictEqual(sellRxLabel(rows[3]), 'ORS ×3 — Dr Bala');
+assert.deepStrictEqual(sellFillBody(rows[0], '0803'), { rx: 3, patient_number: '0803' });
 assert.deepStrictEqual(sellFillBody(rows[2], '08031234567'),
   { prescription: 9, patient_number: '08031234567' });
+assert.deepStrictEqual(sellFillBody(rows[3], '08031234567'),
+  { rx: 4, patient_number: '08031234567' });
 console.log('sell helpers ok');

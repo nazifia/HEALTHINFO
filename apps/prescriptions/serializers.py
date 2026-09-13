@@ -134,6 +134,38 @@ class OutsideOrderSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class OutsideScriptLineSerializer(serializers.ModelSerializer):
+    """A line of another pharmacy's script: the drug and directions, not the
+    stock item — that id belongs to the shelf it was written up against."""
+
+    class Meta:
+        model = PrescriptionItem
+        fields = ("id", "name", "brand", "quantity", "unit", "dosage", "duration",
+                  "instructions", "is_dispensed")
+        read_only_fields = fields
+
+
+class OutsideScriptSerializer(serializers.ModelSerializer):
+    """A counter script as a pharmacy other than the one that wrote it up
+    may read it: what was prescribed, by whom and where — and, like
+    OutsideOrderSerializer, nothing about the patient."""
+
+    # Through the model's own lookup, not the related manager: that reads
+    # through the tenant-scoped manager and this reader is another tenant.
+    lines = OutsideScriptLineSerializer(many=True, read_only=True, source="_lines")
+    prescriber_name = serializers.CharField(source="prescriber.name", read_only=True)
+    prescriber_license = serializers.CharField(source="prescriber.license_number",
+                                               read_only=True)
+    facility = serializers.CharField(source="tenant.name", read_only=True)
+
+    class Meta:
+        model = Prescription
+        fields = ("id", "lines", "status", "consultation_category",
+                  "prescriber_name", "prescriber_license", "doctor_name",
+                  "facility", "created_at")
+        read_only_fields = fields
+
+
 def order_name(order):
     """A drug order as the counter saw it: the drug and where it was written."""
     if order is None:

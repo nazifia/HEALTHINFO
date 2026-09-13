@@ -103,11 +103,23 @@ void main() {
           'consultation_category': 'B',
         }
       ],
+      'scripts_elsewhere': [
+        {
+          'id': 4,
+          'prescriber_name': 'Dr Bala',
+          'facility': 'Corner Pharmacy',
+          'lines': [
+            {'name': 'ORS', 'quantity': 3},
+          ],
+        }
+      ],
     };
     final rows = fillableRows(found);
-    expect(rows.map((r) => r['key']), ['script:3', 'order:7', 'order:9']);
+    expect(rows.map((r) => r['key']),
+        ['script:3', 'order:7', 'order:9', 'script:4']);
     expect(rows.map((r) => r['facility']),
-        ['Counter script', 'Here', 'Ikeja Clinic']);
+        ['Counter script', 'Here', 'Ikeja Clinic', 'Corner Pharmacy']);
+    expect(fillableLabel(rows[3]), 'ORS ×3 — Dr Bala');
     expect(fillableLabel(rows[0]), 'Amoxicillin ×10, Paracetamol ×6 — Dr Ada');
     expect(fillableLabel(rows[1]), 'Artemether · 80 mg');
     expect(fillableLabel(rows[2]), 'Amoxicillin · 500 mg · 5 days');
@@ -115,16 +127,18 @@ void main() {
     expect(fillFor(null), (rxId: null, prescriptionId: null));
     expect(fillFor(rows[0]), (rxId: 3, prescriptionId: null));
     expect(fillFor(rows[2]), (rxId: null, prescriptionId: 9));
+    expect(fillFor(rows[3]), (rxId: 4, prescriptionId: null));
 
     final lines = [
       const BasketLine(itemId: 7, name: 'ORS', unitPrice: 150, quantity: 3),
     ];
-    // A script needs no number: the pharmacy wrote it up itself.
+    // A script travels with the number too: another pharmacy's script is
+    // only dispensable to the patient holding it.
     final script = saleBody(
-        lines: lines, paymentMethod: 'cash', rxId: 3, patientNumber: '0803');
-    expect(script['rx'], 3);
+        lines: lines, paymentMethod: 'cash', rxId: 4, patientNumber: '0803');
+    expect(script['rx'], 4);
     expect(script.containsKey('prescription'), isFalse);
-    expect(script.containsKey('patient_number'), isFalse);
+    expect(script['patient_number'], '0803');
   });
 
   test('a walk-in carries no patient, and totals stay server-side', () {

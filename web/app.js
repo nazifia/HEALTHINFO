@@ -3765,18 +3765,19 @@ async function viewHmo() {
 }
 
 /* What a patient's number turned up, as one list the counter can fill from.
-   `kind` says which API field the sale carries it in: a counter script goes
-   in `rx`; a clinician's drug order, written here or at another facility, in
-   `prescription` with the number as proof the patient is standing there. */
+   `kind` says which API field the sale carries it in: a counter script,
+   written up here or at another pharmacy, goes in `rx`; a clinician's drug
+   order, written here or at another facility, in `prescription`. Either
+   travels with the number as proof the patient is standing there. */
 function sellRxRows(found) {
   if (!found) return [];
-  const order = (o, facility) => ({ ...o, kind: 'order', key: `order:${o.id}`,
+  const row = (o, kind, facility) => ({ ...o, kind, key: `${kind}:${o.id}`,
     facility: facility ?? o.facility });
   return [
-    ...(found.scripts || []).map((s) => ({ ...s, kind: 'script', key: `script:${s.id}`,
-      facility: 'Counter script' })),
-    ...(found.orders || []).map((o) => order(o, 'Here')),
-    ...(found.orders_elsewhere || []).map((o) => order(o)),
+    ...(found.scripts || []).map((s) => row(s, 'script', 'Counter script')),
+    ...(found.orders || []).map((o) => row(o, 'order', 'Here')),
+    ...(found.orders_elsewhere || []).map((o) => row(o, 'order')),
+    ...(found.scripts_elsewhere || []).map((s) => row(s, 'script')),
   ];
 }
 
@@ -3791,8 +3792,8 @@ function sellRxLabel(o) {
 
 function sellFillBody(filling, number) {
   if (!filling) return {};
-  if (filling.kind === 'script') return { rx: filling.id };
-  return { prescription: filling.id, patient_number: number };
+  const field = filling.kind === 'script' ? 'rx' : 'prescription';
+  return { [field]: filling.id, patient_number: number };
 }
 
 /* Dispensing counter. The server picks the batches (first expiry first out),
