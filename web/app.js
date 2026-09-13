@@ -119,6 +119,14 @@ window.addEventListener('online', () => Outbox.flush());
 const SEX_FILTER = { param: 'patient_sex', label: 'Sex', text: (r) => r.name,
   options: [{ id: 'F', name: 'Female' }, { id: 'M', name: 'Male' }, { id: 'other', name: 'Other' }] };
 
+// A counter script's states, plus the API's alias for pending+partial:
+// "still owed" is one question at the counter, so it is one filter here too.
+const SCRIPT_STATUS_FILTER = { param: 'status', label: 'State', text: (r) => r.name,
+  options: [{ id: 'undispensed', name: 'Still owed' }, { id: 'pending', name: 'Pending' },
+    { id: 'partial', name: 'Part-filled' }, { id: 'dispensed', name: 'Dispensed' }, { id: 'cancelled', name: 'Cancelled' }] };
+const SCRIPT_SOURCE_FILTER = { param: 'source', label: 'Source', text: (r) => r.name,
+  options: [{ id: 'pharmacy', name: 'Written here' }, { id: 'portal', name: 'Sent in' }] };
+
 // How the patient's care is paid for, mirroring Patient.PatientType — the
 // register filters on it, and the form checks an NHIA patient can be billed.
 const PATIENT_TYPES = {
@@ -251,6 +259,18 @@ const RESOURCES = {
   'pharmacy-orders':        { title: 'Purchase Orders', group: 'Pharmacy', path: 'pharmacy/purchase-orders', roles: 'staff', search: true, extra: 'purchase',
                               actions: [{ name: 'submit', label: 'Submit to supplier', when: ['draft'] },
                                         { name: 'cancel', label: 'Cancel order', danger: true, when: ['draft', 'submitted', 'partial'] }] },
+  // The counter's script — the pharmacy's paperwork for handing stock over,
+  // the same register as the app's Prescriptions screen. ``medications`` is
+  // the write-only line list; the form builds it from its own rows (see
+  // wireScriptLines). Lines are ticked off one at a time on the detail page
+  // (extra: 'script') and the status follows them; the action here is the
+  // "all of it" shortcut, which is what an empty body means to the API.
+  'pharmacy-scripts':       { title: 'Prescriptions',   group: 'Pharmacy', path: 'prescriptions/scripts',    roles: 'staff', search: true, extra: 'script',
+                              hide: ['medications'], filters: [SCRIPT_STATUS_FILTER, SCRIPT_SOURCE_FILTER],
+                              labels: { customer_name: 'Patient name', customer_phone: 'Patient phone', consultation_category: 'Consultation band' },
+                              hints: { customer_phone: 'Any pharmacy finds and fills the script by this number' },
+                              actions: [{ name: 'dispense', label: 'Dispense everything still open', when: ['pending', 'partial'] },
+                                        { name: 'cancel', label: 'Cancel script', danger: true, when: ['pending', 'partial'] }] },
   'pharmacy-hospitals':     { title: 'Hospitals',      group: 'Pharmacy', path: 'prescriptions/hospitals',   roles: 'admin', search: true },
   // What a prescriber has earned and what is still owed them, on their own
   // page (extra: 'statement') — the two ledgers are settled from there.
@@ -344,13 +364,12 @@ const RESOURCES = {
                           fileFrom: ['consultations', 'case-reports', 'prescriptions', 'lab-results', 'appointments'],
                           actions: [{ name: 'merge', label: 'Merge a duplicate into this record', ask: 'hospital_number', adminOnly: true }] },
   // The encounter itself. Closing settles the booking and the case report with
-  // it, so it goes through the action rather than a PATCH of status.
+  // it, so it goes through the action rather than a PATCH of status — as a
+  // form on the page (extra: 'close'), not a chain of prompts.
   'consultations':     { title: 'Visits',             group: 'Clinical', report: true, filters: [SEX_FILTER], fileFrom: ['prescriptions', 'case-reports'],
-                          ...VISIT_SHEET,
+                          ...VISIT_SHEET, extra: 'close',
                           actions: [{ name: 'diagnose', label: 'Record diagnosis', ask: 'diagnosis',
-                                      choose: 'severity:mild,moderate,severe,critical', when: ['open'] },
-                                    { name: 'close', label: 'Close visit', ask: 'follow_up_on,notes',
-                                      choose: 'disposition:home,follow_up,admitted,referred,deceased', when: ['open'] }] },
+                                      choose: 'severity:mild,moderate,severe,critical', when: ['open'] }] },
   'users':             { title: 'Users',              group: 'Admin', adminOnly: true, search: true,
                           filters: ORG_FILTERS },
   // The same list, narrowed to one kind of seat and sitting in that kind's own
@@ -675,13 +694,28 @@ function navHtml() {
     return `<a href="#/portal" data-route="/portal" class="nav-home">${ico('activity')}My Health</a>`
       + navGroup('Account', `<a href="#/profile" data-route="/profile">${ico('users')}Profile</a>`);
   }
-  const clinical = (isClinicalStaff() ? `<a href="#/clinical" data-route="/clinical">${ico('activity')}Ward</a>` : '')
-    + (groups.Clinical || []).join('');
+  // A cadre's own registers (CLINICAL_WORK) come out of whichever group the
+  // registry filed them under and into one named for their profession, with
+  // the ward in front. The rest of the menu is unchanged behind it.
+  const work = CLINICAL_WORK[ME?.role];
+  if (work) {
+    const mine = [];
+    for (const slug of work) {
+      const route = `data-route="/r/${slug}"`;
+      for (const g of Object.keys(groups)) {
+        const hit = groups[g].find((a) => a.includes(route));
+        if (hit) { mine.push(hit); groups[g] = groups[g].filter((a) => a !== hit); }
+      }
+    }
+    html += navGroup(PROFESSION_NAV[ME.role],
+      `<a href="#/clinical" data-route="/clinical">${ico('activity')}Ward</a>` + mine.join(''));
+  }
+  const clinical = (groups.Clinical || []).join('');
   // A prescriber's own desk sits first; everyone else finds it after the references.
   if (clinical && prescriber) html += navGroup('Clinical', clinical);
   html += navGroup('Tools', tools.join(''));
   html += navGroup('Catalog', groups.Catalog.join(''));
-  html += navGroup('Reports', groups.Reports.join(''));
+  if (groups.Reports?.length) html += navGroup('Reports', groups.Reports.join(''));
   if (groups.Pharmacy?.length) {
     html += navGroup('Pharmacy',
       `<a href="#/pharmacy" data-route="/pharmacy">${ico('pill')}Counter</a>` +
@@ -2097,6 +2131,8 @@ async function viewDetail(slug, id) {
       ${res.history ? '<div class="card"><h3>Clinical history</h3><div id="rec-history"><p class="loading">Loading…</p></div></div>' : ''}
       ${res.extra === 'purchase' ? purchaseReceiveHtml(obj) : ''}
       ${res.extra === 'count' ? stockCountHtml(obj) : ''}
+      ${res.extra === 'script' ? scriptLinesHtml(obj) : ''}
+      ${res.extra === 'close' ? closeVisitHtml(obj) : ''}
       ${res.extra === 'preauth' ? preauthItemsHtml(obj) + preauthDecisionHtml(obj)
         + preauthTrailHtml() : ''}
       ${res.extra === 'statement' ? '<div id="statement"><p class="loading">Loading…</p></div>' : ''}`);
@@ -2108,6 +2144,8 @@ async function viewDetail(slug, id) {
     }
     if (res.extra === 'purchase') wirePurchaseReceive(id, () => viewDetail(slug, id));
     if (res.extra === 'count') wireStockCount(id, () => viewDetail(slug, id));
+    if (res.extra === 'script') wireScriptDispense(id, () => viewDetail(slug, id));
+    if (res.extra === 'close') wireCloseVisit(id, () => viewDetail(slug, id));
     if (res.extra === 'statement') loadStatement(slug, id);
     if (res.extra === 'preauth') {
       wirePreauthItems(() => viewDetail(slug, id));
@@ -2139,10 +2177,6 @@ async function viewDetail(slug, id) {
           if (!options.includes(picked)) return toast(`${key} must be one of ${options.join(', ')}.`, true);
           body[key] = picked;
         }
-        // Say so before the round trip that would refuse it.
-        if (body.disposition === 'follow_up' && !body.follow_up_on) {
-          return toast('A follow-up disposition needs a follow-up date.', true);
-        }
         try {
           // The duplicate is named by hospital number; the API wants its id.
           if (slug === 'patients' && b.dataset.pa === 'merge') {
@@ -2162,8 +2196,7 @@ async function viewDetail(slug, id) {
           }
           // Most visits end with something to take home, so the toast carries
           // the next step; the "+ Prescription" link is on the page below.
-          toast(r?.message || (slug === 'consultations' && b.dataset.pa === 'close'
-            ? 'Visit closed. Write the prescription under "File a record".' : 'Done.'));
+          toast(r?.message || 'Done.');
           viewDetail(slug, id);
         } catch (e) { toast(e.message, true); }
       };
@@ -2282,6 +2315,9 @@ async function viewForm(slug, id, query) {
     // on purpose: inside it, a second field named `medication` would collide
     // with the first and collectForm would read neither.
     const multiDrug = slug === 'prescriptions' && !id;
+    // A script's drugs are its own rows too, edited only while nothing has
+    // gone out (the serializer refuses the rest).
+    const scriptLines = slug === 'pharmacy-scripts';
     // A new visit takes its diagnosis here, in the clinician's own words, and
     // files it through the diagnose action once the visit exists — the server
     // matches the text to the catalog and files the case report (same as the
@@ -2306,6 +2342,10 @@ async function viewForm(slug, id, query) {
       ${multiDrug ? `<div id="drugs"></div>
       <div class="actions">
         <button type="button" id="add-drug" class="btn ghost">+ Add another drug</button>
+      </div>` : ''}
+      ${scriptLines ? `<div id="rx-lines"></div>
+      <div class="actions">
+        <button type="button" id="add-line" class="btn ghost">+ Add a drug</button>
       </div>` : ''}
       <div class="actions">
         <button type="submit" form="f" class="btn">${id ? 'Save' : sheet ? esc(sheet.submit) : 'Create'}</button>
@@ -2340,10 +2380,15 @@ async function viewForm(slug, id, query) {
       });
     }
     const drugRows = multiDrug ? wireExtraDrugs(fields, res) : null;
+    const lineRows = scriptLines ? await wireScriptLines(current.lines) : null;
     $('#f').onsubmit = async (e) => {
       e.preventDefault();
       const body = prescriptionPayload(collectForm(e.target, fields),
         drugRows ? [...drugRows.children].map((row) => collectRow(row, fields)) : []);
+      if (lineRows) {
+        body.medications = [...lineRows.children].map(collectScriptLine).filter((l) => l.name);
+        if (!body.medications.length) return toast('A script needs at least one drug on it.', true);
+      }
       if (slug === 'patients') {
         const problem = patientFormError(body);
         if (problem) return toast(problem, true);
@@ -2461,6 +2506,52 @@ function wireExtraDrugs(fields, { labels = {}, hints = {} }) {
     row.querySelector('input, select')?.focus();
   };
   return box;
+}
+
+/* The drugs on a counter script, one row each, outside the <form> for the
+ * same reason as the extra drug rows above. The item is picked off the shelf
+ * (its name rides along, which is what the line is filed under) or typed for
+ * a drug the pharmacy does not stock; the quantity is what the script says. */
+const SCRIPT_LINE_FIELDS = ['item', 'name', 'quantity', 'dosage', 'duration', 'instructions'];
+async function wireScriptLines(existing = []) {
+  const box = $('#rx-lines');
+  let items = [];
+  try { items = await allItems(); } catch { /* typed names still work */ }
+  const options = '<option value=""></option>' + items.map((i) =>
+    `<option value="${i.id}">${esc(i.name)}${i.unit_price == null ? '' : ` · ${money(i.unit_price)}`}</option>`).join('');
+  const renumber = () => [...box.children].forEach((row, i) => { row.querySelector('h3').textContent = `Drug ${i + 1}`; });
+  const add = (line = {}) => {
+    const row = document.createElement('div');
+    row.className = 'card form-card';
+    row.innerHTML = `<h3></h3>
+      <label>From the shelf<select name="item">${options}</select></label>
+      <label>Drug *<input name="name" maxlength="255" value="${esc(line.name ?? '')}"></label>
+      <label>Quantity *<input type="number" name="quantity" min="1" value="${esc(line.quantity ?? 1)}"></label>
+      <label>Dosage<input name="dosage" maxlength="200" value="${esc(line.dosage ?? '')}" placeholder="1 tablet twice daily"></label>
+      <label>Duration<input name="duration" maxlength="100" value="${esc(line.duration ?? '')}" placeholder="5 days"></label>
+      <label>Instructions<input name="instructions" value="${esc(line.instructions ?? '')}"></label>
+      <div class="actions"><button type="button" class="btn ghost">Remove</button></div>`;
+    const sel = row.querySelector('[name="item"]');
+    sel.value = line.item ?? '';
+    sel.onchange = () => { if (sel.value) row.querySelector('[name="name"]').value = sel.selectedOptions[0].text.split(' · ')[0]; };
+    if (items.length > 12) makeSearchable(sel, { placeholder: 'Type an item name…' });
+    row.querySelector('.actions button').onclick = () => { row.remove(); renumber(); };
+    box.append(row);
+    renumber();
+  };
+  $('#add-line').onclick = () => { add(); box.lastChild.querySelector('[name="name"]').focus(); };
+  for (const line of existing.length ? existing : [{}]) add(line);
+  return box;
+}
+
+function collectScriptLine(row) {
+  const line = {};
+  for (const name of SCRIPT_LINE_FIELDS) {
+    const raw = (row.querySelector(`[name="${name}"]`)?.value ?? '').trim();
+    if (raw === '') continue;
+    line[name] = (name === 'item' || name === 'quantity') ? Number(raw) : raw;
+  }
+  return line;
 }
 
 /* One extra drug row. It is not in a <form>, so the values are read off the
@@ -3374,6 +3465,9 @@ const CLINICAL_WORK = {
   midwife: ['vital-events', 'prescriptions', 'immunizations', 'case-reports', 'appointments'],
   chew:    ['chw-reports', 'prescriptions', 'immunizations', 'case-reports', 'adverse-reactions'],
 };
+// The sidebar group each cadre's work sits under (navHtml). Same keys as
+// mobile/lib/screens/home_screen.dart _professionLabel.
+const PROFESSION_NAV = { doctor: 'Doctor', nurse: 'Nursing', midwife: 'Midwifery', chew: 'Community Health' };
 
 /* The ward's own home: the same banner a patient lands on, with the day's
    workload as the facts; a box to find a patient by phone or name; and three quick
@@ -3419,6 +3513,7 @@ async function viewClinical() {
     if (!p) return;
     go.innerHTML = `<a class="btn" href="#/r/consultations/new?patient=${p.id}">+ Start visit</a>
       <a class="btn ghost" href="#/r/prescriptions/new?patient=${p.id}">+ Prescribe</a>
+      ${isPharmacyStaff() ? `<a class="btn ghost" href="#/r/pharmacy-scripts/new?patient=${p.id}&customer_name=${encodeURIComponent(p.full_name || '')}&customer_phone=${encodeURIComponent(p.phone || '')}">+ Counter script</a>` : ''}
       <a class="btn ghost" href="#/r/patients/${p.id}">Open record</a>`;
   });
   $('#patient-q').focus();
@@ -3650,7 +3745,7 @@ async function viewPharmacy() {
       <div class="page-head"><h2>Pharmacy</h2>
         <a class="btn" href="#/pharmacy/sell">+ Dispense</a></div>
       <div class="tiles">
-        ${tile('Scripts to fill', scripts ? scripts.total : '—')}
+        <a class="tile linktile" href="#/r/pharmacy-scripts"><span class="tile-label">Scripts to fill</span><span class="tile-val">${esc(scripts ? scripts.total : '—')}</span></a>
         ${tile('Sales today', sales ? sales.sales : '—')}
         ${tile('Billed today', sales ? money(sales.billed) : '—')}
         ${tile('Collected today', sales ? money(sales.collected) : '—')}
@@ -4320,6 +4415,68 @@ function wirePurchaseReceive(orderId, reload) {
     try {
       const r = await Api.post(`/api/pharmacy/purchase-orders/${orderId}/receive/`, body);
       toast(r?.message || 'Received.');
+      reload();
+    } catch (err) { toast(err.message, true); }
+  };
+}
+
+/* Ending a visit — the app's _CloseSheet. The disposition is the one thing
+   asked; the follow-up date is optional whatever it is, and the note is
+   appended to what the visit already says. */
+const DISPOSITIONS = [['home', 'Discharged home'], ['follow_up', 'Discharged, follow-up'],
+  ['admitted', 'Admitted'], ['referred', 'Referred out'], ['deceased', 'Died']];
+function closeVisitHtml(visit) {
+  if (visit.status !== 'open' || !canActRes(RESOURCES.consultations)) return '';
+  return `<div class="card"><h3>Close visit</h3>
+    <form id="close-visit" class="form-card">
+      <label>Disposition<select name="disposition">${DISPOSITIONS.map(([v, l]) =>
+        `<option value="${v}">${esc(l)}</option>`).join('')}</select></label>
+      <label>Follow-up date (optional)<input type="date" name="follow_up_on" value="${esc(String(visit.follow_up_on || '').slice(0, 10))}"></label>
+      <label>Closing note (optional)<textarea name="notes" rows="2"></textarea></label>
+      <div class="actions"><button class="btn">Close visit</button></div>
+    </form></div>`;
+}
+
+function wireCloseVisit(visitId, reload) {
+  const form = $('#close-visit');
+  if (!form) return;
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(form);
+    const body = { disposition: fd.get('disposition') };
+    for (const k of ['follow_up_on', 'notes']) if (fd.get(k)?.trim()) body[k] = fd.get(k).trim();
+    try {
+      await Api.post(`/api/consultations/${visitId}/close/`, body);
+      toast('Visit closed. Write the prescription under "File a record".');
+      reload();
+    } catch (err) { toast(err.message, true); }
+  };
+}
+
+/* Ticking a script's drugs off as they are handed over — the app's RxSheet.
+   Only the open lines are offered; the status follows what was ticked, so a
+   part-filled script comes back partial without anyone setting it. */
+function scriptLinesHtml(rx) {
+  const open = (rx.lines || []).filter((l) => !l.is_dispensed);
+  if (!open.length || rx.status === 'cancelled' || !isPharmacyStaff()) return '';
+  return `<div class="card"><h3>Still to dispense</h3>
+    <form id="dispense" class="form-card">
+      ${open.map((l) => `<label><input type="checkbox" name="line" value="${l.id}" checked>
+        ${esc(l.name)} ×${l.quantity} ${esc(l.unit || '')}${l.dosage ? ` — ${esc(l.dosage)}` : ''}</label>`).join('')}
+      <div class="actions"><button class="btn">Dispense ticked</button></div>
+    </form></div>`;
+}
+
+function wireScriptDispense(rxId, reload) {
+  const form = $('#dispense');
+  if (!form) return;
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const lines = [...form.querySelectorAll('[name="line"]:checked')].map((i) => Number(i.value));
+    if (!lines.length) return toast('Tick what is being handed over.', true);
+    try {
+      const r = await Api.post(`/api/prescriptions/scripts/${rxId}/dispense/`, { lines });
+      toast(r?.message || 'Dispensed.');
       reload();
     } catch (err) { toast(err.message, true); }
   };

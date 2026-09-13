@@ -2,7 +2,7 @@ from uuid import uuid4
 
 from django.db import transaction
 from django.db.models import Q
-from rest_framework import viewsets
+from rest_framework import serializers, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.response import Response
@@ -371,19 +371,34 @@ class ConsultationViewSet(_ReportViewSet):
     def close(self, request, pk=None):
         """End the encounter: ``{"disposition": ..., "follow_up_on": ...}``.
 
-        ``follow_up_on`` is required for the ``follow_up`` disposition and
-        optional otherwise; ``notes`` is appended to the note if given.
+        ``follow_up_on`` is optional, whatever the disposition; ``notes`` is
+        appended to the note if given.
         """
         consultation = self.get_object()
+        # Parsed here, not by the model: a date the parser cannot read is the
+        # client's mistake (400), and the model would raise Django's
+        # ValidationError from save(), which the API answers with a 500. The
+        # web asks for it in a text box, so day-first is read as well as ISO.
+        follow_up_on = request.data.get("follow_up_on") or None
+        if follow_up_on:
+            try:
+                follow_up_on = FOLLOW_UP_DATE.run_validation(follow_up_on)
+            except ValidationError as exc:
+                raise ValidationError({"follow_up_on": exc.detail}) from exc
         try:
             consultation.close(
                 disposition=request.data.get("disposition", ""),
-                follow_up_on=request.data.get("follow_up_on") or None,
+                follow_up_on=follow_up_on,
                 notes=request.data.get("notes") or None,
             )
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
         return Response(self.get_serializer(consultation).data)
+
+
+FOLLOW_UP_DATE = serializers.DateField(
+    input_formats=["iso-8601", "%d/%m/%Y", "%d-%m-%Y", "%d/%m/%y"]
+)
 
 
 class AppointmentViewSet(_ReportViewSet):

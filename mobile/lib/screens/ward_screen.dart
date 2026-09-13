@@ -59,6 +59,12 @@ const _work = <String, List<_Register>>{
   'chew': [_chwReports, _drugOrders, _immunizations, _cases, _adr],
 };
 
+/// The drawer labels of each cadre's registers, in the same order: the home
+/// screen builds the profession group from them.
+final wardWorkLabels = {
+  for (final e in _work.entries) e.key: [for (final r in e.value) r.label],
+};
+
 /// Fields worth reading in a one-line summary, best first. The registers do not
 /// share a shape, so the first key a row actually carries wins.
 const _titleKeys = [

@@ -575,14 +575,11 @@ class _CloseSheetState extends State<_CloseSheet> {
           onChanged: (v) => setState(() => _disposition = v!),
         ),
         const SizedBox(height: 12),
-        // Required for a follow-up disposition, optional otherwise — say which
-        // before the round trip that would reject it.
+        // Optional whatever the disposition: a follow-up with no day on it
+        // yet is still a follow-up.
         InputDecorator(
-          decoration: InputDecoration(
-            labelText: 'Follow-up date',
-            helperText: _disposition == 'follow_up'
-                ? 'Required for a follow-up disposition'
-                : null,
+          decoration: const InputDecoration(
+            labelText: 'Follow-up date (optional)',
           ),
           child: Row(children: [
             Expanded(

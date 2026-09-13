@@ -177,6 +177,39 @@ List<_Group> get _prescriberGroups => [
             : g,
     ];
 
+/// The drawer group each cadre's work sits under. Same keys as web/app.js
+/// PROFESSION_NAV.
+const _professionLabel = {
+  'doctor': 'Doctor',
+  'nurse': 'Nursing',
+  'midwife': 'Midwifery',
+  'chew': 'Community Health',
+};
+
+/// A cadre's own registers (ward_screen.dart _work) pulled out of whichever
+/// group holds them into one named for their profession, ahead of the rest
+/// of the prescriber menu (same as web/app.js navHtml).
+List<_Group> _professionGroups(String role) {
+  final mine = wardWorkLabels[role] ?? const <String>[];
+  final own = <_Section>[];
+  final rest = <_Group>[];
+  for (final g in _prescriberGroups) {
+    final keep = <_Section>[];
+    for (final s in g.sections) {
+      (mine.contains(s.label) ? own : keep).add(s);
+    }
+    // An untouched group keeps its identity: the callers pick the account
+    // group out of the result by reference.
+    if (keep.length == g.sections.length) {
+      rest.add(g);
+    } else if (keep.isNotEmpty) {
+      rest.add(_Group(g.label, keep));
+    }
+  }
+  own.sort((a, b) => mine.indexOf(a.label).compareTo(mine.indexOf(b.label)));
+  return [_Group(_professionLabel[role] ?? 'My desk', own), ...rest];
+}
+
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -477,7 +510,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       // Picked one: the clinical menu, read as that facility. They are a
       // licensed cadre, so the API narrows every register to their own
       // caseload exactly as it does the facility's own doctors.
-      _setGroups([..._prescriberGroups.where((g) => g != _accountGroup),
+      _setGroups([..._professionGroups(role!).where((g) => g != _accountGroup),
         _withEarnings(_facilityAccountGroup, me),
       ], home: _Section('Ward', Icons.local_hospital_outlined,
           WardScreen(onOpen: _openSection)));
@@ -529,7 +562,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // so it is built here where the drawer's index lives.
     if (_wardRoles.contains(role)) {
       _setGroups([
-        for (final g in _prescriberGroups)
+        for (final g in _professionGroups(role!))
           g == _accountGroup ? _withEarnings(g, me) : g,
       ], home: _Section('Ward', Icons.local_hospital_outlined,
           WardScreen(onOpen: _openSection)));

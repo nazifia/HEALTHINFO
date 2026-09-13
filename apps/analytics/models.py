@@ -906,9 +906,9 @@ class Consultation(PatientLinkedModel, TenantOwnedModel):
             raise ValueError("This consultation is already closed.")
         if disposition not in self.Disposition.values:
             raise ValueError(f"Not a disposition: {disposition!r}")
+        # The date is optional even on a follow-up: "come back when the
+        # results are in" is a real disposition with no day on it yet.
         follow_up = follow_up_on or self.follow_up_on
-        if disposition == self.Disposition.FOLLOW_UP and not follow_up:
-            raise ValueError("A follow-up disposition needs a follow-up date.")
         self.disposition = disposition
         self.follow_up_on = follow_up
         if notes:

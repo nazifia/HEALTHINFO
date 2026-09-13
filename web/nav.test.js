@@ -83,4 +83,12 @@ assert.ok(src.includes('async function viewHmo()'), 'viewHmo not defined');
 assert.ok(src.includes("deskUsers ? usersLink : ''"), 'Users link not shown in the desk section');
 assert.ok(src.includes("groups.Admin.filter((a) => a !== usersLink)"), 'Users link left in Admin too');
 
+// Every clinical cadre gets a sidebar group named for its profession, holding
+// its own registers — one label per CLINICAL_WORK key, or a cadre renders an
+// "undefined" heading.
+const workKeys = [...src.match(/const CLINICAL_WORK = \{([^}]*)\}/)[1].matchAll(/^\s*(\w+):/gm)].map((m) => m[1]);
+const navKeys = [...src.match(/const PROFESSION_NAV = \{([^}]*)\}/)[1].matchAll(/(\w+): '/g)].map((m) => m[1]);
+assert.deepStrictEqual(navKeys.sort(), workKeys.sort());
+assert.ok(src.includes('navGroup(PROFESSION_NAV[ME.role]'), 'profession group not rendered');
+
 console.log('nav.test.js ok');

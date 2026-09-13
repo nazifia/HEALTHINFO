@@ -66,10 +66,11 @@ def test_closed_note_cannot_be_edited(patient):
         reloaded.close(disposition=Consultation.Disposition.HOME)
 
 
-def test_follow_up_disposition_needs_a_date(patient):
-    consultation = Consultation.objects.create(patient=patient, chief_complaint="Fever")
-    with pytest.raises(ValueError, match="follow-up date"):
-        consultation.close(disposition=Consultation.Disposition.FOLLOW_UP)
+def test_follow_up_disposition_takes_an_optional_date(patient):
+    undated = Consultation.objects.create(patient=patient, chief_complaint="Fever")
+    undated.close(disposition=Consultation.Disposition.FOLLOW_UP)
+    assert undated.follow_up_on is None
+    consultation = Consultation.objects.create(patient=patient, chief_complaint="Cough")
     consultation.close(
         disposition=Consultation.Disposition.FOLLOW_UP,
         follow_up_on=datetime.date(2026, 10, 1),
@@ -288,6 +289,23 @@ def test_api_will_not_edit_or_delete_a_signed_note(api, patient):
     deleted = api.delete(url)
     assert deleted.status_code == 400
     assert "cannot be deleted" in deleted.json()["message"]
+
+
+def test_api_refuses_a_badly_typed_follow_up_date(api, patient):
+    created = api.post(
+        "/api/consultations/",
+        {"patient": patient.id, "chief_complaint": "Fever"}, format="json",
+    ).json()
+    url = f"/api/consultations/{created['id']}/close/"
+    r = api.post(url, {"disposition": "follow_up", "follow_up_on": "next week"},
+                 format="json")
+    assert r.status_code == 400
+    assert "format" in r.json()["message"]
+    # Day-first is how the date is written on the desk, so it is read too.
+    r = api.post(url, {"disposition": "follow_up", "follow_up_on": "20/09/2026"},
+                 format="json")
+    assert r.status_code == 200
+    assert r.json()["follow_up_on"] == "2026-09-20"
 
 
 def test_api_names_the_diagnosis_of_the_linked_case(api, patient):
