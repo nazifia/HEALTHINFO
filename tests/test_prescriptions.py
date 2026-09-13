@@ -837,3 +837,25 @@ def test_a_sale_off_a_counter_script_ticks_its_lines(db_clean):
     }, format="json")
     assert sold.status_code == 201, sold.content
     assert Script.all_objects.get(pk=script_id).status == Script.Status.DISPENSED
+
+
+def test_a_script_is_found_by_the_picked_prescribers_name(db_clean):
+    """The counter picks the doctor from the list, so the script carries a
+    prescriber id and no doctor_name — the search must still find them."""
+    from apps.prescriptions.models import Prescriber
+
+    pharm = Tenant.objects.create(name="P", slug="p", kind=Tenant.Kind.PHARMACY)
+    staff = User.objects.create_user(phone="08030000702", password="x",
+                                     tenant=pharm, role=Role.PHARMACIST)
+    c = _client(staff, pharm)
+    doc = Prescriber.all_objects.create(tenant=pharm, name="Dr Ada Bello",
+                                        license_number="m1")
+    saved = c.post("/api/prescriptions/scripts/", {
+        "customer_name": "Chidi Okafor", "prescriber": doc.pk,
+        "medications": [{"name": "Amox", "quantity": 1}],
+    }, format="json")
+    assert saved.status_code == 201, saved.content
+    for q, hits in (("Bello", 1), ("Chidi", 1), ("Nwosu", 0)):
+        got = c.get("/api/prescriptions/scripts/", {"search": q}).json()
+        rows = got["results"] if isinstance(got, dict) else got
+        assert len(rows) == hits, (q, got)

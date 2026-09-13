@@ -148,7 +148,10 @@ class PrescriptionViewSet(PharmacyViewSet):
     model = Prescription
     serializer_class = PrescriptionSerializer
     filterset_class = PrescriptionFilter
-    search_fields = ("customer_name", "customer_phone", "doctor_name", "diagnosis")
+    # A picked prescriber is a foreign key with doctor_name left blank, so the
+    # doctor's name has to be searched on the link too.
+    search_fields = ("customer_name", "customer_phone", "doctor_name",
+                     "prescriber__name", "diagnosis")
     ordering_fields = ("created_at",)
 
     def get_queryset(self):
