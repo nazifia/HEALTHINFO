@@ -17,10 +17,10 @@ import 'package:flutter/material.dart';
 /// fold would otherwise have finished before anyone saw it. Scrolling out
 /// (either way) snaps it back to the start so it replays on the next entry.
 
-const _reveal = Duration(milliseconds: 500);
-const _stagger = Duration(milliseconds: 60);
-const _count = Duration(milliseconds: 900);
-const _sweep = Duration(milliseconds: 800);
+const _reveal = Duration(milliseconds: 750);
+const _stagger = Duration(milliseconds: 90);
+const _count = Duration(milliseconds: 1350);
+const _sweep = Duration(milliseconds: 1200);
 
 bool _still(BuildContext c) => MediaQuery.disableAnimationsOf(c);
 

@@ -1143,7 +1143,7 @@ function countUp(root) {
     if (!m || el.dataset.counted) continue;
     el.dataset.counted = '1';
     const end = Number(m[2].replace(/,/g, '') + (m[3] || ''));
-    const t0 = performance.now(), D = 1700;
+    const t0 = performance.now(), D = 2500;
     const tick = (now) => {
       const p = Math.min((now - t0) / D, 1);
       el.textContent = countFmt(src, end * (1 - (1 - p) ** 3));
@@ -2349,6 +2349,8 @@ async function viewForm(slug, id, query) {
       </div>` : ''}
       <div class="actions">
         <button type="submit" form="f" class="btn">${id ? 'Save' : sheet ? esc(sheet.submit) : 'Create'}</button>
+        ${withDx ? `<a class="btn ghost" href="#/r/prescriptions/new?${new URLSearchParams(
+          Object.fromEntries(['patient', 'case_report'].filter((k) => prefill[k]).map((k) => [k, prefill[k]])))}">Prescribe only — no visit</a>` : ''}
         ${prefill.back ? `<a class="btn ghost" href="${esc(prefill.back)}">Skip — nothing to prescribe</a>`
           : `<a class="btn ghost" href="#/r/${slug}${id ? '/' + id : ''}">Cancel</a>`}
       </div></div>`);
@@ -3440,8 +3442,10 @@ async function viewAnalytics(registry, prefix, key) {
       // The money report leads with its totals; the tables under it are the grain.
       const headline = key === 'sales' ? salesHeadline
         : key === 'controlled' ? controlledHeadline : null;
-      $('#out').innerHTML = (headline ? headline(data) : '')
-        + renderData(data, 0, rowLink);
+      const head = headline ? headline(data) : '';
+      // The daily tile says the day's takings; the per-area daily table under it is noise.
+      if (key === 'sales') delete data.daily;
+      $('#out').innerHTML = head + renderData(data, 0, rowLink);
     }
     catch (err) { $('#out').innerHTML = `<p class="err">${esc(err.message)}</p>`; }
   };

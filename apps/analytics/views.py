@@ -305,6 +305,10 @@ class ConsultationViewSet(_ReportViewSet):
     serializer_class = ConsultationSerializer
     filterset_fields = ("status", "disposition", "patient", "appointment",
                         "case_report", "region", "follow_up_on", "patient_sex")
+    # By patient or complaint, the way a visit is looked up on the ward.
+    search_fields = ("patient__hospital_number", "patient__first_name",
+                     "patient__last_name", "patient__other_names", "patient__phone",
+                     "chief_complaint")
 
     def _save(self, serializer, **kwargs):
         """Save through the model's own rules, reporting a broken one as a 400.

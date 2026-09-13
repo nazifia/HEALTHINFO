@@ -60,6 +60,7 @@ class ConsultationsScreen extends StatelessWidget {
     return ReportListScreen(
       path: '/api/consultations/',
       fabLabel: 'New consultation',
+      searchHint: 'Search name, hospital number, phone or complaint',
       emptyIcon: Icons.medical_information_outlined,
       emptyTitle: 'No consultations yet',
       emptyMessage: 'Tap "New consultation" to start one.',
@@ -974,8 +975,34 @@ class _FormState extends State<_Form> {
           maxLines: 3,
           decoration: const InputDecoration(labelText: 'Notes'),
         ),
+        // Not every prescription needs a visit on the books first: a repeat
+        // script, or a walk-in the prescriber will not be examining.
+        if (!_isEdit)
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              icon: const Icon(Icons.medication_outlined, size: 18),
+              label: const Text('Prescribe only — no visit'),
+              onPressed: _saving ? null : _prescribeOnly,
+            ),
+          ),
       ],
     );
+  }
+
+  Future<void> _prescribeOnly() async {
+    if (_patientId == null) {
+      setState(() => _error = 'Pick a patient to prescribe for.');
+      return;
+    }
+    final written = await prescribeFor(
+      context,
+      _patient ?? {'id': _patientId, 'full_name': _patientLabel ?? ''},
+      caseReport: _caseReportId,
+    );
+    if (!written || !mounted) return;
+    showSuccess(context, 'Order written.');
+    Navigator.of(context).pop(false);
   }
 }
 
