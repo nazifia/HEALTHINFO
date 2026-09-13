@@ -1,12 +1,14 @@
-import 'package:flutter/foundation.dart' show ValueNotifier, kIsWeb;
+import 'package:flutter/foundation.dart' show ValueNotifier, kDebugMode, kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
 
 // Backend connection settings.
-// Web defaults to the deployed prod backend so `flutter build web` is safe
-// without flags; Android emulator uses the 10.0.2.2 host alias. Override for
-// local dev or a real device:
+// Release builds (web, APK, IPA) default to the deployed prod backend, the
+// same one the static SPA in web/ uses, so a record filed on a phone shows on
+// the web and back. Only a debug run on the Android emulator uses the
+// 10.0.2.2 host alias. Override either way:
 //   flutter run --dart-define=API_BASE=http://localhost:8000
 const String _apiBaseOverride = String.fromEnvironment('API_BASE');
+const String prodApiBase = 'https://healthinfo.pythonanywhere.com';
 
 String _defaultApiBase() {
   if (_apiBaseOverride.isNotEmpty) return _apiBaseOverride;
@@ -14,9 +16,12 @@ String _defaultApiBase() {
     // Served from a dev host → local backend; deployed host → prod API.
     final host = Uri.base.host;
     if (host == 'localhost' || host == '127.0.0.1') return 'http://$host:8000';
-    return 'https://healthinfo.pythonanywhere.com';
+    return prodApiBase;
   }
-  return 'http://10.0.2.2:8000'; // Android emulator alias for the host machine
+  // Android emulator alias for the host machine; a release APK on a real
+  // phone has no such host, so it goes to prod like the web does.
+  if (kDebugMode) return 'http://10.0.2.2:8000';
+  return prodApiBase;
 }
 
 final String apiBase = _defaultApiBase();
