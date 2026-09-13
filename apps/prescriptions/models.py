@@ -331,8 +331,16 @@ class PrescriberCommission(_PrescriberDue):
     prescriber = models.ForeignKey(
         Prescriber, on_delete=models.CASCADE, related_name="commissions"
     )
+    # One of the two is set: the counter script this pharmacy wrote up, or the
+    # clinician's drug order — possibly another facility's — that a sale here
+    # filled (see raise_order_commission).
     prescription = models.ForeignKey(
-        Prescription, on_delete=models.CASCADE, related_name="commissions"
+        Prescription, null=True, blank=True, on_delete=models.CASCADE,
+        related_name="commissions",
+    )
+    order = models.ForeignKey(
+        "analytics.Prescription", null=True, blank=True,
+        on_delete=models.CASCADE, related_name="prescriber_commissions",
     )
     sale = models.ForeignKey(
         "pos.Sale", null=True, blank=True, on_delete=models.SET_NULL,
@@ -356,6 +364,44 @@ class PrescriberCommission(_PrescriberDue):
     def __str__(self):
         return (f"Commission {self.pk} — {self.prescriber_id} "
                 f"({self.commission_rate}%)")
+
+
+def raise_order_commission(sale):
+    """Commission on a clinician's drug order that a sale here filled. Idempotent.
+
+    The order names its writer by licence; the pharmacy names the prescribers
+    it pays by licence too. Where the two meet, this pharmacy owes that doctor
+    its rate on what the sale sold — the same as a script written up at the
+    counter, whichever facility the order was written at. A writer this
+    pharmacy has no terms with earns nothing here.
+
+    No consultation payout: a drug order carries no fee band, and the fee is
+    the writing facility's to charge.
+    """
+    order = sale.prescription
+    licence = (getattr(order.reporter, "license_number", "") or "").strip()
+    if not licence or sale.total <= 0:
+        return None
+    prescriber = Prescriber.all_objects.filter(
+        tenant_id=sale.tenant_id, license_number__iexact=licence,
+        is_active=True, commission_rate__gt=0,
+    ).first()
+    if prescriber is None:
+        return None
+    rate = Decimal(prescriber.commission_rate)
+    commission, _created = PrescriberCommission.all_objects.get_or_create(
+        tenant_id=sale.tenant_id, order=order, sale=sale,
+        defaults={
+            "prescriber": prescriber,
+            # Who the sale was rung up for, never the writing facility's
+            # record: the pharmacy learned the drug, not the patient.
+            "patient_name": sale.buyer,
+            "sales_amount": sale.total,
+            "commission_rate": rate,
+            "commission_amount": _money(sale.total * rate / Decimal("100")),
+        },
+    )
+    return commission
 
 
 class ConsultationPayout(_PrescriberDue):

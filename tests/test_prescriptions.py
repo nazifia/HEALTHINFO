@@ -468,6 +468,23 @@ def test_a_pharmacy_fills_another_facilitys_prescription_on_the_number(db_clean)
     assert Sale.all_objects.get(pk=sold.json()["id"]).prescription_id == order.pk
     order.refresh_from_db()
     assert order.status == Prescription.Status.DISPENSED
+
+    # The writer earns on it here only if this pharmacy has terms with them,
+    # matched by licence — and once, however many times the sale is re-read.
+    from apps.prescriptions.models import Prescriber, PrescriberCommission,         raise_order_commission
+    assert not PrescriberCommission.all_objects.filter(order=order).exists()
+    Prescriber.all_objects.create(tenant=pharm, name="Dr Ada", license_number="mdcn1",
+                                  commission_rate=Decimal("10.00"))
+    sale = Sale.all_objects.get(pk=sold.json()["id"])
+    raise_order_commission(sale)
+    raise_order_commission(sale)
+    [commission] = PrescriberCommission.all_objects.filter(order=order)
+    assert commission.tenant_id == pharm.id
+    assert commission.commission_amount == Decimal("25.00")   # 10% of 250.00
+    assert commission.patient_name == "Walk-in"   # never the hospital's record
+    listed = client.get("/api/prescriptions/commissions/").json()
+    rows = listed["results"] if isinstance(listed, dict) else listed
+    assert rows[0]["order_name"] == "Amoxicillin — General Hospital"
     assert order.dispensed_at is not None
     # The hospital's record stayed the hospital's.
     assert order.tenant_id == hosp.id

@@ -121,7 +121,9 @@ class PrescriberViewSet(PharmacyViewSet):
     def statement(self, request, pk=None):
         """What this prescriber has earned and what is still owed."""
         prescriber = self.get_object()
-        commissions = PrescriberCommission.objects.filter(prescriber=prescriber)
+        commissions = PrescriberCommission.objects.filter(
+            prescriber=prescriber
+        ).select_related("prescription", "order__medication", "order__tenant")
         payouts = ConsultationPayout.objects.filter(prescriber=prescriber)
         return Response({
             "prescriber": prescriber.pk,
@@ -299,7 +301,9 @@ class _PrescriberDueViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
     model = None
 
     def get_queryset(self):
-        return self.model.objects.select_related("prescriber", "prescription")
+        return self.model.objects.select_related(
+            "prescriber", "prescription", "order__medication", "order__tenant"
+        )
 
     def _require_admin(self):
         if not is_pharmacy_admin(self.request.user):

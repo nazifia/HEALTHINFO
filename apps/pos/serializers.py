@@ -7,6 +7,7 @@ from apps.accounts.serializers import TenantUserField
 from apps.analytics.models import Prescription as DrugOrder
 from apps.inventory.models import OutOfStock, StockItem, Supplier
 from apps.patients.models import patients_by_number
+from apps.prescriptions.models import raise_order_commission
 from apps.inventory.serializers import StockBatchSerializer  # noqa: F401
 from config.serializers import NamedRelationsMixin
 
@@ -243,6 +244,10 @@ class SaleSerializer(NamedRelationsMixin, serializers.ModelSerializer):
             # The prescriber earns on what their script actually sold, so this
             # is raised from the sale rather than when the script was written.
             sale.rx.raise_prescriber_dues(sale)
+        elif sale.prescription_id:
+            # A clinician's order filled here — another facility's included —
+            # pays its writer if this pharmacy has terms with them.
+            raise_order_commission(sale)
         sale.refresh_from_db()
         return sale
 

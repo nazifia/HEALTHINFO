@@ -232,6 +232,9 @@ class _StatementSheetState extends State<StatementSheet> {
                       amount: c['commission_amount'],
                       status: '${c['status']}',
                       when: '${c['created_at']}',
+                      // A drug order filled here — another facility's or our
+                      // own — is named by drug and where it was written.
+                      note: c['order_name'] as String?,
                     ),
                   if (payouts.isNotEmpty) ...[
                     const SizedBox(height: 8),
@@ -263,11 +266,13 @@ class _DueTile extends StatelessWidget {
   final Object? amount;
   final String status;
   final String when;
+  final String? note;
   const _DueTile(
       {required this.title,
       required this.amount,
       required this.status,
-      required this.when});
+      required this.when,
+      this.note});
 
   @override
   Widget build(BuildContext context) {
@@ -276,7 +281,7 @@ class _DueTile extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       title: Text(title,
           style: TextStyle(color: context.labelColor, fontSize: 14)),
-      subtitle: Text(when.split('T').first,
+      subtitle: Text([when.split('T').first, ?note].join(' · '),
           style: TextStyle(color: context.hintColor, fontSize: 12)),
       trailing: Column(
         mainAxisAlignment: MainAxisAlignment.center,
