@@ -44,7 +44,15 @@ def envelope_exception_handler(exc, context):
         else:
             message, errors = _first_error(detail), detail
     elif isinstance(detail, list) and detail:
-        message, errors = str(detail[0]), {"detail": detail}
+        # A list body (one prescription of several drugs) fails per row: the
+        # rows that passed are empty dicts, so the message comes off the first
+        # row that did not, named by its position on the form.
+        bad = next(((i, d) for i, d in enumerate(detail) if d), (0, detail[0]))
+        i, d = bad
+        message = _first_error(d) if isinstance(d, dict) else str(d)
+        if isinstance(d, dict) and len(detail) > 1:
+            message = f"Drug {i + 1}: {message}"
+        errors = {"detail": detail}
     else:
         message, errors = "Request failed.", detail
     # Prod mode (toggled from the admin) hides server-error internals; dev keeps

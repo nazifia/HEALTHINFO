@@ -291,6 +291,8 @@ def test_one_prescription_carries_several_drugs(db_clean):
         {"patient": patient.id, "medication": 999999},
     ], format="json")
     assert broken.status_code == 400, broken.content
+    # The toast names the row that failed, not "{}" for the row that passed.
+    assert broken.json()["message"].startswith("Drug 2: "), broken.content
     assert Prescription.all_objects.filter(patient=patient).count() == 3
 
 
