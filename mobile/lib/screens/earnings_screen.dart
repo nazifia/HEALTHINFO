@@ -43,92 +43,117 @@ class _EarningsScreenState extends State<EarningsScreen> {
             title: 'No statement',
             message: '${snap.error}',
             action: TextButton(
-                onPressed: () => setState(() => _future = _load()),
-                child: const Text('Retry')),
+              onPressed: () => setState(() {
+                _future = _load();
+              }),
+              child: const Text('Retry'),
+            ),
           );
         }
         final s = snap.data ?? const {};
         final owed = (s['outstanding'] as Map?) ?? const {};
         final paid = (s['paid'] as Map?) ?? const {};
-        final commissions =
-            ((s['commissions'] ?? []) as List).cast<Map<String, dynamic>>();
+        final commissions = ((s['commissions'] ?? []) as List)
+            .cast<Map<String, dynamic>>();
         final payouts = ((s['consultation_payouts'] ?? []) as List)
             .cast<Map<String, dynamic>>();
         return RefreshIndicator(
           onRefresh: () async {
-            setState(() => _future = _load());
+            setState(() {
+              _future = _load();
+            });
             await _future;
           },
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              Text('Licence ${s['license_number'] ?? ''}',
-                  style: TextStyle(color: context.hintColor, fontSize: 12)),
+              Text(
+                'Licence ${s['license_number'] ?? ''}',
+                style: TextStyle(color: context.hintColor, fontSize: 12),
+              ),
               const SizedBox(height: 4),
               Text(
-                  'A pharmacy that fills your prescription owes you its '
-                  'commission on the drugs and the fee for the consultation '
-                  'band you wrote — on its own terms with you.',
-                  style: TextStyle(color: context.hintColor, fontSize: 13)),
+                'A pharmacy that fills your prescription owes you its '
+                'commission on the drugs and the fee for the consultation '
+                'band you wrote — on its own terms with you.',
+                style: TextStyle(color: context.hintColor, fontSize: 13),
+              ),
               const SizedBox(height: 12),
-              KpiRow(tiles: [
-                KpiTile(
+              KpiRow(
+                tiles: [
+                  KpiTile(
                     icon: Icons.percent_outlined,
                     label: 'Commission owed',
                     value: money(owed['commission']),
-                    color: EnhancedTheme.primaryTeal),
-                KpiTile(
+                    color: EnhancedTheme.primaryTeal,
+                  ),
+                  KpiTile(
                     icon: Icons.medical_services_outlined,
                     label: 'Consultations owed',
                     value: money(owed['consultation']),
-                    color: EnhancedTheme.accentCyan),
-              ]),
+                    color: EnhancedTheme.accentCyan,
+                  ),
+                ],
+              ),
               const SizedBox(height: 12),
-              KpiRow(tiles: [
-                KpiTile(
+              KpiRow(
+                tiles: [
+                  KpiTile(
                     icon: Icons.account_balance_wallet_outlined,
                     label: 'Total owed',
                     value: money(owed['total']),
-                    color: EnhancedTheme.accentOrange),
-                KpiTile(
+                    color: EnhancedTheme.accentOrange,
+                  ),
+                  KpiTile(
                     icon: Icons.check_circle_outline,
                     label: 'Paid to date',
                     value: money(paid['total']),
-                    color: EnhancedTheme.successGreen),
-              ]),
+                    color: EnhancedTheme.successGreen,
+                  ),
+                ],
+              ),
               const SizedBox(height: 16),
               if (commissions.isEmpty && payouts.isEmpty)
                 const EmptyState(
                   icon: Icons.receipt_long_outlined,
                   title: 'Nothing earned yet',
-                  message: 'A pharmacy that has terms with you books what it '
+                  message:
+                      'A pharmacy that has terms with you books what it '
                       'owes when it fills one of your prescriptions.',
                   boxed: true,
                 ),
               if (commissions.isNotEmpty)
-                _Ledger(title: 'Commissions', rows: [
-                  for (final c in commissions)
-                    _DueTile(
-                      title: '${c['pharmacy_name']} · ${c['commission_rate']}%',
-                      amount: c['commission_amount'],
-                      status: '${c['status']}',
-                      when: '${c['created_at']}',
-                      note: c['order_name'] as String? ??
-                          'on ${money(c['sales_amount'])} sold',
-                    ),
-                ]),
+                _Ledger(
+                  title: 'Commissions',
+                  rows: [
+                    for (final c in commissions)
+                      _DueTile(
+                        title:
+                            '${c['pharmacy_name']} · ${c['commission_rate']}%',
+                        amount: c['commission_amount'],
+                        status: '${c['status']}',
+                        when: '${c['created_at']}',
+                        note:
+                            c['order_name'] as String? ??
+                            'on ${money(c['sales_amount'])} sold',
+                      ),
+                  ],
+                ),
               if (payouts.isNotEmpty)
-                _Ledger(title: 'Consultation fees', rows: [
-                  for (final p in payouts)
-                    _DueTile(
-                      title:
-                          '${p['pharmacy_name']} · band ${p['consultation_category']}',
-                      amount: p['consultation_fee'],
-                      status: '${p['status']}',
-                      when: '${p['created_at']}',
-                      note: p['order_name'] as String?,
-                    ),
-                ]),
+                _Ledger(
+                  title: 'Consultation fees',
+                  rows: [
+                    for (final p in payouts)
+                      _DueTile(
+                        title:
+                            '${p['pharmacy_name']} · band ${p['consultation_category']}',
+                        amount: p['consultation_fee'],
+                        status: '${p['status']}',
+                        when: '${p['created_at']}',
+                        note: p['order_name'] as String?,
+                      ),
+                  ],
+                ),
             ],
           ),
         );
@@ -151,9 +176,13 @@ class _Ledger extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title,
-                style: TextStyle(
-                    color: context.labelColor, fontWeight: FontWeight.w700)),
+            Text(
+              title,
+              style: TextStyle(
+                color: context.labelColor,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
             ...rows,
           ],
         ),
@@ -168,33 +197,43 @@ class _DueTile extends StatelessWidget {
   final String status;
   final String when;
   final String? note;
-  const _DueTile(
-      {required this.title,
-      required this.amount,
-      required this.status,
-      required this.when,
-      this.note});
+  const _DueTile({
+    required this.title,
+    required this.amount,
+    required this.status,
+    required this.when,
+    this.note,
+  });
 
   @override
   Widget build(BuildContext context) {
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,
-      title: Text(title,
-          style: TextStyle(color: context.labelColor, fontSize: 14)),
-      subtitle: Text([when.split('T').first, ?note].join(' · '),
-          style: TextStyle(color: context.hintColor, fontSize: 12)),
+      title: Text(
+        title,
+        style: TextStyle(color: context.labelColor, fontSize: 14),
+      ),
+      subtitle: Text(
+        [when.split('T').first, ?note].join(' · '),
+        style: TextStyle(color: context.hintColor, fontSize: 12),
+      ),
       trailing: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Text(money(amount),
-              style: TextStyle(
-                  color: context.labelColor,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700)),
-          Text(status,
-              style: TextStyle(color: statusColor(status), fontSize: 11)),
+          Text(
+            money(amount),
+            style: TextStyle(
+              color: context.labelColor,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          Text(
+            status,
+            style: TextStyle(color: statusColor(status), fontSize: 11),
+          ),
         ],
       ),
     );

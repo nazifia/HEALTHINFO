@@ -43,8 +43,9 @@ class _FacilityPickerScreenState extends State<FacilityPickerScreen> {
     if (mounted) setState(() {});
   }
 
-  void _reload() =>
-      setState(() => _future = api.prescribingFacilities());
+  void _reload() => setState(() {
+    _future = api.prescribingFacilities();
+  });
 
   Future<void> _pick(Map<String, dynamic> t) async {
     await setTenant('${t['slug']}', name: '${t['name']}');
@@ -76,15 +77,17 @@ class _FacilityPickerScreenState extends State<FacilityPickerScreen> {
             return const SkeletonCards(cards: 4);
           }
           if (snap.hasError) {
-            return ListView(children: [
-              const SizedBox(height: 80),
-              EmptyState(
-                icon: Icons.error_outline,
-                title: 'Could not load your facilities',
-                message: '${snap.error}',
-                color: EnhancedTheme.errorRed,
-              ),
-            ]);
+            return ListView(
+              children: [
+                const SizedBox(height: 80),
+                EmptyState(
+                  icon: Icons.error_outline,
+                  title: 'Could not load your facilities',
+                  message: '${snap.error}',
+                  color: EnhancedTheme.errorRed,
+                ),
+              ],
+            );
           }
           final rows = snap.data!.cast<Map<String, dynamic>>();
           return ListView(
@@ -95,20 +98,26 @@ class _FacilityPickerScreenState extends State<FacilityPickerScreen> {
                 GlassCard(
                   margin: const EdgeInsets.only(bottom: 12),
                   padding: const EdgeInsets.all(16),
-                  child: Row(children: [
-                    const Icon(Icons.check_circle_outline, size: 20),
-                    const SizedBox(width: 10),
-                    Expanded(
-                        child: Text('Writing under $tenantLabel',
-                            style: const TextStyle(fontWeight: FontWeight.w600))),
-                    TextButton(onPressed: _clear, child: const Text('Clear')),
-                  ]),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle_outline, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Writing under $tenantLabel',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      TextButton(onPressed: _clear, child: const Text('Clear')),
+                    ],
+                  ),
                 ),
               if (rows.isEmpty)
                 const EmptyState(
                   icon: Icons.apartment_outlined,
                   title: 'No facility open to you yet',
-                  message: 'Ask the platform admin to check the state on your '
+                  message:
+                      'Ask the platform admin to check the state on your '
                       'account, and that the facility you work with has been '
                       'approved.',
                   boxed: true,
@@ -120,9 +129,11 @@ class _FacilityPickerScreenState extends State<FacilityPickerScreen> {
                     padding: const EdgeInsets.all(4),
                     onTap: () => _pick(t),
                     child: ListTile(
-                      leading: Icon(t['kind'] == 'pharmacy'
-                          ? Icons.local_pharmacy_outlined
-                          : Icons.local_hospital_outlined),
+                      leading: Icon(
+                        t['kind'] == 'pharmacy'
+                            ? Icons.local_pharmacy_outlined
+                            : Icons.local_hospital_outlined,
+                      ),
                       title: Text('${t['name']}'),
                       subtitle: Text('${t['kind']}'),
                       trailing: '${t['slug']}' == tenantSlug
@@ -144,12 +155,12 @@ class _Explainer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: Text(
-          'Your licence covers the whole state, but a prescription belongs to '
-          'one facility. Pick the one you are working in — you can change it '
-          'at any time.',
-          style: TextStyle(color: context.subLabelColor),
-        ),
-      );
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Text(
+      'Your licence covers the whole state, but a prescription belongs to '
+      'one facility. Pick the one you are working in — you can change it '
+      'at any time.',
+      style: TextStyle(color: context.subLabelColor),
+    ),
+  );
 }

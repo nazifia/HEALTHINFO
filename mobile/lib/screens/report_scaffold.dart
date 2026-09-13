@@ -27,11 +27,11 @@ class ReportFilter {
 
 /// The patient's sex, copied onto every report at save time (``patient_sex``
 /// on the API). Same values the patient form writes.
-const sexFilter = ReportFilter(param: 'patient_sex', anyLabel: 'Any sex', options: {
-  'F': 'Female',
-  'M': 'Male',
-  'other': 'Other',
-});
+const sexFilter = ReportFilter(
+  param: 'patient_sex',
+  anyLabel: 'Any sex',
+  options: {'F': 'Female', 'M': 'Male', 'other': 'Other'},
+);
 
 /// Query params for a list request: the picked filters plus the search box.
 ///
@@ -57,7 +57,12 @@ class ReportListScreen extends StatefulWidget {
   final String emptyTitle;
   final String emptyMessage;
   final String savedMessage;
-  final Widget Function(Map<String, dynamic> row, VoidCallback reload, VoidCallback edit) card;
+  final Widget Function(
+    Map<String, dynamic> row,
+    VoidCallback reload,
+    VoidCallback edit,
+  )
+  card;
   // Form sheet for a new (existing == null) or edited record. Pops `true` on save.
   final Widget Function(Map<String, dynamic>? existing) form;
   // Optional summary widget rendered above the list, fed the loaded rows
@@ -75,7 +80,8 @@ class ReportListScreen extends StatefulWidget {
   // Optional fold over the loaded rows before they are turned into cards — a
   // list that the API returns one row per drug shows one card per
   // prescription. The header still counts the rows as they came.
-  final List<Map<String, dynamic>> Function(List<Map<String, dynamic>>)? collapse;
+  final List<Map<String, dynamic>> Function(List<Map<String, dynamic>>)?
+  collapse;
 
   const ReportListScreen({
     super.key,
@@ -130,8 +136,14 @@ class _ReportListScreenState extends State<ReportListScreen>
 
   void _reload() {
     final id = ++_requestId;
-    setState(() => _future = _guard(
-        id, api.getList(widget.path, listQuery(_query, _picked))));
+    // A block, not an arrow: an arrow hands the Future back to setState,
+    // and the debug assert on that throws before the rebuild is scheduled.
+    setState(() {
+      _future = _guard(
+        id,
+        api.getList(widget.path, listQuery(_query, _picked)),
+      );
+    });
   }
 
   /// Never resolves if a newer request has started, so the stale reply can't
@@ -179,66 +191,78 @@ class _ReportListScreenState extends State<ReportListScreen>
               onPressed: _openForm,
               backgroundColor: EnhancedTheme.primaryTeal,
               icon: const Icon(Icons.add, color: Colors.white),
-              label: Text(widget.fabLabel,
-                  style: const TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.w700)),
-            ),
-      body: Column(children: [
-        if (widget.searchHint != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: TextField(
-              onChanged: _onSearchChanged,
-              textInputAction: TextInputAction.search,
-              decoration: InputDecoration(
-                hintText: widget.searchHint,
-                prefixIcon: const Icon(Icons.search, size: 20),
-                isDense: true,
+              label: Text(
+                widget.fabLabel,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
-          ),
-        if (widget.filters.isNotEmpty)
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-            child: Row(children: [
-              for (final f in widget.filters) ...[
-                FilterDropdown(
-                  filter: f,
-                  value: _picked[f.param],
-                  onChanged: (v) {
-                    if (v == null) {
-                      _picked.remove(f.param);
-                    } else {
-                      _picked[f.param] = v;
-                    }
-                    _reload();
-                  },
+      body: Column(
+        children: [
+          if (widget.searchHint != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: TextField(
+                onChanged: _onSearchChanged,
+                textInputAction: TextInputAction.search,
+                decoration: InputDecoration(
+                  hintText: widget.searchHint,
+                  prefixIcon: const Icon(Icons.search, size: 20),
+                  isDense: true,
                 ),
-                const SizedBox(width: 8),
-              ],
-            ]),
-          ),
-        Expanded(child: _list()),
-      ]),
+              ),
+            ),
+          if (widget.filters.isNotEmpty)
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+              child: Row(
+                children: [
+                  for (final f in widget.filters) ...[
+                    FilterDropdown(
+                      filter: f,
+                      value: _picked[f.param],
+                      onChanged: (v) {
+                        if (v == null) {
+                          _picked.remove(f.param);
+                        } else {
+                          _picked[f.param] = v;
+                        }
+                        _reload();
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                ],
+              ),
+            ),
+          Expanded(child: _list()),
+        ],
+      ),
     );
   }
 
   Widget _list() {
     return RefreshIndicator(
-        onRefresh: () async {
-          _reload();
-          await _future;
-        },
-        child: FutureBuilder<List<dynamic>>(
-          future: _future,
-          builder: (context, snap) {
-            if (snap.connectionState == ConnectionState.waiting) {
-              return const Center(
-                  child: CircularProgressIndicator(color: EnhancedTheme.primaryTeal));
-            }
-            if (snap.hasError) {
-              return ListView(children: [
+      onRefresh: () async {
+        _reload();
+        await _future;
+      },
+      child: FutureBuilder<List<dynamic>>(
+        future: _future,
+        builder: (context, snap) {
+          if (snap.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(
+                color: EnhancedTheme.primaryTeal,
+              ),
+            );
+          }
+          if (snap.hasError) {
+            return ListView(
+              children: [
                 const SizedBox(height: 80),
                 EmptyState(
                   icon: Icons.error_outline,
@@ -246,13 +270,15 @@ class _ReportListScreenState extends State<ReportListScreen>
                   message: '${snap.error}',
                   color: EnhancedTheme.errorRed,
                 ),
-              ]);
-            }
-            final items = (snap.data ?? []).cast<Map<String, dynamic>>();
-            if (items.isEmpty) {
-              // "Nothing here" and "nothing matched" are different problems —
-              // only the second one is fixed by clearing the search or filters.
-              return ListView(children: [
+              ],
+            );
+          }
+          final items = (snap.data ?? []).cast<Map<String, dynamic>>();
+          if (items.isEmpty) {
+            // "Nothing here" and "nothing matched" are different problems —
+            // only the second one is fixed by clearing the search or filters.
+            return ListView(
+              children: [
                 const SizedBox(height: 80),
                 EmptyState(
                   icon: _narrowed ? Icons.search_off : widget.emptyIcon,
@@ -260,28 +286,33 @@ class _ReportListScreenState extends State<ReportListScreen>
                   message: !_narrowed
                       ? widget.emptyMessage
                       : _query.isEmpty
-                          ? 'Nothing matched the selected filters.'
-                          : 'Nothing found for "$_query".',
+                      ? 'Nothing matched the selected filters.'
+                      : 'Nothing found for "$_query".',
                 ),
-              ]);
-            }
-            final cards = widget.collapse?.call(items) ?? items;
-            return CardGrid(
-              itemCount: cards.length,
-              header: widget.header == null ? null : widget.header!(items),
-              itemBuilder: (context, i) {
-                final card =
-                    widget.card(cards[i], _reload, () => _openForm(cards[i]));
-                if (widget.onTap == null) return card;
-                return InkWell(
-                  borderRadius: BorderRadius.circular(16),
-                  onTap: () => widget.onTap!(cards[i]),
-                  child: card,
-                );
-              },
+              ],
             );
-          },
-        ));
+          }
+          final cards = widget.collapse?.call(items) ?? items;
+          return CardGrid(
+            itemCount: cards.length,
+            header: widget.header == null ? null : widget.header!(items),
+            itemBuilder: (context, i) {
+              final card = widget.card(
+                cards[i],
+                _reload,
+                () => _openForm(cards[i]),
+              );
+              if (widget.onTap == null) return card;
+              return InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: () => widget.onTap!(cards[i]),
+                child: card,
+              );
+            },
+          );
+        },
+      ),
+    );
   }
 }
 
@@ -338,9 +369,10 @@ class FilterDropdown extends StatelessWidget {
             Text(
               label,
               style: TextStyle(
-                  color: context.labelColor,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600),
+                color: context.labelColor,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             Icon(Icons.arrow_drop_down, size: 20, color: accent),
           ],
@@ -398,18 +430,25 @@ class ReportFormSheet extends StatelessWidget {
                   ),
                 ),
               ),
-              Text(title,
-                  style: TextStyle(
-                      color: context.labelColor,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800)),
+              Text(
+                title,
+                style: TextStyle(
+                  color: context.labelColor,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
               const SizedBox(height: 16),
               ...children,
               if (error != null) ...[
                 const SizedBox(height: 12),
-                Text(error!,
-                    style: const TextStyle(
-                        color: EnhancedTheme.errorRed, fontSize: 13)),
+                Text(
+                  error!,
+                  style: const TextStyle(
+                    color: EnhancedTheme.errorRed,
+                    fontSize: 13,
+                  ),
+                ),
               ],
               const SizedBox(height: 20),
               SizedBox(
@@ -417,13 +456,17 @@ class ReportFormSheet extends StatelessWidget {
                 child: FilledButton(
                   onPressed: saving ? null : onSubmit,
                   style: FilledButton.styleFrom(
-                      backgroundColor: EnhancedTheme.primaryTeal),
+                    backgroundColor: EnhancedTheme.primaryTeal,
+                  ),
                   child: saving
                       ? const SizedBox(
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
                       : Text(submitLabel),
                 ),
               ),
@@ -451,7 +494,11 @@ class ReportBadge extends StatelessWidget {
       ),
       child: Text(
         text.isEmpty ? '—' : text.replaceAll('_', ' ').toUpperCase(),
-        style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 11),
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w700,
+          fontSize: 11,
+        ),
       ),
     );
   }
@@ -465,6 +512,7 @@ class PatientPicker extends StatefulWidget {
   final int? initialId;
   final String? initialLabel;
   final ValueChanged<int?> onChanged;
+
   /// The whole picked row, for forms that carry the patient's own details
   /// (region, allergies) instead of asking for them again.
   final ValueChanged<Map<String, dynamic>>? onPicked;
@@ -536,23 +584,29 @@ class _PatientPickerState extends State<PatientPicker> {
   Widget build(BuildContext context) {
     return InputDecorator(
       decoration: const InputDecoration(labelText: 'Patient (optional)'),
-      child: Row(children: [
-        Expanded(
-          child: Text(
-            _label ?? (_id == null ? 'Not linked' : 'Patient #$_id'),
-            style: TextStyle(
-                color: _id == null ? context.hintColor : context.labelColor),
-            overflow: TextOverflow.ellipsis,
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              _label ?? (_id == null ? 'Not linked' : 'Patient #$_id'),
+              style: TextStyle(
+                color: _id == null ? context.hintColor : context.labelColor,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-        ),
-        if (_id != null)
-          IconButton(
-            visualDensity: VisualDensity.compact,
-            icon: const Icon(Icons.clear, size: 18),
-            onPressed: _clear,
+          if (_id != null)
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.clear, size: 18),
+              onPressed: _clear,
+            ),
+          TextButton(
+            onPressed: _pick,
+            child: Text(_id == null ? 'Link' : 'Change'),
           ),
-        TextButton(onPressed: _pick, child: Text(_id == null ? 'Link' : 'Change')),
-      ]),
+        ],
+      ),
     );
   }
 }
@@ -574,6 +628,7 @@ class SearchSheet extends StatefulWidget {
   final String Function(Map<String, dynamic>) label;
   final String Function(Map<String, dynamic>) sub;
   final List<Map<String, dynamic>> Function(List<Map<String, dynamic>>)? filter;
+
   /// Sent with every lookup, e.g. the role a field may link.
   final Map<String, String> query;
 
@@ -616,8 +671,13 @@ class _SearchSheetState extends State<SearchSheet> {
       if (!mounted) return;
       final id = ++_requestId;
       setState(() {
-        _future = _guard(id, api.getList(widget.path,
-            {...widget.query, if (q.isNotEmpty) 'search': q}));
+        _future = _guard(
+          id,
+          api.getList(widget.path, {
+            ...widget.query,
+            if (q.isNotEmpty) 'search': q,
+          }),
+        );
       });
     });
   }
@@ -631,7 +691,9 @@ class _SearchSheetState extends State<SearchSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: Container(
         height: MediaQuery.of(context).size.height * 0.7,
         decoration: BoxDecoration(
@@ -639,69 +701,81 @@ class _SearchSheetState extends State<SearchSheet> {
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-        child: Column(children: [
-          Text(widget.title,
+        child: Column(
+          children: [
+            Text(
+              widget.title,
               style: TextStyle(
-                  color: context.labelColor,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800)),
-          const SizedBox(height: 12),
-          TextField(
-            autofocus: true,
-            onChanged: _search,
-            decoration: InputDecoration(
-              hintText: widget.hint,
-              prefixIcon: const Icon(Icons.search, size: 20),
-              isDense: true,
+                color: context.labelColor,
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: FutureBuilder<List<dynamic>>(
-              future: _future,
-              builder: (context, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(
+            const SizedBox(height: 12),
+            TextField(
+              autofocus: true,
+              onChanged: _search,
+              decoration: InputDecoration(
+                hintText: widget.hint,
+                prefixIcon: const Icon(Icons.search, size: 20),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: FutureBuilder<List<dynamic>>(
+                future: _future,
+                builder: (context, snap) {
+                  if (snap.connectionState == ConnectionState.waiting) {
+                    return const Center(
                       child: CircularProgressIndicator(
-                          color: EnhancedTheme.primaryTeal));
-                }
-                if (snap.hasError) {
-                  return EmptyState(
-                    icon: Icons.error_outline,
-                    title: widget.errorTitle,
-                    message: '${snap.error}',
-                    color: EnhancedTheme.errorRed,
-                  );
-                }
-                var rows = (snap.data ?? []).cast<Map<String, dynamic>>();
-                if (widget.filter != null) rows = widget.filter!(rows);
-                if (rows.isEmpty) {
-                  return EmptyState(
-                    icon: widget.emptyIcon,
-                    title: widget.emptyTitle,
-                    message: widget.emptyMessage,
-                  );
-                }
-                return ListView.builder(
-                  itemCount: rows.length,
-                  itemBuilder: (context, i) {
-                    final r = rows[i];
-                    return ListTile(
-                      dense: true,
-                      title: Text(widget.label(r),
-                          style: TextStyle(color: context.labelColor)),
-                      subtitle: Text(
-                        widget.sub(r),
-                        style: TextStyle(color: context.hintColor, fontSize: 12),
+                        color: EnhancedTheme.primaryTeal,
                       ),
-                      onTap: () => Navigator.of(context).pop(r),
                     );
-                  },
-                );
-              },
+                  }
+                  if (snap.hasError) {
+                    return EmptyState(
+                      icon: Icons.error_outline,
+                      title: widget.errorTitle,
+                      message: '${snap.error}',
+                      color: EnhancedTheme.errorRed,
+                    );
+                  }
+                  var rows = (snap.data ?? []).cast<Map<String, dynamic>>();
+                  if (widget.filter != null) rows = widget.filter!(rows);
+                  if (rows.isEmpty) {
+                    return EmptyState(
+                      icon: widget.emptyIcon,
+                      title: widget.emptyTitle,
+                      message: widget.emptyMessage,
+                    );
+                  }
+                  return ListView.builder(
+                    itemCount: rows.length,
+                    itemBuilder: (context, i) {
+                      final r = rows[i];
+                      return ListTile(
+                        dense: true,
+                        title: Text(
+                          widget.label(r),
+                          style: TextStyle(color: context.labelColor),
+                        ),
+                        subtitle: Text(
+                          widget.sub(r),
+                          style: TextStyle(
+                            color: context.hintColor,
+                            fontSize: 12,
+                          ),
+                        ),
+                        onTap: () => Navigator.of(context).pop(r),
+                      );
+                    },
+                  );
+                },
+              ),
             ),
-          ),
-        ]),
+          ],
+        ),
       ),
     );
   }

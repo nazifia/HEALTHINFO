@@ -17,8 +17,10 @@ import 'report_scaffold.dart';
 Future<List<Map<String, dynamic>>> loadStockItems() async {
   final rows = <Map<String, dynamic>>[];
   for (var page = 1; page <= 10; page++) {
-    final batch = await api
-        .getList('/api/pharmacy/items/', {'is_active': 'true', 'page': '$page'});
+    final batch = await api.getList('/api/pharmacy/items/', {
+      'is_active': 'true',
+      'page': '$page',
+    });
     rows.addAll(batch.cast<Map<String, dynamic>>());
     if (batch.length < 25) break;
   }
@@ -52,20 +54,25 @@ class PharmacyStockScreen extends StatelessWidget {
               : 'The pharmacy admin sets up the item list.',
           savedMessage: 'Item saved.',
           filters: const [
-            ReportFilter(param: 'form', anyLabel: 'Any form', options: {
-              'tablet': 'Tablet',
-              'capsule': 'Capsule',
-              'syrup': 'Syrup',
-              'injection': 'Injection',
-              'cream': 'Cream',
-              'drops': 'Drops',
-              'consumable': 'Consumable',
-              'other': 'Other',
-            }),
-            ReportFilter(param: 'is_active', anyLabel: 'Any state', options: {
-              'true': 'Active',
-              'false': 'Retired',
-            }),
+            ReportFilter(
+              param: 'form',
+              anyLabel: 'Any form',
+              options: {
+                'tablet': 'Tablet',
+                'capsule': 'Capsule',
+                'syrup': 'Syrup',
+                'injection': 'Injection',
+                'cream': 'Cream',
+                'drops': 'Drops',
+                'consumable': 'Consumable',
+                'other': 'Other',
+              },
+            ),
+            ReportFilter(
+              param: 'is_active',
+              anyLabel: 'Any state',
+              options: {'true': 'Active', 'false': 'Retired'},
+            ),
           ],
           header: (items) => _Header(items: items),
           card: (row, reload, edit) =>
@@ -78,7 +85,9 @@ class PharmacyStockScreen extends StatelessWidget {
   }
 
   static Future<void> _openItem(
-      BuildContext context, Map<String, dynamic> row) async {
+    BuildContext context,
+    Map<String, dynamic> row,
+  ) async {
     await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -96,38 +105,47 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final low = items.where((r) => r['is_low_stock'] == true).length;
     final onHand = items.fold<num>(
-        0, (sum, r) => sum + ((r['quantity_on_hand'] as num?) ?? 0));
+      0,
+      (sum, r) => sum + ((r['quantity_on_hand'] as num?) ?? 0),
+    );
     final retail = items.fold<num>(0, (sum, r) {
       final price = num.tryParse('${r['unit_price']}') ?? 0;
       return sum + price * ((r['quantity_on_hand'] as num?) ?? 0);
     });
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
-      child: Column(children: [
-        StatsHeader(
-          icon: Icons.inventory_2_outlined,
-          title: 'Stock',
-          subtitle: '${items.length} item${items.length == 1 ? '' : 's'}',
-          color: EnhancedTheme.primaryTeal,
-        ),
-        KpiRow(tiles: [
-          KpiTile(
-              icon: Icons.warning_amber_rounded,
-              label: 'To reorder',
-              value: '$low',
-              color: EnhancedTheme.errorRed),
-          KpiTile(
-              icon: Icons.medication_outlined,
-              label: 'Units on hand',
-              value: units(onHand),
-              color: EnhancedTheme.primaryTeal),
-          KpiTile(
-              icon: Icons.sell_outlined,
-              label: 'At retail',
-              value: money(retail),
-              color: EnhancedTheme.accentOrange),
-        ]),
-      ]),
+      child: Column(
+        children: [
+          StatsHeader(
+            icon: Icons.inventory_2_outlined,
+            title: 'Stock',
+            subtitle: '${items.length} item${items.length == 1 ? '' : 's'}',
+            color: EnhancedTheme.primaryTeal,
+          ),
+          KpiRow(
+            tiles: [
+              KpiTile(
+                icon: Icons.warning_amber_rounded,
+                label: 'To reorder',
+                value: '$low',
+                color: EnhancedTheme.errorRed,
+              ),
+              KpiTile(
+                icon: Icons.medication_outlined,
+                label: 'Units on hand',
+                value: units(onHand),
+                color: EnhancedTheme.primaryTeal,
+              ),
+              KpiTile(
+                icon: Icons.sell_outlined,
+                label: 'At retail',
+                value: money(retail),
+                color: EnhancedTheme.accentOrange,
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -144,33 +162,49 @@ class _ItemCard extends StatelessWidget {
     return GlassCard(
       borderRadius: 16,
       padding: const EdgeInsets.all(14),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Expanded(
-            child: Text('${row['name']}',
-                style: TextStyle(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${row['name']}',
+                  style: TextStyle(
                     color: context.labelColor,
                     fontWeight: FontWeight.w700,
-                    fontSize: 15)),
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+              if (low)
+                const ReportBadge(
+                  text: 'reorder',
+                  color: EnhancedTheme.errorRed,
+                ),
+              if (admin)
+                IconButton(
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  onPressed: edit,
+                ),
+            ],
           ),
-          if (low)
-            const ReportBadge(text: 'reorder', color: EnhancedTheme.errorRed),
-          if (admin)
-            IconButton(
-                icon: const Icon(Icons.edit_outlined, size: 18),
-                onPressed: edit),
-        ]),
-        const SizedBox(height: 6),
-        Text(
-          '${units(row['quantity_on_hand'])} ${row['unit']}(s) on hand'
-          ' · reorder at ${units(row['reorder_level'])}',
-          style: TextStyle(color: context.hintColor, fontSize: 13),
-        ),
-        const SizedBox(height: 4),
-        Text('${money(row['unit_price'])} each',
+          const SizedBox(height: 6),
+          Text(
+            '${units(row['quantity_on_hand'])} ${row['unit']}(s) on hand'
+            ' · reorder at ${units(row['reorder_level'])}',
+            style: TextStyle(color: context.hintColor, fontSize: 13),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${money(row['unit_price'])} each',
             style: const TextStyle(
-                color: EnhancedTheme.primaryTeal, fontWeight: FontWeight.w700)),
-      ]),
+              color: EnhancedTheme.primaryTeal,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -198,8 +232,11 @@ class _ItemSheetState extends State<_ItemSheet> {
     });
   }
 
-  void _reload() => setState(() => _batches = api.getList(
-      '/api/pharmacy/batches/', {'item': '${widget.item['id']}'}));
+  void _reload() => setState(() {
+    _batches = api.getList('/api/pharmacy/batches/', {
+      'item': '${widget.item['id']}',
+    });
+  });
 
   Future<void> _receive() async {
     final booked = await showModalBottomSheet<bool>(
@@ -241,13 +278,18 @@ class _ItemSheetState extends State<_ItemSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('${widget.item['name']}',
-                style: TextStyle(
-                    color: context.labelColor,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800)),
-            Text('${money(widget.item['unit_price'])} each',
-                style: TextStyle(color: context.hintColor, fontSize: 13)),
+            Text(
+              '${widget.item['name']}',
+              style: TextStyle(
+                color: context.labelColor,
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            Text(
+              '${money(widget.item['unit_price'])} each',
+              style: TextStyle(color: context.hintColor, fontSize: 13),
+            ),
             const SizedBox(height: 16),
             FutureBuilder<List<dynamic>>(
               future: _batches,
@@ -256,40 +298,57 @@ class _ItemSheetState extends State<_ItemSheet> {
                   return const Padding(
                     padding: EdgeInsets.symmetric(vertical: 24),
                     child: Center(
-                        child: CircularProgressIndicator(
-                            color: EnhancedTheme.primaryTeal)),
+                      child: CircularProgressIndicator(
+                        color: EnhancedTheme.primaryTeal,
+                      ),
+                    ),
                   );
                 }
                 final rows = (snap.data ?? []).cast<Map<String, dynamic>>();
                 if (rows.isEmpty) {
-                  return Text('No batches on the shelf.',
-                      style: TextStyle(color: context.hintColor, fontSize: 13));
+                  return Text(
+                    'No batches on the shelf.',
+                    style: TextStyle(color: context.hintColor, fontSize: 13),
+                  );
                 }
-                return Column(children: [
-                  for (final b in rows)
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      dense: true,
-                      title: Text('Batch ${b['batch_number']}',
+                return Column(
+                  children: [
+                    for (final b in rows)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        title: Text(
+                          'Batch ${b['batch_number']}',
                           style: TextStyle(
-                              color: context.labelColor, fontSize: 14)),
-                      subtitle: Text([
-                        '${units(b['quantity'])} left',
-                        if (b['expiry_date'] != null)
-                          'expires ${b['expiry_date']}',
-                        if ((b['supplier_name'] ?? '').toString().isNotEmpty)
-                          '${b['supplier_name']}',
-                      ].join(' · ')),
-                      trailing: b['is_expired'] == true
-                          ? const ReportBadge(
-                              text: 'expired', color: EnhancedTheme.errorRed)
-                          : admin
-                              ? TextButton(
-                                  onPressed: () => _adjust(b),
-                                  child: const Text('Adjust'))
-                              : null,
-                    ),
-                ]);
+                            color: context.labelColor,
+                            fontSize: 14,
+                          ),
+                        ),
+                        subtitle: Text(
+                          [
+                            '${units(b['quantity'])} left',
+                            if (b['expiry_date'] != null)
+                              'expires ${b['expiry_date']}',
+                            if ((b['supplier_name'] ?? '')
+                                .toString()
+                                .isNotEmpty)
+                              '${b['supplier_name']}',
+                          ].join(' · '),
+                        ),
+                        trailing: b['is_expired'] == true
+                            ? const ReportBadge(
+                                text: 'expired',
+                                color: EnhancedTheme.errorRed,
+                              )
+                            : admin
+                            ? TextButton(
+                                onPressed: () => _adjust(b),
+                                child: const Text('Adjust'),
+                              )
+                            : null,
+                      ),
+                  ],
+                );
               },
             ),
             const SizedBox(height: 12),
@@ -298,7 +357,8 @@ class _ItemSheetState extends State<_ItemSheet> {
               child: FilledButton.icon(
                 onPressed: _receive,
                 style: FilledButton.styleFrom(
-                    backgroundColor: EnhancedTheme.primaryTeal),
+                  backgroundColor: EnhancedTheme.primaryTeal,
+                ),
                 icon: const Icon(Icons.local_shipping_outlined),
                 label: const Text('Receive delivery'),
               ),
@@ -339,8 +399,9 @@ class _ReceiveFormState extends State<_ReceiveForm> {
   /// being booked in.
   Future<void> _loadSuppliers() async {
     try {
-      final rows =
-          await api.getAll('/api/pharmacy/suppliers/', {'is_active': 'true'});
+      final rows = await api.getAll('/api/pharmacy/suppliers/', {
+        'is_active': 'true',
+      });
       if (mounted) {
         setState(() => _suppliers = rows.cast<Map<String, dynamic>>());
       }
@@ -369,7 +430,9 @@ class _ReceiveFormState extends State<_ReceiveForm> {
   Future<void> _submit() async {
     final quantity = int.tryParse(_quantity.text.trim()) ?? 0;
     if (quantity <= 0 || _batch.text.trim().isEmpty) {
-      setState(() => _error = 'A delivery needs a quantity and a batch number.');
+      setState(
+        () => _error = 'A delivery needs a quantity and a batch number.',
+      );
       return;
     }
     setState(() {
@@ -402,22 +465,24 @@ class _ReceiveFormState extends State<_ReceiveForm> {
       submitLabel: 'Book in',
       onSubmit: _submit,
       children: [
-        Row(children: [
-          Expanded(
-            child: TextField(
-              controller: _quantity,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Quantity'),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _quantity,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Quantity'),
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: TextField(
-              controller: _batch,
-              decoration: const InputDecoration(labelText: 'Batch number'),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextField(
+                controller: _batch,
+                decoration: const InputDecoration(labelText: 'Batch number'),
+              ),
             ),
-          ),
-        ]),
+          ],
+        ),
         const SizedBox(height: 12),
         TextField(
           controller: _cost,
@@ -432,16 +497,21 @@ class _ReceiveFormState extends State<_ReceiveForm> {
           items: [
             const DropdownMenuItem(value: null, child: Text('— none —')),
             for (final s in _suppliers)
-              DropdownMenuItem(value: s['id'] as int, child: Text('${s['name']}')),
+              DropdownMenuItem(
+                value: s['id'] as int,
+                child: Text('${s['name']}'),
+              ),
           ],
           onChanged: (v) => setState(() => _supplierId = v),
         ),
         ListTile(
           contentPadding: EdgeInsets.zero,
           title: const Text('Expiry'),
-          subtitle: Text(_expiry == null
-              ? 'Not set'
-              : _expiry!.toIso8601String().substring(0, 10)),
+          subtitle: Text(
+            _expiry == null
+                ? 'Not set'
+                : _expiry!.toIso8601String().substring(0, 10),
+          ),
           trailing: const Icon(Icons.event_outlined),
           onTap: _pickExpiry,
         ),
@@ -460,8 +530,9 @@ class _AdjustForm extends StatefulWidget {
 }
 
 class _AdjustFormState extends State<_AdjustForm> {
-  late final TextEditingController _quantity =
-      TextEditingController(text: '${widget.batch['quantity'] ?? 0}');
+  late final TextEditingController _quantity = TextEditingController(
+    text: '${widget.batch['quantity'] ?? 0}',
+  );
   final _reason = TextEditingController();
   bool _writeOff = false;
   bool _saving = false;
@@ -519,7 +590,9 @@ class _AdjustFormState extends State<_AdjustForm> {
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           title: const Text('Write-off'),
-          subtitle: const Text('Expired, damaged or lost — not a count correction'),
+          subtitle: const Text(
+            'Expired, damaged or lost — not a count correction',
+          ),
           value: _writeOff,
           onChanged: (v) => setState(() => _writeOff = v),
         ),
@@ -641,40 +714,44 @@ class _ItemFormState extends State<_ItemForm> {
           onChanged: (v) => setState(() => _form = v ?? 'tablet'),
         ),
         const SizedBox(height: 12),
-        Row(children: [
-          Expanded(
-            child: TextField(
-              controller: _price,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Sell price (₦)'),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _price,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Sell price (₦)'),
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: TextField(
-              controller: _cost,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Cost (₦)'),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextField(
+                controller: _cost,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Cost (₦)'),
+              ),
             ),
-          ),
-        ]),
+          ],
+        ),
         const SizedBox(height: 12),
-        Row(children: [
-          Expanded(
-            child: TextField(
-              controller: _unit,
-              decoration: const InputDecoration(labelText: 'Unit'),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _unit,
+                decoration: const InputDecoration(labelText: 'Unit'),
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: TextField(
-              controller: _reorder,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Reorder level'),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextField(
+                controller: _reorder,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Reorder level'),
+              ),
             ),
-          ),
-        ]),
+          ],
+        ),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           title: const Text('Prescription only'),
@@ -685,7 +762,8 @@ class _ItemFormState extends State<_ItemForm> {
           contentPadding: EdgeInsets.zero,
           title: const Text('Controlled (poison)'),
           subtitle: const Text(
-              'Counted in the state controlled-drug register.'),
+            'Counted in the state controlled-drug register.',
+          ),
           value: _isControlled,
           onChanged: (v) => setState(() => _isControlled = v),
         ),

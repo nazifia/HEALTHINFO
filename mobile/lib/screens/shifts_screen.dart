@@ -31,48 +31,54 @@ class _ShiftsScreenState extends State<ShiftsScreen> {
       future: api.myRole(),
       builder: (context, snap) {
         final admin = isPharmacyAdmin(snap.data);
-        return Column(children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: Row(children: [
-              for (final week in [false, true]) ...[
-                ChoiceChip(
-                  label: Text(week ? 'Week' : 'List'),
-                  selected: _calendar == week,
-                  onSelected: (_) => setState(() => _calendar = week),
-                ),
-                const SizedBox(width: 8),
-              ],
-            ]),
-          ),
-          Expanded(
-            child: _calendar
-                ? _WeekView(admin: admin)
-                : ReportListScreen(
-                    path: '/api/shifts/',
-                    fabLabel: 'Add shift',
-                    showFab: admin,
-                    emptyIcon: Icons.schedule_outlined,
-                    emptyTitle: 'Nobody rostered yet',
-                    emptyMessage: admin
-                        ? 'Tap "Add shift" to put someone on.'
-                        : 'The tenant admin keeps the roster.',
-                    savedMessage: 'Shift saved.',
-                    header: (items) => const _OnDutyHeader(),
-                    card: (row, reload, edit) =>
-                        _ShiftCard(row: row, admin: admin, edit: edit),
-                    form: (existing) => _ShiftForm(existing: existing),
-                  ),
-          ),
-        ]);
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Row(
+                children: [
+                  for (final week in [false, true]) ...[
+                    ChoiceChip(
+                      label: Text(week ? 'Week' : 'List'),
+                      selected: _calendar == week,
+                      onSelected: (_) => setState(() => _calendar = week),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                ],
+              ),
+            ),
+            Expanded(
+              child: _calendar
+                  ? _WeekView(admin: admin)
+                  : ReportListScreen(
+                      path: '/api/shifts/',
+                      fabLabel: 'Add shift',
+                      showFab: admin,
+                      emptyIcon: Icons.schedule_outlined,
+                      emptyTitle: 'Nobody rostered yet',
+                      emptyMessage: admin
+                          ? 'Tap "Add shift" to put someone on.'
+                          : 'The tenant admin keeps the roster.',
+                      savedMessage: 'Shift saved.',
+                      header: (items) => const _OnDutyHeader(),
+                      card: (row, reload, edit) =>
+                          _ShiftCard(row: row, admin: admin, edit: edit),
+                      form: (existing) => _ShiftForm(existing: existing),
+                    ),
+            ),
+          ],
+        );
       },
     );
   }
 }
 
 /// Open the shift sheet over any screen; true when something was saved.
-Future<bool> _editShift(BuildContext context,
-    [Map<String, dynamic>? existing]) async {
+Future<bool> _editShift(
+  BuildContext context, [
+  Map<String, dynamic>? existing,
+]) async {
   final saved = await showModalBottomSheet<Object?>(
     context: context,
     isScrollControlled: true,
@@ -114,7 +120,9 @@ class _WeekViewState extends State<_WeekView> {
     });
   }
 
-  void _reload() => setState(() => _future = _load());
+  void _reload() => setState(() {
+    _future = _load();
+  });
 
   void _jump(DateTime monday) {
     _monday = monday;
@@ -136,8 +144,10 @@ class _WeekViewState extends State<_WeekView> {
               },
               backgroundColor: EnhancedTheme.primaryTeal,
               icon: const Icon(Icons.add, color: Colors.white),
-              label: const Text('Add shift',
-                  style: TextStyle(color: Colors.white)),
+              label: const Text(
+                'Add shift',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
       body: FutureBuilder<List<dynamic>>(
         future: _future,
@@ -146,27 +156,31 @@ class _WeekViewState extends State<_WeekView> {
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
             children: [
-              Row(children: [
-                IconButton(
-                  icon: const Icon(Icons.chevron_left),
-                  onPressed: () =>
-                      _jump(_monday.subtract(const Duration(days: 7))),
-                ),
-                Expanded(
-                  child: Text(
-                    '${heading.format(_monday)} – ${heading.format(end)}',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.chevron_left),
+                    onPressed: () =>
+                        _jump(_monday.subtract(const Duration(days: 7))),
+                  ),
+                  Expanded(
+                    child: Text(
+                      '${heading.format(_monday)} – ${heading.format(end)}',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
                         color: context.labelColor,
                         fontWeight: FontWeight.w700,
-                        fontSize: 15),
+                        fontSize: 15,
+                      ),
+                    ),
                   ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.chevron_right),
-                  onPressed: () => _jump(_monday.add(const Duration(days: 7))),
-                ),
-              ]),
+                  IconButton(
+                    icon: const Icon(Icons.chevron_right),
+                    onPressed: () =>
+                        _jump(_monday.add(const Duration(days: 7))),
+                  ),
+                ],
+              ),
               if (_monday != _weekOf(DateTime.now()))
                 Center(
                   child: TextButton(
@@ -180,8 +194,10 @@ class _WeekViewState extends State<_WeekView> {
                   child: Center(child: CircularProgressIndicator()),
                 )
               else if (snap.hasError)
-                Text('${snap.error}',
-                    style: const TextStyle(color: EnhancedTheme.errorRed))
+                Text(
+                  '${snap.error}',
+                  style: const TextStyle(color: EnhancedTheme.errorRed),
+                )
               else
                 for (var i = 0; i < 7; i++) ..._day(context, rows, i),
             ],
@@ -192,7 +208,10 @@ class _WeekViewState extends State<_WeekView> {
   }
 
   List<Widget> _day(
-      BuildContext context, List<Map<String, dynamic>> rows, int offset) {
+    BuildContext context,
+    List<Map<String, dynamic>> rows,
+    int offset,
+  ) {
     final day = _monday.add(Duration(days: offset));
     final onDay = rows.where((r) {
       final start = _at(r['starts_at']);
@@ -205,14 +224,17 @@ class _WeekViewState extends State<_WeekView> {
         child: Text(
           '${DateFormat('EEEE d MMM').format(day)}${today ? '  ·  today' : ''}',
           style: TextStyle(
-              color: today ? EnhancedTheme.primaryTeal : context.hintColor,
-              fontWeight: FontWeight.w700,
-              fontSize: 13),
+            color: today ? EnhancedTheme.primaryTeal : context.hintColor,
+            fontWeight: FontWeight.w700,
+            fontSize: 13,
+          ),
         ),
       ),
       if (onDay.isEmpty)
-        Text('Nobody on',
-            style: TextStyle(color: context.hintColor, fontSize: 12))
+        Text(
+          'Nobody on',
+          style: TextStyle(color: context.hintColor, fontSize: 12),
+        )
       else
         for (final row in onDay)
           Padding(
@@ -264,22 +286,26 @@ class _OnDutyHeader extends StatelessWidget {
             .join(', ');
         return Padding(
           padding: const EdgeInsets.only(bottom: 6),
-          child: Column(children: [
-            StatsHeader(
-              icon: Icons.schedule_outlined,
-              title: 'Staff roster',
-              subtitle: names.isEmpty ? 'Nobody on duty right now' : names,
-              color: EnhancedTheme.primaryTeal,
-            ),
-            KpiRow(tiles: [
-              KpiTile(
-                icon: Icons.how_to_reg_outlined,
-                label: 'On duty now',
-                value: count == null ? '—' : '$count',
-                color: EnhancedTheme.successGreen,
+          child: Column(
+            children: [
+              StatsHeader(
+                icon: Icons.schedule_outlined,
+                title: 'Staff roster',
+                subtitle: names.isEmpty ? 'Nobody on duty right now' : names,
+                color: EnhancedTheme.primaryTeal,
               ),
-            ]),
-          ]),
+              KpiRow(
+                tiles: [
+                  KpiTile(
+                    icon: Icons.how_to_reg_outlined,
+                    label: 'On duty now',
+                    value: count == null ? '—' : '$count',
+                    color: EnhancedTheme.successGreen,
+                  ),
+                ],
+              ),
+            ],
+          ),
         );
       },
     );
@@ -290,7 +316,11 @@ class _ShiftCard extends StatelessWidget {
   final Map<String, dynamic> row;
   final bool admin;
   final VoidCallback edit;
-  const _ShiftCard({required this.row, required this.admin, required this.edit});
+  const _ShiftCard({
+    required this.row,
+    required this.admin,
+    required this.edit,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -301,38 +331,56 @@ class _ShiftCard extends StatelessWidget {
     return GlassCard(
       borderRadius: 16,
       padding: const EdgeInsets.all(14),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Expanded(
-            child: Text('${row['username'] ?? 'User #${row['user']}'}',
-                style: TextStyle(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${row['username'] ?? 'User #${row['user']}'}',
+                  style: TextStyle(
                     color: context.labelColor,
                     fontWeight: FontWeight.w700,
-                    fontSize: 15)),
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+              if (_onNow(row))
+                const ReportBadge(
+                  text: 'on now',
+                  color: EnhancedTheme.successGreen,
+                ),
+              if (admin)
+                IconButton(
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  onPressed: edit,
+                ),
+            ],
           ),
-          if (_onNow(row))
-            const ReportBadge(text: 'on now', color: EnhancedTheme.successGreen),
-          if (admin)
-            IconButton(
-                icon: const Icon(Icons.edit_outlined, size: 18),
-                onPressed: edit),
-        ]),
-        const SizedBox(height: 6),
-        Text(
-          start == null || end == null
-              ? '—'
-              : '${_stamp.format(start)}  →  ${_stamp.format(end)}',
-          style: TextStyle(color: context.hintColor, fontSize: 13),
-        ),
-        if (branch.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Text(branch, style: TextStyle(color: context.hintColor, fontSize: 13)),
+          const SizedBox(height: 6),
+          Text(
+            start == null || end == null
+                ? '—'
+                : '${_stamp.format(start)}  →  ${_stamp.format(end)}',
+            style: TextStyle(color: context.hintColor, fontSize: 13),
+          ),
+          if (branch.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              branch,
+              style: TextStyle(color: context.hintColor, fontSize: 13),
+            ),
+          ],
+          if (notes.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              notes,
+              style: TextStyle(color: context.hintColor, fontSize: 12),
+            ),
+          ],
         ],
-        if (notes.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Text(notes, style: TextStyle(color: context.hintColor, fontSize: 12)),
-        ],
-      ]),
+      ),
     );
   }
 }
@@ -423,8 +471,13 @@ class _ShiftFormState extends State<_ShiftForm> {
       initialTime: TimeOfDay.fromDateTime(current ?? now),
     );
     if (time == null) return;
-    final picked =
-        DateTime(day.year, day.month, day.day, time.hour, time.minute);
+    final picked = DateTime(
+      day.year,
+      day.month,
+      day.day,
+      time.hour,
+      time.minute,
+    );
     setState(() {
       if (start) {
         _starts = picked;
@@ -475,28 +528,36 @@ class _ShiftFormState extends State<_ShiftForm> {
     }
   }
 
-  Widget _pickField(String label, String? value, String empty, VoidCallback tap,
-          {VoidCallback? clear}) =>
-      InputDecorator(
-        decoration: InputDecoration(labelText: label),
-        child: Row(children: [
-          Expanded(
-            child: Text(
-              value == null || value.isEmpty ? empty : value,
-              style: TextStyle(
-                  color: value == null || value.isEmpty
-                      ? context.hintColor
-                      : context.labelColor),
-              overflow: TextOverflow.ellipsis,
+  Widget _pickField(
+    String label,
+    String? value,
+    String empty,
+    VoidCallback tap, {
+    VoidCallback? clear,
+  }) => InputDecorator(
+    decoration: InputDecoration(labelText: label),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(
+            value == null || value.isEmpty ? empty : value,
+            style: TextStyle(
+              color: value == null || value.isEmpty
+                  ? context.hintColor
+                  : context.labelColor,
             ),
+            overflow: TextOverflow.ellipsis,
           ),
-          if (clear != null && value != null && value.isNotEmpty)
-            IconButton(
-                icon: const Icon(Icons.clear, size: 18), onPressed: clear),
-          IconButton(
-              icon: const Icon(Icons.edit_outlined, size: 18), onPressed: tap),
-        ]),
-      );
+        ),
+        if (clear != null && value != null && value.isNotEmpty)
+          IconButton(icon: const Icon(Icons.clear, size: 18), onPressed: clear),
+        IconButton(
+          icon: const Icon(Icons.edit_outlined, size: 18),
+          onPressed: tap,
+        ),
+      ],
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -509,19 +570,32 @@ class _ShiftFormState extends State<_ShiftForm> {
       children: [
         _pickField('Staff member', _userLabel, 'Nobody picked', _pickUser),
         const SizedBox(height: 12),
-        _pickField('Branch (optional)', _branchLabel, 'Whole facility',
-            _pickBranch, clear: () {
-          setState(() {
-            _branchId = null;
-            _branchLabel = null;
-          });
-        }),
+        _pickField(
+          'Branch (optional)',
+          _branchLabel,
+          'Whole facility',
+          _pickBranch,
+          clear: () {
+            setState(() {
+              _branchId = null;
+              _branchLabel = null;
+            });
+          },
+        ),
         const SizedBox(height: 12),
-        _pickField('Starts', _starts == null ? null : _stamp.format(_starts!),
-            'Not set', () => _pickWhen(start: true)),
+        _pickField(
+          'Starts',
+          _starts == null ? null : _stamp.format(_starts!),
+          'Not set',
+          () => _pickWhen(start: true),
+        ),
         const SizedBox(height: 12),
-        _pickField('Ends', _ends == null ? null : _stamp.format(_ends!),
-            'Not set', () => _pickWhen(start: false)),
+        _pickField(
+          'Ends',
+          _ends == null ? null : _stamp.format(_ends!),
+          'Not set',
+          () => _pickWhen(start: false),
+        ),
         const SizedBox(height: 12),
         TextField(
           controller: _notes,
