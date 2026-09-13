@@ -3401,8 +3401,17 @@ async function viewAnalytics(registry, prefix, key) {
     catch (e) { dash = `<p class="err">${esc(e.message)}</p>`; }
     const indexTitle = prefix === '/platform' ? 'Platform Analytics'
       : prefix === '/trading' ? 'Trading Reports' : 'Tenant Analytics';
-    return render(statIndex(indexTitle, registry, prefix) +
-      `<h3>${esc(registry[0].label)}</h3>` + dash);
+    render(statIndex(indexTitle, registry, prefix) +
+      `<h3>${esc(registry[0].label)}</h3><div id="live">` + dash + '</div>');
+    // Live dashboard: re-pull the numbers so rows `simulate` (or real staff)
+    // write show up without a reload. ponytail: 10s poll, route() clears it;
+    // swap for SSE only if the poll load ever shows on the server.
+    liveTimer = setInterval(async () => {
+      if (document.hidden || !$('#live')) return;
+      try { $('#live').innerHTML = renderData(noSearchTrend(await Api.get(registry[0].path))); }
+      catch (e) { /* keep the last good numbers; next tick retries */ }
+    }, 10000);
+    return;
   }
   const m = registry.find((x) => x.key === key);
   if (!m) return errorBox(new Error('Unknown metric: ' + key));
@@ -4851,7 +4860,9 @@ const homeHash = (role) => role === 'super_admin' && !Api.tenant ? '#/platform'
   : role === 'pharmacist' ? '#/pharmacy'
   : CLINICAL_ROLES.has(role) ? '#/clinical' : '#/';
 
+let liveTimer = null;  // dashboard auto-refresh; every navigation stops it
 function route() {
+  clearInterval(liveTimer); liveTimer = null;
   const path = location.hash.slice(1) || '/';
   const isAuthRoute = /^\/(login|register|onboarding|forgot|reset)(\?|$)/.test(path);
   if (!Api.isLoggedIn && !isAuthRoute) { location.hash = '#/login'; return; }
