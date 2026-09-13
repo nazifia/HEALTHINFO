@@ -2122,8 +2122,10 @@ async function viewDetail(slug, id) {
         // ``ask`` is one key, or several comma-separated — an optional one
         // left blank (a drawer's closing note) stays out of the body.
         for (const key of (b.dataset.ask || '').split(',').filter(Boolean)) {
-          // A diagnosis already on the note comes up to be changed, not retyped.
-          const answer = prompt(`${b.textContent} — ${key}:`, key === 'diagnosis' ? obj.case_report_notes || '' : '');
+          // A diagnosis already on the note comes up to be changed, not retyped;
+          // a payment amount starts at what the sale still owes.
+          const preset = key === 'diagnosis' ? obj.case_report_notes || '' : key === 'amount' ? obj.balance_due ?? '' : '';
+          const answer = prompt(`${b.textContent} — ${key}:`, preset);
           if (answer === null) return;
           if (answer !== '') body[key] = answer;
         }
@@ -3790,6 +3792,19 @@ function sellRxLabel(o) {
     o.duration_days ? `${o.duration_days} days` : ''].filter(Boolean).join(' · ');
 }
 
+/* The stock item to preselect for what a row prescribes: drug and dose
+   ("Amoxicillin 500 mg" against "Amoxicillin 500mg"), else the drug alone,
+   else its first word. Spaces dropped so strengths compare.
+   ponytail: prefix match; the pharmacist still sees and can change the pick. */
+function sellMatchItem(items, row) {
+  const squash = (t) => (t || '').toLowerCase().replace(/\s+/g, '');
+  const drug = row.medication_name || row.lines?.[0]?.name || '';
+  if (!drug.trim()) return null;
+  const starts = (p) => p && items.find((i) => squash(i.name).startsWith(p));
+  return starts(squash(drug + (row.dose || ''))) || starts(squash(drug))
+    || starts(squash(drug.trim().split(/\s+/)[0])) || null;
+}
+
 function sellFillBody(filling, number) {
   if (!filling) return {};
   const field = filling.kind === 'script' ? 'rx' : 'prescription';
@@ -3949,6 +3964,8 @@ async function viewSell() {
         // with it are marked off by the basket lines that match them.
         filling = order ? { ...order, label: rxLabel(order) } : null;
         draw();
+        const hit = order && sellMatchItem(items, order);
+        if (hit) { $('#add').stock_item.value = hit.id; $('#add').quantity.select(); }
       };
     }
 

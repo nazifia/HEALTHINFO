@@ -13,8 +13,8 @@ const src = readFileSync(`${__dirname}/app.js`, 'utf8');
 const a = src.indexOf('function sellRxRows(found) {');
 const b = src.indexOf('/* Dispensing counter.');
 assert.ok(a > 0 && b > a, 'sell helpers not found in app.js');
-const { sellRxRows, sellRxLabel, sellFillBody } = new Function(
-  `${src.slice(a, b)}; return { sellRxRows, sellRxLabel, sellFillBody };`)();
+const { sellRxRows, sellRxLabel, sellFillBody, sellMatchItem } = new Function(
+  `${src.slice(a, b)}; return { sellRxRows, sellRxLabel, sellFillBody, sellMatchItem };`)();
 
 assert.deepStrictEqual(sellRxRows(null), []);
 const found = {
@@ -42,4 +42,14 @@ assert.deepStrictEqual(sellFillBody(rows[2], '08031234567'),
   { prescription: 9, patient_number: '08031234567' });
 assert.deepStrictEqual(sellFillBody(rows[3], '08031234567'),
   { rx: 4, patient_number: '08031234567' });
+
+const stock = [{ id: 1, name: 'Amoxicillin 250mg' }, { id: 2, name: 'Paracetamol 500mg' },
+  { id: 5, name: 'Amoxicillin 500mg' }];
+assert.strictEqual(sellMatchItem(stock, rows[2]).id, 5);   // 'Amoxicillin' + '500 mg'
+assert.strictEqual(sellMatchItem(stock, rows[1]), null);
+assert.strictEqual(sellMatchItem(stock, { medication_name: 'Amoxicillin', dose: '1g' }).id, 1);
+assert.strictEqual(sellMatchItem(stock, { medication_name: 'Paracetamol 1g' }).id, 2);
+assert.strictEqual(sellMatchItem(stock, { medication_name: 'paracetamol 500mg' }).id, 2);
+assert.strictEqual(sellMatchItem(stock, rows[3]), null);
+assert.strictEqual(sellMatchItem(stock, {}), null);
 console.log('sell helpers ok');
