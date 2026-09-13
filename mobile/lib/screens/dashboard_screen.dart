@@ -7,6 +7,7 @@ import '../shared/widgets/bar_chart.dart';
 import '../shared/widgets/skeleton_cards.dart';
 import '../shared/widgets/stats_kit.dart';
 import '../shared/stats_rows.dart';
+import '../shared/live_refresh.dart';
 
 /// Tenant analytics dashboard — GET /api/analytics/tenant/.
 /// Read-only summary cards + ranked lists.
@@ -17,7 +18,10 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends State<DashboardScreen> with LiveRefresh {
+  @override
+  void refresh() => setState(() { _future = _load(); });
+
   late Future<Map<String, dynamic>> _future;
   DateTimeRange? _range;
 
@@ -69,7 +73,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: FutureBuilder<Map<String, dynamic>>(
         future: _future,
         builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
+          if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
             return const SkeletonCards(cards: 4, statRow: true);
           }
           if (snap.hasError) {

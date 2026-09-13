@@ -7,6 +7,7 @@ import '../shared/controlled_stats.dart';
 import '../shared/widgets/breakdown_card.dart';
 import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/stats_kit.dart';
+import '../shared/live_refresh.dart';
 
 /// The state's controlled-drug register: what was written for, what was handed
 /// over, and what left the counter with no script behind it. Aggregate-only —
@@ -21,7 +22,10 @@ class ControlledDrugsScreen extends StatefulWidget {
   State<ControlledDrugsScreen> createState() => _ControlledDrugsScreenState();
 }
 
-class _ControlledDrugsScreenState extends State<ControlledDrugsScreen> {
+class _ControlledDrugsScreenState extends State<ControlledDrugsScreen> with LiveRefresh {
+  @override
+  void refresh() => setState(() { _future = _load(); });
+
   late Future<Map<String, dynamic>> _future;
 
   @override
@@ -48,7 +52,7 @@ class _ControlledDrugsScreenState extends State<ControlledDrugsScreen> {
       child: FutureBuilder<Map<String, dynamic>>(
         future: _future,
         builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
+          if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
             return const Center(
                 child: CircularProgressIndicator(color: EnhancedTheme.primaryTeal));
           }

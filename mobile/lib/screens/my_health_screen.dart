@@ -8,6 +8,7 @@ import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/hero_banner.dart';
 import '../shared/widgets/snack.dart';
+import '../shared/live_refresh.dart';
 
 /// A patient's home — GET /api/portal/*.
 ///
@@ -80,7 +81,10 @@ String _text(Object? v) {
 }
 
 class _MyHealthScreenState extends State<MyHealthScreen>
-    with AutomaticKeepAliveClientMixin {
+    with AutomaticKeepAliveClientMixin, LiveRefresh {
+  @override
+  void refresh() => setState(() { _future = _load(); });
+
   late Future<List<dynamic>> _future;
 
   // The pharmacy list is loaded on demand, not with the page: it asks for the
@@ -148,7 +152,7 @@ class _MyHealthScreenState extends State<MyHealthScreen>
         child: FutureBuilder<List<dynamic>>(
           future: _future,
           builder: (context, snap) {
-            if (snap.connectionState == ConnectionState.waiting) {
+            if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
               return const Center(
                   child: CircularProgressIndicator(
                       color: EnhancedTheme.primaryTeal));

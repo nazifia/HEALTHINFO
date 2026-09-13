@@ -8,6 +8,7 @@ import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/stats_kit.dart';
 import 'pharmacy_kit.dart';
 import 'report_scaffold.dart';
+import '../shared/live_refresh.dart';
 
 /// Notifiable cases — GET /api/reports/notifiable/.
 ///
@@ -24,7 +25,10 @@ class NotifiableScreen extends StatefulWidget {
   State<NotifiableScreen> createState() => _NotifiableScreenState();
 }
 
-class _NotifiableScreenState extends State<NotifiableScreen> {
+class _NotifiableScreenState extends State<NotifiableScreen> with LiveRefresh {
+  @override
+  void refresh() => _reload();
+
   int _days = 30;
   late Future<List<Map<String, dynamic>>> _future = _load();
 
@@ -62,7 +66,7 @@ class _NotifiableScreenState extends State<NotifiableScreen> {
       child: FutureBuilder<List<Map<String, dynamic>>>(
         future: _future,
         builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
+          if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
             return const Center(
                 child:
                     CircularProgressIndicator(color: EnhancedTheme.primaryTeal));

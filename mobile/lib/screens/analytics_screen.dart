@@ -7,6 +7,7 @@ import '../shared/widgets/bar_chart.dart';
 import '../shared/widgets/skeleton_cards.dart';
 import '../shared/widgets/stats_kit.dart';
 import '../shared/stats_rows.dart';
+import '../shared/live_refresh.dart';
 
 /// Secondary analytics dashboards in one scroll: conversion funnel, peer
 /// benchmark, daily retention, and adverse-reaction signal.
@@ -19,7 +20,10 @@ class AnalyticsScreen extends StatefulWidget {
   State<AnalyticsScreen> createState() => _AnalyticsScreenState();
 }
 
-class _AnalyticsScreenState extends State<AnalyticsScreen> {
+class _AnalyticsScreenState extends State<AnalyticsScreen> with LiveRefresh {
+  @override
+  void refresh() => setState(() { _future = _load(); });
+
   late Future<_Bundle> _future;
 
   @override
@@ -72,7 +76,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       child: FutureBuilder<_Bundle>(
         future: _future,
         builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
+          if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
             return const SkeletonCards(cards: 4, statRow: false);
           }
           if (snap.hasError) {

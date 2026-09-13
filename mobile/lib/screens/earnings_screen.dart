@@ -7,6 +7,7 @@ import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/stats_kit.dart';
 import 'pharmacy_kit.dart';
+import '../shared/live_refresh.dart';
 
 /// The prescriber's side of the ledger — GET /api/prescriptions/my-dues/.
 ///
@@ -22,7 +23,10 @@ class EarningsScreen extends StatefulWidget {
   State<EarningsScreen> createState() => _EarningsScreenState();
 }
 
-class _EarningsScreenState extends State<EarningsScreen> {
+class _EarningsScreenState extends State<EarningsScreen> with LiveRefresh {
+  @override
+  void refresh() => setState(() { _future = _load(); });
+
   late Future<Map<String, dynamic>> _future = _load();
 
   Future<Map<String, dynamic>> _load() async =>
@@ -34,7 +38,7 @@ class _EarningsScreenState extends State<EarningsScreen> {
     return FutureBuilder<Map<String, dynamic>>(
       future: _future,
       builder: (context, snap) {
-        if (snap.connectionState != ConnectionState.done) {
+        if (snap.connectionState != ConnectionState.done && !snap.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
         if (snap.hasError) {

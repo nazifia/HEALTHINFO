@@ -10,6 +10,7 @@ import '../shared/widgets/stats_kit.dart';
 import '../shared/sales_headline.dart';
 import '../shared/stats_rows.dart';
 import 'controlled_drugs_screen.dart' show controlledCards;
+import '../shared/live_refresh.dart';
 
 /// Public-health analytics: the analysis side of the four collection feeds —
 /// AMR, immunization coverage, vital-stats mortality and pharmacy shortages.
@@ -22,7 +23,10 @@ class PublicHealthScreen extends StatefulWidget {
   State<PublicHealthScreen> createState() => _PublicHealthScreenState();
 }
 
-class _PublicHealthScreenState extends State<PublicHealthScreen> {
+class _PublicHealthScreenState extends State<PublicHealthScreen> with LiveRefresh {
+  @override
+  void refresh() => setState(() { _future = _loadAll(); });
+
   late Future<List<Map<String, dynamic>>> _future;
 
   @override
@@ -87,7 +91,7 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
       child: FutureBuilder<List<Map<String, dynamic>>>(
         future: _future,
         builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
+          if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
             return const Center(
                 child: CircularProgressIndicator(color: EnhancedTheme.primaryTeal));
           }
@@ -104,7 +108,7 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> {
           }
           final [lab, imm, vital, stock, chw, facility, insurance, appt, rx, visit,
               sales, poison] = snap.data!;
-          final takings = salesHeadline(sales);
+          final takings = salesHeadline(sales, now: DateTime.now());
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             children: [

@@ -1088,10 +1088,28 @@ function setNav(open, refocus) {
 }
 const navOpen = () => $('#sidebar').classList.contains('open');
 
+// True while a live refresh re-runs the current view (see route()): the
+// screen is swapped in place — no spinner, no scroll-to-top, no replay of
+// the entrance animations and count-ups on numbers that only just moved.
+let refreshing = false;
 function render(html) {
-  $('#main').innerHTML = html;
-  $('#main').scrollTop = 0;
-  setNav(false);
+  const main = $('#main');
+  if (!refreshing) {
+    main.innerHTML = html;
+    main.scrollTop = 0;
+    setNav(false);
+    return;
+  }
+  const top = main.scrollTop;
+  const open = [...main.querySelectorAll('details')].map((d) => d.open);
+  main.innerHTML = html;
+  main.scrollTop = top;
+  main.querySelectorAll('details').forEach((d, i) => { d.open = open[i] ?? d.open; });
+  for (const el of main.querySelectorAll(SEEN_SEL)) {
+    el.classList.add('seen');
+    for (const a of el.getAnimations({ subtree: true })) a.finish();
+  }
+  for (const el of main.querySelectorAll('.tile-val, .hero-stat strong, .big-val')) el.dataset.counted = '1';
 }
 
 /* Below-the-fold cards, charts and numbers hold still until scrolled into
@@ -1153,7 +1171,7 @@ function countUp(root) {
   }
 }
 
-const spinner = () => render('<div class="loading">Loading…</div>');
+const spinner = () => { if (!refreshing) render('<div class="loading">Loading…</div>'); };
 
 function errorBox(e) {
   render(`<div class="card error-card"><h3>Error</h3><p>${esc(e.message || e)}</p></div>`);
@@ -3296,17 +3314,18 @@ async function viewNotifiable() {
     const fd = new FormData($('#f'));
     return { from: fd.get('from'), to: fd.get('to') };
   };
-  const load = async () => {
-    $('#out').innerHTML = '<div class="loading">Loading…</div>';
+  const load = async (quiet = false) => {
+    if (!quiet) $('#out').innerHTML = '<div class="loading">Loading…</div>';
     try {
       const data = await Api.get('/api/reports/notifiable/', params());
       $('#out').innerHTML = `<p class="muted">${data.count} case(s)</p>` +
         (data.cases.length ? tableHtml(data.cases) : '<p class="muted">No notifiable cases in range.</p>');
-    } catch (err) { $('#out').innerHTML = `<p class="err">${esc(err.message)}</p>`; }
+    } catch (err) { if (!quiet) $('#out').innerHTML = `<p class="err">${esc(err.message)}</p>`; }
   };
   $('#f').onsubmit = (e) => { e.preventDefault(); load(); };
   $('#csv').onclick = () => Api.download('/api/reports/notifiable/', { ...params(), format: 'csv' }, 'notifiable_cases.csv')
     .catch((err) => toast(err.message, true));
+  live(() => load(true));  // the form holds the picked range: re-pull only the numbers
   load();
 }
 
@@ -3334,15 +3353,19 @@ async function viewGraph(type, id) {
 
 /* The headline takings from /analytics/platform/sales/: what every pharmacy in
    the patch sold, for the latest day, month and year the payload carries. The
-   rows are one per (area, period), so a period's total is the sum of its rows —
-   and with a ?from/to window the latest period in range is not today, so the
-   tile names the period it is showing instead of implying one. */
-function salesHeadline(data) {
+   rows are one per (area, period), so a period's total is the sum of its rows.
+   With no window the tiles are today, this month and this year (`now`; the
+   server buckets in UTC), reading zero until the first sale lands rather than
+   showing the last day that had one. With a ?from/to window the latest period
+   in range is not today, so the tile names the period it is showing instead. */
+function salesHeadline(data, now = null) {
   const tiles = [];
-  for (const bucket of ['daily', 'monthly', 'yearly']) {
+  const iso = now ? now.toISOString() : '';
+  for (const [bucket, width] of [['daily', 10], ['monthly', 7], ['yearly', 4]]) {
     const rows = data?.[bucket];
-    if (!Array.isArray(rows) || !rows.length) continue;
-    const period = rows.reduce((latest, r) => (r.period > latest ? r.period : latest), '');
+    if (!Array.isArray(rows) || (!now && !rows.length)) continue;
+    const period = now ? iso.slice(0, width)
+      : rows.reduce((latest, r) => (r.period > latest ? r.period : latest), '');
     const hit = rows.filter((r) => r.period === period);
     const revenue = hit.reduce((t, r) => t + Number(r.revenue || 0), 0);
     const count = hit.reduce((t, r) => t + Number(r.sales || 0), 0);
@@ -3401,17 +3424,8 @@ async function viewAnalytics(registry, prefix, key) {
     catch (e) { dash = `<p class="err">${esc(e.message)}</p>`; }
     const indexTitle = prefix === '/platform' ? 'Platform Analytics'
       : prefix === '/trading' ? 'Trading Reports' : 'Tenant Analytics';
-    render(statIndex(indexTitle, registry, prefix) +
-      `<h3>${esc(registry[0].label)}</h3><div id="live">` + dash + '</div>');
-    // Live dashboard: re-pull the numbers so rows `simulate` (or real staff)
-    // write show up without a reload. ponytail: 10s poll, route() clears it;
-    // swap for SSE only if the poll load ever shows on the server.
-    liveTimer = setInterval(async () => {
-      if (document.hidden || !$('#live')) return;
-      try { $('#live').innerHTML = renderData(noSearchTrend(await Api.get(registry[0].path))); }
-      catch (e) { /* keep the last good numbers; next tick retries */ }
-    }, 10000);
-    return;
+    return render(statIndex(indexTitle, registry, prefix) +
+      `<h3>${esc(registry[0].label)}</h3>` + dash);
   }
   const m = registry.find((x) => x.key === key);
   if (!m) return errorBox(new Error('Unknown metric: ' + key));
@@ -3441,24 +3455,27 @@ async function viewAnalytics(registry, prefix, key) {
   // rows beside them do not — so they open the case, where the button that
   // records the notification lives.
   const rowLink = key === 'idsr' ? (r) => (r.id ? `#/r/case-reports/${r.id}` : null) : null;
-  const load = async () => {
-    $('#out').innerHTML = '<div class="loading">Loading…</div>';
+  const load = async (quiet = false) => {
+    if (!quiet) $('#out').innerHTML = '<div class="loading">Loading…</div>';
     try {
       const data = await Api.get(m.path, params());
       // The prescribing rates stay in the payload for the mobile app; the web screen shows counts only.
       if (key === 'prescriptions') for (const k of Object.keys(data)) if (k.endsWith('_rate')) delete data[k];
       if (key === 'dashboard') noSearchTrend(data);
       // The money report leads with its totals; the tables under it are the grain.
-      const headline = key === 'sales' ? salesHeadline
+      const headline = key === 'sales' ? (d) => salesHeadline(d, Object.keys(params()).length ? null : new Date())
         : key === 'controlled' ? controlledHeadline : null;
       const head = headline ? headline(data) : '';
       // The daily tile says the day's takings; the per-area daily table under it is noise.
       if (key === 'sales') delete data.daily;
       $('#out').innerHTML = head + renderData(data, 0, rowLink);
     }
-    catch (err) { $('#out').innerHTML = `<p class="err">${esc(err.message)}</p>`; }
+    catch (err) { if (!quiet) $('#out').innerHTML = `<p class="err">${esc(err.message)}</p>`; }
   };
   $('#f').onsubmit = (e) => { e.preventDefault(); load(); };
+  // The form holds the picked range, so the whole-view refresh would lose
+  // it: re-pull the numbers for that range instead.
+  live(() => load(true));
   if (m.csv) $('#csv').onclick = () => Api.download(m.path, { ...params(), format: 'csv' }, `${key}.csv`).catch((e) => toast(e.message, true));
   if (m.exportPath) $('#export').onclick = () => Api.download(m.exportPath, params(), `${key}.csv`).catch((e) => toast(e.message, true));
   load();
@@ -3603,7 +3620,7 @@ async function viewGov() {
     <div class="tiles">${kpis.map(([k, v]) =>
       `<div class="tile kpi-tile"><span class="tile-label">${esc(k)}</span><span class="tile-val">${esc(v)}</span></div>`).join('')}</div>
     <h3>What the pharmacies sold <a class="btn ghost" href="#/platform/sales">Details</a></h3>
-    ${salesHeadline(sales) || '<p class="muted">No sales recorded yet.</p>'}
+    ${salesHeadline(sales, new Date()) || '<p class="muted">No sales recorded yet.</p>'}
     <div class="card"><h3>Outbreak alerts</h3>
       ${alerts.length ? tableHtml(alerts) : '<p class="muted">No spike above threshold.</p>'}</div>
     <h3>Go to</h3>
@@ -4860,9 +4877,30 @@ const homeHash = (role) => role === 'super_admin' && !Api.tenant ? '#/platform'
   : role === 'pharmacist' ? '#/pharmacy'
   : CLINICAL_ROLES.has(role) ? '#/clinical' : '#/';
 
-let liveTimer = null;  // dashboard auto-refresh; every navigation stops it
+// Live screens: every dashboard, register and report re-pulls its numbers
+// so rows other staff (or `simulate`) write show up without a reload.
+// Forms, the till and the detail pages hold what the user is doing; they stay
+// as loaded. ponytail: 10s poll, route() clears it; swap for SSE only if the
+// poll load ever shows on the server.
+const LIVE_RE = /^\/(?:|clinical|facility|earnings|portal|insurer|gov|pharmacy|hmo|notifications|notifiable|r\/[a-z-]+|(?:analytics|platform|trading)(?:\/[a-z-]+)?)$/;
+const LIVE_MS = 10000;
+let liveTimer = null;  // every navigation stops it
+function live(tick) {
+  clearInterval(liveTimer);
+  liveTimer = setInterval(() => { if (!document.hidden) tick(); }, LIVE_MS);
+}
+// Re-run the view the way it first ran, with render() swapping the screen
+// in place. Typing in a box (a search, an inline edit) holds the refresh off.
+async function refreshView(view, m) {
+  if (refreshing || document.activeElement?.matches('input, textarea, select')) return;
+  refreshing = true;
+  try { await view(m); }
+  catch (e) { /* keep the last good screen; next tick retries */ }
+  finally { refreshing = false; }
+}
 function route() {
   clearInterval(liveTimer); liveTimer = null;
+  refreshing = false;
   const path = location.hash.slice(1) || '/';
   const isAuthRoute = /^\/(login|register|onboarding|forgot|reset)(\?|$)/.test(path);
   if (!Api.isLoggedIn && !isAuthRoute) { location.hash = '#/login'; return; }
@@ -4874,7 +4912,10 @@ function route() {
   if (Api.tenant && /^\/platform(?:\/|$)/.test(path)) { location.hash = '#/'; return; }
   for (const [re, view] of routes) {
     const m = path.match(re);
-    if (m) return view(m);
+    if (!m) continue;
+    const p = view(m);
+    if (LIVE_RE.test(path)) live(() => refreshView(view, m));
+    return p;
   }
   errorBox(new Error('Page not found: ' + path));
 }

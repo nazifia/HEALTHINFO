@@ -28,6 +28,20 @@ void main() {
     ]);
   });
 
+  test('live, each bucket is today / this month / this year, zero until a sale lands', () {
+    final now = DateTime.utc(2026, 9, 13, 8);
+    expect(salesHeadline(_payload, now: now), [
+      (bucket: 'daily', period: '2026-09-13', revenue: 0, sales: 0),
+      (bucket: 'monthly', period: '2026-09', revenue: 350.50, sales: 5),
+      (bucket: 'yearly', period: '2026', revenue: 1250.50, sales: 14),
+    ]);
+    // A patch with no sales yet still shows today, not "nothing".
+    expect(salesHeadline({'level': 'state', 'daily': []}, now: now), [
+      (bucket: 'daily', period: '2026-09-13', revenue: 0, sales: 0),
+    ]);
+    expect(salesHeadline(null, now: now), isEmpty);
+  });
+
   test('an empty or missing bucket shows nothing, never a zero', () {
     expect(salesHeadline({'level': 'state', 'daily': [], 'monthly': []}), isEmpty);
     expect(salesHeadline(null), isEmpty);

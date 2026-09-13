@@ -6,6 +6,7 @@ import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/skeleton_cards.dart';
 import '../shared/widgets/stats_kit.dart';
+import '../shared/live_refresh.dart';
 
 /// Pharmacy reports — the /api/reports/* endpoints in one scroll.
 ///
@@ -22,7 +23,10 @@ class PharmacyReportsScreen extends StatefulWidget {
   State<PharmacyReportsScreen> createState() => _PharmacyReportsScreenState();
 }
 
-class _PharmacyReportsScreenState extends State<PharmacyReportsScreen> {
+class _PharmacyReportsScreenState extends State<PharmacyReportsScreen> with LiveRefresh {
+  @override
+  void refresh() => _reload();
+
   String _period = 'month';
   late Future<_Reports> _future = _load();
 
@@ -102,7 +106,7 @@ class _PharmacyReportsScreenState extends State<PharmacyReportsScreen> {
       child: FutureBuilder<_Reports>(
         future: _future,
         builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
+          if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
             return const SkeletonCards(cards: 4, statRow: true);
           }
           if (snap.hasError) {

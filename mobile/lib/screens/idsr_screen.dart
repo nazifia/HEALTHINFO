@@ -8,6 +8,7 @@ import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/stats_kit.dart';
 import 'report_scaffold.dart';
+import '../shared/live_refresh.dart';
 
 /// IDSR daily epidemiological summary — GET /api/analytics/idsr/.
 ///
@@ -30,7 +31,10 @@ class IdsrScreen extends StatefulWidget {
   State<IdsrScreen> createState() => _IdsrScreenState();
 }
 
-class _IdsrScreenState extends State<IdsrScreen> {
+class _IdsrScreenState extends State<IdsrScreen> with LiveRefresh {
+  @override
+  void refresh() => _reload();
+
   int _days = 30;
   // Which endpoint answered, so the CSV export pulls the same scope as the
   // rows on screen rather than guessing at the reader's role a second time.
@@ -84,7 +88,7 @@ class _IdsrScreenState extends State<IdsrScreen> {
       child: FutureBuilder<List<Map<String, dynamic>>>(
         future: _future,
         builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
+          if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
             return const Center(
                 child: CircularProgressIndicator(color: EnhancedTheme.primaryTeal));
           }

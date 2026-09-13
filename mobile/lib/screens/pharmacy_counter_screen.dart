@@ -9,6 +9,7 @@ import '../shared/widgets/snack.dart';
 import '../shared/widgets/stats_kit.dart';
 import 'pharmacy_dispense_sheet.dart';
 import 'pharmacy_sales_screen.dart';
+import '../shared/live_refresh.dart';
 
 /// The pharmacy counter: today's takings, what to reorder, what is about to
 /// expire, and what the insurers still owe — plus the button that starts a sale.
@@ -36,7 +37,10 @@ class _CounterData {
       this.expiring, this.scripts);
 }
 
-class _PharmacyCounterScreenState extends State<PharmacyCounterScreen> {
+class _PharmacyCounterScreenState extends State<PharmacyCounterScreen> with LiveRefresh {
+  @override
+  void refresh() => _reload();
+
   late Future<_CounterData> _future;
   String? _role;
 
@@ -167,7 +171,7 @@ class _PharmacyCounterScreenState extends State<PharmacyCounterScreen> {
         child: FutureBuilder<_CounterData>(
           future: _future,
           builder: (context, snap) {
-            if (snap.connectionState == ConnectionState.waiting) {
+            if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
               return const SkeletonCards(cards: 3, statRow: true);
             }
             if (snap.hasError) {

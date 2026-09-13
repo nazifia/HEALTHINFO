@@ -7,6 +7,7 @@ import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/skeleton_cards.dart';
 import '../shared/widgets/stats_kit.dart';
 import '../shared/stats_rows.dart';
+import '../shared/live_refresh.dart';
 
 /// Platform-wide super-admin dashboard — GET /api/analytics/platform/.
 /// Cross-tenant rollup: tenant/user counts, search volume, per-tenant breakdown,
@@ -20,7 +21,10 @@ class SuperAdminDashboardScreen extends StatefulWidget {
       _SuperAdminDashboardScreenState();
 }
 
-class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
+class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> with LiveRefresh {
+  @override
+  void refresh() => setState(() { _future = _load(); });
+
   late Future<Map<String, dynamic>> _future;
   DateTimeRange? _range;
 
@@ -70,7 +74,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
       child: FutureBuilder<Map<String, dynamic>>(
         future: _future,
         builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
+          if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
             return const SkeletonCards(cards: 4, statRow: true);
           }
           if (snap.hasError) {

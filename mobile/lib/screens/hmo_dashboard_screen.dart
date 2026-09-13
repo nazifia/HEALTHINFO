@@ -6,6 +6,7 @@ import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/skeleton_cards.dart';
 import '../shared/widgets/stats_kit.dart';
+import '../shared/live_refresh.dart';
 
 /// The pharmacy's side of the insurance desk: what the schemes have been
 /// billed over a period, what they still owe, and the two queues that stall
@@ -59,7 +60,10 @@ class _HmoData {
 }
 
 class _HmoDashboardScreenState extends State<HmoDashboardScreen>
-    with AutomaticKeepAliveClientMixin {
+    with AutomaticKeepAliveClientMixin, LiveRefresh {
+  @override
+  void refresh() => _reload();
+
   late Future<_HmoData> _future;
 
   // Empty is every claim ever raised, which is the figure the counter asks for
@@ -201,7 +205,7 @@ class _HmoDashboardScreenState extends State<HmoDashboardScreen>
       child: FutureBuilder<_HmoData>(
         future: _future,
         builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
+          if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
             return const SkeletonCards(cards: 3, statRow: true);
           }
           if (snap.hasError) {

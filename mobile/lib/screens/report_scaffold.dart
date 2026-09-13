@@ -8,6 +8,7 @@ import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/responsive.dart';
 import '../shared/widgets/searchable_dropdown.dart';
 import '../shared/widgets/snack.dart';
+import '../shared/live_refresh.dart';
 
 /// One server-side choice filter offered above a report list.
 ///
@@ -106,7 +107,10 @@ class ReportListScreen extends StatefulWidget {
 }
 
 class _ReportListScreenState extends State<ReportListScreen>
-    with AutomaticKeepAliveClientMixin {
+    with AutomaticKeepAliveClientMixin, LiveRefresh {
+  @override
+  void refresh() => _reload();
+
   late Future<List<dynamic>> _future;
   String _query = '';
   // Picked filter values, keyed by query param. A param is absent when the
@@ -253,7 +257,7 @@ class _ReportListScreenState extends State<ReportListScreen>
       child: FutureBuilder<List<dynamic>>(
         future: _future,
         builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
+          if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
             return const Center(
               child: CircularProgressIndicator(
                 color: EnhancedTheme.primaryTeal,

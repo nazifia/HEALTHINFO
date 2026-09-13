@@ -6,6 +6,7 @@ import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/bar_chart.dart';
+import '../shared/live_refresh.dart';
 
 /// Outbreak surveillance — disease clusters whose latest day spikes above their
 /// trailing baseline. Super-admins get the cross-tenant view
@@ -18,7 +19,10 @@ class SurveillanceScreen extends StatefulWidget {
   State<SurveillanceScreen> createState() => _SurveillanceScreenState();
 }
 
-class _SurveillanceScreenState extends State<SurveillanceScreen> {
+class _SurveillanceScreenState extends State<SurveillanceScreen> with LiveRefresh {
+  @override
+  void refresh() => setState(() { _future = _load(); });
+
   late Future<List<dynamic>> _future;
 
   @override
@@ -49,7 +53,7 @@ class _SurveillanceScreenState extends State<SurveillanceScreen> {
       child: FutureBuilder<List<dynamic>>(
         future: _future,
         builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
+          if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
             return const Center(
                 child:
                     CircularProgressIndicator(color: EnhancedTheme.primaryTeal));

@@ -9,7 +9,7 @@ const assert = require('assert');
 const { readFileSync } = require('fs');
 
 const src = readFileSync(`${__dirname}/app.js`, 'utf8');
-const a = src.indexOf('function salesHeadline(data) {');
+const a = src.indexOf('function salesHeadline(data, now = null) {');
 const b = src.indexOf('function statIndex(');
 assert.ok(a > 0 && b > a, 'salesHeadline not found in app.js');
 
@@ -46,5 +46,18 @@ assert.ok(html.includes('4 sale(s)'), 'daily sale count is not the two areas add
 // Nothing to show is empty, never a tile reading zero.
 assert.strictEqual(salesHeadline({ level: 'state', daily: [], monthly: [], yearly: [] }), '');
 assert.strictEqual(salesHeadline(null), '');
+
+// Live (no window): the tiles are today, this month and this year — zero
+// until the first sale lands, never the last day that had one.
+const now = new Date('2026-09-13T08:00:00Z');
+const live = salesHeadline(data, now);
+assert.ok(live.includes('2026-09-13'), 'live daily tile is not today');
+assert.ok(!live.includes('2026-09-10'), 'live daily tile shows the last day with sales');
+assert.ok(live.includes('N0.00'), 'a day with no sales yet does not read zero');
+assert.ok(live.includes('0 sale(s)'), 'a day with no sales yet does not count zero');
+assert.ok(live.includes('N350.50'), 'live monthly total wrong');
+assert.ok(live.includes('N1250.50'), 'live yearly total wrong');
+assert.ok(salesHeadline({ level: 'state', daily: [], monthly: [], yearly: [] }, now).includes('2026-09-13'),
+  'a live dashboard with no sales yet still shows today');
 
 console.log('sales: ok');

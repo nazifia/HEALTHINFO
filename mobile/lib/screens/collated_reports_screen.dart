@@ -8,6 +8,7 @@ import '../shared/widgets/breakdown_card.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/empty_state.dart';
 import '../shared/stats_rows.dart';
+import '../shared/live_refresh.dart';
 
 /// Collated case reports rollup.
 /// Super-admins get the cross-tenant platform view (/api/analytics/platform/cases/);
@@ -19,7 +20,10 @@ class CollatedReportsScreen extends StatefulWidget {
   State<CollatedReportsScreen> createState() => _CollatedReportsScreenState();
 }
 
-class _CollatedReportsScreenState extends State<CollatedReportsScreen> {
+class _CollatedReportsScreenState extends State<CollatedReportsScreen> with LiveRefresh {
+  @override
+  void refresh() => setState(() { _future = _load(); });
+
   late Future<Map<String, dynamic>> _future;
 
   @override
@@ -50,7 +54,7 @@ class _CollatedReportsScreenState extends State<CollatedReportsScreen> {
       child: FutureBuilder<Map<String, dynamic>>(
         future: _future,
         builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
+          if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
             return const Center(
                 child:
                     CircularProgressIndicator(color: EnhancedTheme.primaryTeal));

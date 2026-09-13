@@ -14,6 +14,7 @@ import 'consultations_screen.dart';
 import 'drug_orders_screen.dart';
 import 'report_scaffold.dart';
 import 'vital_events_screen.dart';
+import '../shared/live_refresh.dart';
 
 /// The ward: a clinical cadre's own landing screen. How much of each register
 /// they file exists, and the latest few of the one they file most.
@@ -112,7 +113,10 @@ class WardScreen extends StatefulWidget {
 }
 
 class _WardScreenState extends State<WardScreen>
-    with AutomaticKeepAliveClientMixin {
+    with AutomaticKeepAliveClientMixin, LiveRefresh {
+  @override
+  void refresh() => _reload();
+
   late Future<_WardData> _future;
 
   @override
@@ -291,7 +295,7 @@ class _WardScreenState extends State<WardScreen>
       child: FutureBuilder<_WardData>(
         future: _future,
         builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
+          if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
             return const SkeletonCards(cards: 3, statRow: true);
           }
           if (snap.hasError) {
