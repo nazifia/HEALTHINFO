@@ -14,6 +14,7 @@ way, so the ledger must say so.
 from django.db import models, transaction
 from django.utils import timezone
 
+from apps.accounts.models import normalize_phone
 from apps.tenants.models import TenantOwnedModel
 from config.money import money as _money
 
@@ -60,6 +61,12 @@ class Customer(TenantOwnedModel):
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        # One shape for the number: "+234 803 123 4567" at one visit and
+        # "08031234567" at the next are one customer, and one wallet.
+        self.phone = normalize_phone(self.phone)
+        super().save(*args, **kwargs)
 
     @property
     def total_purchases(self):

@@ -183,6 +183,14 @@ class Prescription(TenantOwnedModel):
         return f"Rx{self.pk} — {self.customer_name} ({self.status})"
 
     def save(self, *args, **kwargs):
+        # A script written against a customer or patient record carries their
+        # number too: another pharmacy finds and fills it on the number alone
+        # (by_number, Sale.patient_number), never on this counter's record ids.
+        if not self.customer_phone:
+            for who in (self.customer, self.patient):
+                if who is not None and who.phone:
+                    self.customer_phone = who.phone
+                    break
         # One shape for the number, so a script written up as "+234 803 123
         # 4567" is still found by the "08031234567" on the patient's card.
         self.customer_phone = normalize_phone(self.customer_phone)

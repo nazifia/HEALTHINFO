@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
+from apps.accounts.models import normalize_phone
 from config.serializers import NamedRelationsMixin
 
 from .models import Customer, WalletTransaction
@@ -28,6 +29,20 @@ class CustomerSerializer(serializers.ModelSerializer):
         # could PATCH a wallet could hand itself money.
         read_only_fields = ("wallet_balance", "outstanding_debt", "last_visit",
                             "created_at", "updated_at")
+
+    def validate_phone(self, value):
+        # unique_together (tenant, phone) can't be checked by DRF here: tenant
+        # is stamped server-side. Check the one shape the model stores against
+        # this tenant's rows, so a respelt number is a 400, not a 500.
+        value = normalize_phone(value)
+        clash = Customer.objects.filter(phone=value)
+        if self.instance is not None:
+            clash = clash.exclude(pk=self.instance.pk)
+        if clash.exists():
+            raise serializers.ValidationError(
+                "A customer with this phone number already exists."
+            )
+        return value
 
 
 class WalletInputSerializer(serializers.Serializer):
