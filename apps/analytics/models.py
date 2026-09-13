@@ -574,6 +574,12 @@ class Prescription(PatientLinkedModel, TenantOwnedModel):
     # NULL on the orders written before this existed and on anything captured
     # from a counter script, which is grouped by the script it came off.
     group = models.UUIDField(null=True, blank=True, editable=False, default=None)
+    # The consultation band (A-E) the writer charges for this visit, picked
+    # when the prescription is written. Not a price: the pharmacy that fills
+    # the order reads its own terms with this prescriber for the band's fee,
+    # folds it into the sale and owes it on (prescriptions.ConsultationPayout).
+    # Blank is no consultation fee. Shared by every drug in the ``group``.
+    consultation_category = models.CharField(max_length=1, blank=True)
 
     class Meta:
         ordering = ("-created_at", "-id")

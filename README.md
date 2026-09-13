@@ -313,12 +313,47 @@ named patient's claims are commercial and clinical data both.
   `.../complete/` turns it into a sale.
 - `GET/POST /api/pos/expenses/` — money out that bought no stock. A cash expense
   names the drawer it left, so the till still counts correctly at close.
-- `GET/POST /api/prescriptions/` — scripts filled at the counter, with lines
-  ticked off by `POST .../{id}/dispense/` and the status following what was
-  ticked. A sale against a script raises the prescriber's commission (a share
-  of that sale) and, once, their consultation payout (a flat band fee charged
-  silently at the till); `/api/prescriptions/commissions/` and
+- `GET/POST /api/prescriptions/scripts/` — scripts written up at the counter,
+  with lines ticked off by `POST .../{id}/dispense/` and the status following
+  what was ticked. A sale that names the script (`rx`) raises the prescriber's
+  commission (a share of the drugs on that sale) and, once, their consultation
+  payout — the band fee the script carries, folded into the sale's total
+  silently (never itemised, never typed at the till); the second sale off a
+  part-filled script carries no fee. `/api/prescriptions/commissions/` and
   `/api/prescriptions/consultation-payouts/` settle them.
+
+### A prescription written anywhere, filled at any pharmacy
+The portal flow: a prescriber writes, the patient fills it wherever they
+reach, and the pharmacy that fills it pays the writer.
+
+1. **The prescriber writes** `POST /api/prescriptions/` under a facility (an
+   independent prescriber picks one in their state — `GET
+   /api/tenants/prescribing/`). A list body is one prescription of several
+   drugs. Each row may carry a `consultation_category` (A–E): the band the
+   visit is charged at, not a price.
+2. **The counter finds it** on the number the patient hands over — `GET
+   /api/prescriptions/scripts/by-number/?number=&undispensed=1` — which
+   returns this pharmacy's own `scripts`, its facility's `orders`, and
+   `orders_elsewhere`: orders written at another facility for that number,
+   carrying the drug, the directions, the band, the writer and where it was
+   written, and nothing about the patient.
+3. **The sale fills it** — `POST /api/pos/sales/` with `prescription: <order
+   id>` and `patient_number` (the proof the patient is standing there; not
+   asked for inside the writing facility), or `rx: <script id>` for a counter
+   script. The basket lines mark the matching drugs of the prescription
+   dispensed. If this pharmacy has terms with the writer — a `Prescriber` row
+   whose `license_number` matches the writer's licence — the band's fee from
+   that row rides on the sale's total silently, once per prescription, and
+   the sale raises the writer's commission (that pharmacy's rate on the drugs
+   sold) and their consultation payout. A pharmacy with no terms with the
+   writer charges no fee and owes nothing.
+4. **The writer reads their statement** — `GET /api/prescriptions/my-dues/`,
+   no tenant header — every pharmacy's commissions and consultation payouts
+   carrying their licence, with `pharmacy_name` and what each was earned on,
+   split into `outstanding` and `paid`. The pharmacy admin settles from its
+   own `/api/prescriptions/commissions/pay-all/` and
+   `/api/prescriptions/consultation-payouts/pay-all/`; the writer sees the
+   rows move to `paid`. Web: `#/earnings`; mobile: Account → My earnings.
 - `GET /api/reports/sales|inventory|customers|profit|monthly|cashier-sales|staff-performance/`
   — `?period=today|week|month|quarter|year` or `?from=&to=`. Two rules run
   through all of them: a refund counts on the day it was recorded, and a line

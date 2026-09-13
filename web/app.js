@@ -183,11 +183,16 @@ const VISIT_SHEET = {
 };
 const ORDER_SHEET = {
   form: { title: 'Prescribe', submit: 'Write orders' },
-  layout: ['patient', 'medication', 'dose', 'frequency', 'duration_days', 'region', 'notes'],
-  labels: { medication: 'Drug', duration_days: 'Duration in days', patient: 'Patient (optional)' },
+  layout: ['patient', 'medication', 'dose', 'frequency', 'duration_days', 'consultation_category',
+           'region', 'notes'],
+  labels: { medication: 'Drug', duration_days: 'Duration in days', patient: 'Patient (optional)',
+            consultation_category: 'Consultation band' },
   // The counter moves the status and stamps the dispensing, not the prescriber.
   hide: ['patient_age_group', 'patient_sex', 'status', 'dispensed_at'],
-  hints: { duration_days: 'Leave blank for an open-ended course' },
+  hints: { duration_days: 'Leave blank for an open-ended course',
+           // The band is the prescriber's; the price is each pharmacy's terms
+           // with them, folded into the sale and owed back (see #/earnings).
+           consultation_category: 'The pharmacy that fills this charges its fee for the band and owes it to you' },
 };
 
 const ORG_FILTERS = [
@@ -623,7 +628,7 @@ function navHtml() {
   }
   if (needsFacility()) {
     return `<a href="#/facility" data-route="/facility" class="nav-home">${ico('shield')}Choose Facility</a>`
-      + navGroup('Account', `<a href="#/profile" data-route="/profile">${ico('users')}Profile</a>`);
+      + navGroup('Account', `<a href="#/profile" data-route="/profile">${ico('users')}Profile</a>${earningsLink()}`);
   }
   const iconFor = (slug, r) => slug.endsWith('users') || slug === 'patients' ? 'users'
     : r.hmo ? 'shield'
@@ -699,12 +704,18 @@ function navHtml() {
   // The only route the sidebar did not reach: the topbar badge opens it, which
   // is not obvious on a phone where the badge is a username and nothing else.
   html += navGroup('Account', `<a href="#/profile" data-route="/profile">${ico('users')}Profile</a>`
+    + earningsLink()
     + (isIndependent()
       ? `<a href="#/facility" data-route="/facility">${ico('shield')}Change Facility</a>` : '')
     + (PHARMACY_STAFF_ROLES.has(ME?.role)
       ? `<a href="#/notifications" data-route="/notifications">${ico('flag')}Notifications</a>` : ''));
   return html;
 }
+
+// What the pharmacies owe a prescriber is theirs to read wherever they stand,
+// so the link hangs off the account, not off a facility.
+const earningsLink = () => ME?.license_number
+  ? `<a href="#/earnings" data-route="/earnings">${ico('chart')}My Earnings</a>` : '';
 
 /* The state a platform admin is working in. Empty is the whole country; a
    pick narrows every cross-tenant read — the rollups, the facility list they
@@ -974,7 +985,7 @@ async function ensureChrome() {
   // rather than to a page of 403s. Their own profile stays reachable: it is
   // where the state on their row reads out.
   const here = location.hash.slice(1) || '/';
-  if (needsFacility() && !/^\/(facility|profile)/.test(here)) {
+  if (needsFacility() && !/^\/(facility|profile|earnings)/.test(here)) {
     location.hash = '#/facility';
     return false;
   }
@@ -3534,6 +3545,50 @@ async function viewFacility() {
   }
 }
 
+/* The prescriber's side of the ledger: what every pharmacy on the platform
+   owes them for the scripts it filled, matched by licence, and what has been
+   paid. Read with no facility picked — the API takes no tenant header here —
+   so an independent prescriber sees it before choosing where to write. The
+   pharmacy settles; this page only reads. */
+async function viewEarnings() {
+  if (!await ensureChrome()) return;
+  if (!ME?.license_number) return errorBox(new Error('Licensed prescribers only.'));
+  spinner();
+  let st;
+  try { st = await Api.get('/api/prescriptions/my-dues/'); }
+  catch (e) { return errorBox(e); }
+  const tile = (k, v) =>
+    `<div class="tile kpi-tile"><span class="tile-label">${esc(k)}</span><span class="tile-val">${esc(v)}</span></div>`;
+  const ledger = (title, rows) => `<div class="card"><h3>${esc(title)}</h3>
+    ${rows.length ? tableHtml(rows.map(earningsRow)) : '<p class="muted">Nothing here yet.</p>'}</div>`;
+  render(`<div class="page-head"><h2>My Earnings</h2></div>
+    <p class="muted">Licence ${esc(st.license_number)}. A pharmacy that fills your
+      prescription owes you its commission on the drugs and the fee for the
+      consultation band you wrote — on its own terms with you, so the figures
+      are theirs to settle.</p>
+    <div class="tiles">
+      ${tile('Commission owed', money(st.outstanding.commission))}
+      ${tile('Consultations owed', money(st.outstanding.consultation))}
+      ${tile('Total owed', money(st.outstanding.total))}
+      ${tile('Paid to date', money(st.paid.total))}
+    </div>
+    ${ledger('Commissions', st.commissions || [])}
+    ${ledger('Consultation fees', st.consultation_payouts || [])}`);
+}
+
+// One row of a prescriber's statement, as they read it: the pharmacy, what it
+// was earned on, the figure, and whether it has been paid.
+const earningsRow = (r) => ({
+  pharmacy: r.pharmacy_name,
+  earned_on: r.order_name || (r.prescription ? `Script ${r.prescription}` : ''),
+  ...(r.commission_amount !== undefined
+    ? { sales: money(r.sales_amount), rate: `${Number(r.commission_rate)}%`, amount: money(r.commission_amount) }
+    : { band: r.consultation_category || '', amount: money(r.consultation_fee) }),
+  status: r.status,
+  paid_at: r.paid_at ? String(r.paid_at).slice(0, 10) : '',
+  date: String(r.created_at || '').slice(0, 10),
+});
+
 /* ------------------------------------------------------------- pharmacy */
 
 const PHARMACY_ADMIN_ROLES = new Set(['super_admin', 'tenant_admin']);
@@ -3709,6 +3764,37 @@ async function viewHmo() {
   load().catch((err) => errorBox(err));
 }
 
+/* What a patient's number turned up, as one list the counter can fill from.
+   `kind` says which API field the sale carries it in: a counter script goes
+   in `rx`; a clinician's drug order, written here or at another facility, in
+   `prescription` with the number as proof the patient is standing there. */
+function sellRxRows(found) {
+  if (!found) return [];
+  const order = (o, facility) => ({ ...o, kind: 'order', key: `order:${o.id}`,
+    facility: facility ?? o.facility });
+  return [
+    ...(found.scripts || []).map((s) => ({ ...s, kind: 'script', key: `script:${s.id}`,
+      facility: 'Counter script' })),
+    ...(found.orders || []).map((o) => order(o, 'Here')),
+    ...(found.orders_elsewhere || []).map((o) => order(o)),
+  ];
+}
+
+function sellRxLabel(o) {
+  if (o.kind === 'script') {
+    const lines = (o.lines || []).map((l) => `${l.name} ×${l.quantity}`).join(', ');
+    return [lines || `Rx${o.id}`, o.prescriber_name || o.doctor_name].filter(Boolean).join(' — ');
+  }
+  return [o.medication_name, o.dose, o.frequency,
+    o.duration_days ? `${o.duration_days} days` : ''].filter(Boolean).join(' · ');
+}
+
+function sellFillBody(filling, number) {
+  if (!filling) return {};
+  if (filling.kind === 'script') return { rx: filling.id };
+  return { prescription: filling.id, patient_number: number };
+}
+
 /* Dispensing counter. The server picks the batches (first expiry first out),
    so this screen only asks what and how many. */
 async function viewSell() {
@@ -3752,16 +3838,13 @@ async function viewSell() {
   let rxFound = null;      // null until a lookup has run
   let filling = null;      // { id, label } of the order being filled
 
-  // Rows of both kinds read the same at the counter: a drug, its directions,
+  // Rows of every kind read the same at the counter: what was prescribed,
   // and where it was written. The lookup asks for ?undispensed=1, so what
-  // comes back is already only what can still be handed over.
-  const rxRows = () => [
-    ...(rxFound?.orders || []).map((o) => ({ ...o, facility: 'Here' })),
-    ...(rxFound?.orders_elsewhere || []),
-  ];
-
-  const rxLabel = (o) => [o.medication_name, o.dose, o.frequency,
-    o.duration_days ? `${o.duration_days} days` : ''].filter(Boolean).join(' · ');
+  // comes back is already only what can still be handed over. A counter
+  // script (this pharmacy's own write-up) fills through `rx`; a clinician's
+  // drug order — this facility's or another's — through `prescription`.
+  const rxRows = () => sellRxRows(rxFound);
+  const rxLabel = sellRxLabel;
 
   const rxHtml = () => {
     if (!rxFound) return '<p class="muted">Enter the number the patient gives you.</p>';
@@ -3769,9 +3852,11 @@ async function viewSell() {
     if (!rows.length) return '<p class="muted">Nothing outstanding for that number.</p>';
     return `<table><thead><tr><th>Prescribed</th><th>From</th><th></th></tr></thead>
       <tbody>${rows.map((o) => `<tr>
-        <td>${esc(rxLabel(o))}</td><td>${esc(o.facility || '—')}</td>
-        <td>${filling?.id === o.id ? '<b>Filling</b>'
-          : `<button class="btn ghost" data-fill="${o.id}">Fill this</button>`}</td>
+        <td>${esc(rxLabel(o))}${o.consultation_category
+          ? ` <span class="muted">· consultation band ${esc(o.consultation_category)}</span>` : ''}</td>
+        <td>${esc(o.facility || '—')}</td>
+        <td>${filling?.key === o.key ? '<b>Filling</b>'
+          : `<button class="btn ghost" data-fill="${o.key}">Fill this</button>`}</td>
       </tr>`).join('')}</tbody></table>`;
   };
 
@@ -3813,7 +3898,8 @@ async function viewSell() {
         </form>
         <div id="rx-hits">${rxHtml()}</div>
         ${filling ? `<p class="muted">This sale fills: ${esc(filling.label)}
-          — the order is marked dispensed when the sale completes.</p>` : ''}
+          — ${filling.kind === 'script' ? 'the script' : 'the order'} is marked dispensed when the sale completes${
+          filling.consultation_category ? `, and the prescriber's band ${esc(filling.consultation_category)} fee is added to the bill` : ''}.</p>` : ''}
       </div>
       <form id="scan" class="toolbar">
         <label>Scan a barcode
@@ -3857,10 +3943,10 @@ async function viewSell() {
     };
     for (const b of document.querySelectorAll('[data-fill]')) {
       b.onclick = () => {
-        const order = rxRows().find((o) => String(o.id) === b.dataset.fill);
-        // One order per sale: the API takes one, and the drugs written with it
-        // are marked off by the basket lines that match them.
-        filling = order ? { id: order.id, label: rxLabel(order) } : null;
+        const order = rxRows().find((o) => o.key === b.dataset.fill);
+        // One prescription per sale: the API takes one, and the drugs written
+        // with it are marked off by the basket lines that match them.
+        filling = order ? { ...order, label: rxLabel(order) } : null;
         draw();
       };
     }
@@ -3976,10 +4062,7 @@ async function viewSell() {
         items: basket.map((b) => ({ item: b.item, quantity: b.quantity, discount: b.discount })),
       };
       if (patient) body.patient = patient.id;
-      if (filling) {
-        body.prescription = filling.id;
-        body.patient_number = rxNumber;
-      }
+      Object.assign(body, sellFillBody(filling, rxNumber));
       if (fd.get('enrollment')) body.enrollment = Number(fd.get('enrollment'));
       if (fd.get('authorization')) body.authorization = Number(fd.get('authorization'));
       try {
@@ -4568,6 +4651,7 @@ const routes = [
   [/^\/graph\/([a-z]+)\/(\d+)$/, (m) => viewGraph(m[1], m[2])],
   [/^\/clinical$/, viewClinical],
   [/^\/facility$/, viewFacility],
+  [/^\/earnings$/, viewEarnings],
   [/^\/portal$/, viewPortal],
   [/^\/insurer$/, viewInsurer],
   [/^\/gov$/, viewGov],

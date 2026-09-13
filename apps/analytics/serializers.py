@@ -156,11 +156,19 @@ class PrescriptionSerializer(
         source="medication.generic_name", read_only=True
     )
 
+    consultation_category = serializers.ChoiceField(
+        choices=[("", "No consultation fee")] + [(c, f"Band {c}") for c in "ABCDE"],
+        required=False, allow_blank=True,
+    )
+
     class Meta:
         model = Prescription
         exclude = ("tenant", "reporter")
         # source_ref is provenance written by capture, never by a client.
         read_only_fields = ("source_ref", "created_at", "updated_at")
+
+    def validate_consultation_category(self, value):
+        return (value or "").strip().upper()
 
 
 class ConsultationSerializer(

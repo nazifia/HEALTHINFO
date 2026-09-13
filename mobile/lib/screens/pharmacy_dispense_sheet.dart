@@ -34,7 +34,7 @@ class _DispenseSheetState extends State<DispenseSheet> {
   // What the patient's number turned up, and which of it this sale fills.
   // Null until a lookup has run, which is not the same as an empty result.
   List<Map<String, dynamic>>? _orders;
-  int? _fillingId;
+  String? _fillingKey;
   bool _finding = false;
   int? _itemId;
   int? _patientId;
@@ -65,9 +65,8 @@ class _DispenseSheetState extends State<DispenseSheet> {
   /// What the number the patient handed over is still owed.
   ///
   /// Asks with ?undispensed=1, so what comes back is only what can still be
-  /// handed over — here and, for an order written at another facility, there.
-  /// The counter scripts also returned are left alone: those are dispensed off
-  /// their own screen, line by line.
+  /// handed over: this pharmacy's own counter scripts, and drug orders written
+  /// here or at another facility.
   Future<void> _find() async {
     final number = _number.text.trim();
     if (number.isEmpty) return;
@@ -79,21 +78,17 @@ class _DispenseSheetState extends State<DispenseSheet> {
       final found = await api.get('/api/prescriptions/scripts/by-number/',
           {'number': number, 'undispensed': '1'});
       final body = (found as Map).cast<String, dynamic>();
-      final here = ((body['orders'] ?? []) as List)
-          .map((o) => {...(o as Map).cast<String, dynamic>(), 'facility': 'Here'});
-      final elsewhere = ((body['orders_elsewhere'] ?? []) as List)
-          .map((o) => (o as Map).cast<String, dynamic>());
       if (!mounted) return;
       setState(() {
-        _orders = [...here, ...elsewhere];
+        _orders = fillableRows(body);
         // A number the pharmacist has re-typed may not carry the old pick.
-        if (!_orders!.any((o) => o['id'] == _fillingId)) _fillingId = null;
+        if (!_orders!.any((o) => o['key'] == _fillingKey)) _fillingKey = null;
       });
     } catch (e) {
       if (mounted) {
         setState(() {
           _orders = null;
-          _fillingId = null;
+          _fillingKey = null;
           _error = '$e';
         });
       }
@@ -102,12 +97,15 @@ class _DispenseSheetState extends State<DispenseSheet> {
     }
   }
 
-  String _orderLabel(Map<String, dynamic> o) => [
-        '${o['medication_name'] ?? ''}',
-        '${o['dose'] ?? ''}',
-        '${o['frequency'] ?? ''}',
-        o['duration_days'] == null ? '' : '${o['duration_days']} days',
-      ].where((p) => p.trim().isNotEmpty).join(' · ');
+  Map<String, dynamic>? get _filling {
+    for (final o in _orders ?? const <Map<String, dynamic>>[]) {
+      if (o['key'] == _fillingKey) return o;
+    }
+    return null;
+  }
+
+  bool get _fillingHasBand =>
+      '${_filling?['consultation_category'] ?? ''}'.isNotEmpty;
 
   Future<void> _loadItems() async {
     var rows = <Map<String, dynamic>>[];
@@ -284,7 +282,8 @@ class _DispenseSheetState extends State<DispenseSheet> {
           patientId: _patientId,
           enrollmentId: _enrollmentId,
           authorizationId: _authId,
-          prescriptionId: _fillingId,
+          prescriptionId: fillFor(_filling).prescriptionId,
+          rxId: fillFor(_filling).rxId,
           patientNumber: _number.text,
         ),
       );
@@ -332,29 +331,35 @@ class _DispenseSheetState extends State<DispenseSheet> {
             Text('Nothing outstanding for that number.',
                 style: TextStyle(color: context.hintColor, fontSize: 13))
           else
-            // One order per sale: the API takes one, and the drugs written
-            // with it are marked off by the basket lines that match them.
-            RadioGroup<int?>(
-              groupValue: _fillingId,
-              onChanged: (v) => setState(() => _fillingId = v),
+            // One prescription per sale: the API takes one, and the drugs
+            // written with it are marked off by the basket lines that match.
+            RadioGroup<String?>(
+              groupValue: _fillingKey,
+              onChanged: (v) => setState(() => _fillingKey = v),
               child: Column(children: [
                 for (final o in _orders!)
-                  RadioListTile<int?>(
+                  RadioListTile<String?>(
                     contentPadding: EdgeInsets.zero,
                     dense: true,
-                    value: o['id'] as int?,
-                    title: Text(_orderLabel(o),
+                    value: o['key'] as String?,
+                    title: Text(fillableLabel(o),
                         style:
                             TextStyle(color: context.labelColor, fontSize: 14)),
-                    subtitle: Text('From ${o['facility'] ?? '—'}',
+                    subtitle: Text([
+                      'From ${o['facility'] ?? '—'}',
+                      if ('${o['consultation_category'] ?? ''}'.isNotEmpty)
+                        'consultation band ${o['consultation_category']}',
+                    ].join(' · '),
                         style:
                             TextStyle(color: context.hintColor, fontSize: 12)),
                   ),
               ]),
             ),
-          if (_fillingId != null)
-            Text('This sale fills that order — it is marked dispensed when the '
-                'sale completes.',
+          if (_filling != null)
+            Text(
+                'This sale fills that prescription — it is marked dispensed '
+                'when the sale completes'
+                "${_fillingHasBand ? ", and the prescriber's band fee is added to the bill" : ''}.",
                 style: TextStyle(color: context.hintColor, fontSize: 12)),
         ],
         const SizedBox(height: 12),

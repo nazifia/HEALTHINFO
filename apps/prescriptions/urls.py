@@ -1,8 +1,10 @@
+from django.urls import path
 from rest_framework.routers import SimpleRouter
 
 from .views import (
     ConsultationPayoutViewSet,
     HospitalViewSet,
+    MyDuesView,
     PrescriberCommissionViewSet,
     PrescriberViewSet,
     PrescriptionViewSet,
@@ -22,4 +24,7 @@ router.register("prescriptions/consultation-payouts", ConsultationPayoutViewSet,
 # to hand over — so it gets its own path instead of a route nothing reaches.
 router.register("prescriptions/scripts", PrescriptionViewSet, basename="rx")
 
-urlpatterns = router.urls
+urlpatterns = [
+    # The prescriber's own statement, across every pharmacy that owes them.
+    path("prescriptions/my-dues/", MyDuesView.as_view(), name="rx-my-dues"),
+] + router.urls

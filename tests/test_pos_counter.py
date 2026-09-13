@@ -286,20 +286,30 @@ def test_a_script_pays_its_prescriber_once_per_sale_and_once_per_script(counter)
     # The band's fee is snapshotted when the script is written up.
     assert rx.consultation_fee == Decimal("2000.00")
 
-    sale = _sell(counter, quantity=4, rx=rx.pk)
+    sale = _sell(counter, quantity=4, rx=rx.pk, consultation_fee="1.00")
     sale.refresh_from_db()
+    # The fee rides on the bill silently — never typed at the till, and never
+    # itemised: the subtotal is the drugs, the total carries the fee.
+    assert sale.consultation_fee == Decimal("2000.00")
+    assert sale.subtotal == Decimal("100.00")
+    assert sale.total == Decimal("2100.00")
 
     commission = PrescriberCommission.all_objects.get(prescription=rx)
     payout = ConsultationPayout.all_objects.get(prescription=rx)
-    assert commission.commission_amount == Decimal("10.00")   # 10% of 100.00
+    assert commission.commission_amount == Decimal("10.00")   # 10% of the drugs
+    assert commission.sales_amount == Decimal("100.00")
     assert payout.consultation_fee == Decimal("2000.00")
 
     # Filling more off the same script raises another commission, never a
     # second consultation fee — the patient was consulted once.
     rx.raise_prescriber_dues(sale)
     assert PrescriberCommission.all_objects.filter(prescription=rx).count() == 1
+    again = _sell(counter, quantity=2, rx=rx.pk)
+    assert again.consultation_fee == Decimal("0.00")
+    assert again.total == Decimal("50.00")
+    assert PrescriberCommission.all_objects.filter(prescription=rx).count() == 2
     assert ConsultationPayout.all_objects.filter(prescription=rx).count() == 1
-    assert prescriber.outstanding["total"] == Decimal("2010.00")
+    assert prescriber.outstanding["total"] == Decimal("2015.00")
 
 
 # --- till and reports -----------------------------------------------------

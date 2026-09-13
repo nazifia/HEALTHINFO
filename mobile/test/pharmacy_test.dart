@@ -77,6 +77,56 @@ void main() {
     expect(plain.containsKey('patient_number'), isFalse);
   });
 
+  test('a counter script fills through rx, a drug order through prescription',
+      () {
+    final found = {
+      'scripts': [
+        {
+          'id': 3,
+          'prescriber_name': 'Dr Ada',
+          'lines': [
+            {'name': 'Amoxicillin', 'quantity': 10},
+            {'name': 'Paracetamol', 'quantity': 6},
+          ],
+        }
+      ],
+      'orders': [
+        {'id': 7, 'medication_name': 'Artemether', 'dose': '80 mg'}
+      ],
+      'orders_elsewhere': [
+        {
+          'id': 9,
+          'medication_name': 'Amoxicillin',
+          'dose': '500 mg',
+          'duration_days': 5,
+          'facility': 'Ikeja Clinic',
+          'consultation_category': 'B',
+        }
+      ],
+    };
+    final rows = fillableRows(found);
+    expect(rows.map((r) => r['key']), ['script:3', 'order:7', 'order:9']);
+    expect(rows.map((r) => r['facility']),
+        ['Counter script', 'Here', 'Ikeja Clinic']);
+    expect(fillableLabel(rows[0]), 'Amoxicillin ×10, Paracetamol ×6 — Dr Ada');
+    expect(fillableLabel(rows[1]), 'Artemether · 80 mg');
+    expect(fillableLabel(rows[2]), 'Amoxicillin · 500 mg · 5 days');
+
+    expect(fillFor(null), (rxId: null, prescriptionId: null));
+    expect(fillFor(rows[0]), (rxId: 3, prescriptionId: null));
+    expect(fillFor(rows[2]), (rxId: null, prescriptionId: 9));
+
+    final lines = [
+      const BasketLine(itemId: 7, name: 'ORS', unitPrice: 150, quantity: 3),
+    ];
+    // A script needs no number: the pharmacy wrote it up itself.
+    final script = saleBody(
+        lines: lines, paymentMethod: 'cash', rxId: 3, patientNumber: '0803');
+    expect(script['rx'], 3);
+    expect(script.containsKey('prescription'), isFalse);
+    expect(script.containsKey('patient_number'), isFalse);
+  });
+
   test('a walk-in carries no patient, and totals stay server-side', () {
     final body = saleBody(
       lines: [

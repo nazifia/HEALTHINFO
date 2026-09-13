@@ -129,23 +129,30 @@ class OutsideOrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = DrugOrder
         fields = ("id", "medication", "medication_name", "dose", "frequency",
-                  "duration_days", "status", "group", "prescriber_name",
-                  "facility", "created_at")
+                  "duration_days", "status", "group", "consultation_category",
+                  "prescriber_name", "facility", "created_at")
         read_only_fields = fields
+
+
+def order_name(order):
+    """A drug order as the counter saw it: the drug and where it was written."""
+    if order is None:
+        return None
+    facility = order.tenant.name if order.tenant_id else ""
+    return f"{order.medication.generic_name} — {facility}".rstrip(" —")
 
 
 class PrescriberCommissionSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     prescriber_name = serializers.CharField(source="prescriber.name", read_only=True)
+    # Which pharmacy owes it. Pharmacy staff read their own; a prescriber
+    # reading their statement across pharmacies (my-dues) needs the name.
+    pharmacy_name = serializers.CharField(source="tenant.name", read_only=True)
     # The drug order a sale filled, named as the counter saw it: the drug and
     # where it was written. Empty for a commission off a counter script.
     order_name = serializers.SerializerMethodField()
 
     def get_order_name(self, row):
-        order = row.order
-        if order is None:
-            return None
-        facility = order.tenant.name if order.tenant_id else ""
-        return f"{order.medication.generic_name} — {facility}".rstrip(" —")
+        return order_name(row.order)
 
     class Meta:
         model = PrescriberCommission
@@ -157,10 +164,15 @@ class PrescriberCommissionSerializer(NamedRelationsMixin, serializers.ModelSeria
 
 class ConsultationPayoutSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     prescriber_name = serializers.CharField(source="prescriber.name", read_only=True)
+    pharmacy_name = serializers.CharField(source="tenant.name", read_only=True)
+    order_name = serializers.SerializerMethodField()
+
+    def get_order_name(self, row):
+        return order_name(row.order)
 
     class Meta:
         model = ConsultationPayout
         exclude = ("tenant",)
-        read_only_fields = ("prescriber", "prescription", "patient_name",
+        read_only_fields = ("prescriber", "prescription", "order", "patient_name",
                             "consultation_category", "consultation_fee", "status",
                             "paid_at", "created_at", "updated_at")

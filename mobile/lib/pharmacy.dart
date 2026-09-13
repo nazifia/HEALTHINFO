@@ -172,12 +172,16 @@ double basketTotal(List<BasketLine> lines) =>
 /// patient handed over: an order written at another facility is dispensed on
 /// that number alone, and the API asks for it as the proof the patient is
 /// standing there.
+///
+/// A counter script — this pharmacy's own write-up — fills through `rx`
+/// instead, and needs no number: its staff can read it anyway.
 Map<String, dynamic> saleBody({
   required List<BasketLine> lines,
   required String paymentMethod,
   int? patientId,
   int? enrollmentId,
   int? prescriptionId,
+  int? rxId,
   String? patientNumber,
   int? authorizationId,
 }) {
@@ -191,6 +195,7 @@ Map<String, dynamic> saleBody({
     if (insured && authorizationId != null) 'authorization': authorizationId,
     'prescription': ?prescriptionId,
     if (prescriptionId != null && number.isNotEmpty) 'patient_number': number,
+    'rx': ?rxId,
     'items': [
       for (final l in lines)
         {
@@ -508,4 +513,60 @@ List<String> paymentRequestActions(String? status, String? role,
     default: // completed, rejected, cancelled
       return const [];
   }
+}
+
+
+/// What a patient's number turned up, as one list the counter fills from.
+///
+/// Each row carries a `key` — `script:<id>` for this pharmacy's own counter
+/// script, `order:<id>` for a clinician's drug order written here or at
+/// another facility — so the sale knows which API field to carry it in (see
+/// [fillFor]). The lookup asks for ?undispensed=1, so what comes back is
+/// already only what can still be handed over.
+List<Map<String, dynamic>> fillableRows(Map<String, dynamic> found) {
+  Map<String, dynamic> row(Object? o, String kind, [String? facility]) {
+    final m = (o as Map).cast<String, dynamic>();
+    return {
+      ...m,
+      'kind': kind,
+      'key': '$kind:${m['id']}',
+      'facility': facility ?? m['facility'],
+    };
+  }
+
+  return [
+    for (final s in (found['scripts'] ?? []) as List)
+      row(s, 'script', 'Counter script'),
+    for (final o in (found['orders'] ?? []) as List) row(o, 'order', 'Here'),
+    for (final o in (found['orders_elsewhere'] ?? []) as List) row(o, 'order'),
+  ];
+}
+
+/// One line naming what was prescribed, the way the counter reads it.
+String fillableLabel(Map<String, dynamic> o) {
+  if (o['kind'] == 'script') {
+    final lines = [
+      for (final l in (o['lines'] ?? []) as List)
+        '${(l as Map)['name']} ×${l['quantity']}',
+    ].join(', ');
+    final who = '${o['prescriber_name'] ?? o['doctor_name'] ?? ''}';
+    return [lines.isEmpty ? 'Rx${o['id']}' : lines, if (who.isNotEmpty) who]
+        .join(' — ');
+  }
+  return [
+    '${o['medication_name'] ?? ''}',
+    '${o['dose'] ?? ''}',
+    '${o['frequency'] ?? ''}',
+    o['duration_days'] == null ? '' : '${o['duration_days']} days',
+  ].where((p) => p.trim().isNotEmpty).join(' · ');
+}
+
+/// The sale fields that name what a picked row fills: `rx` for a counter
+/// script, `prescription` plus the patient's number for a drug order.
+({int? rxId, int? prescriptionId}) fillFor(Map<String, dynamic>? picked) {
+  if (picked == null) return (rxId: null, prescriptionId: null);
+  final id = picked['id'] as int?;
+  return picked['kind'] == 'script'
+      ? (rxId: id, prescriptionId: null)
+      : (rxId: null, prescriptionId: id);
 }

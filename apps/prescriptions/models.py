@@ -227,15 +227,16 @@ class Prescription(TenantOwnedModel):
         prescriber = self.prescriber
         commission = None
         rate = Decimal(prescriber.commission_rate)
-        if rate > 0 and sale.total > 0:
+        sold = drugs_sold(sale)
+        if rate > 0 and sold > 0:
             commission, _created = PrescriberCommission.all_objects.get_or_create(
                 tenant=self.tenant, prescriber=prescriber, prescription=self,
                 sale=sale,
                 defaults={
                     "patient_name": self.customer_name,
-                    "sales_amount": sale.total,
+                    "sales_amount": sold,
                     "commission_rate": rate,
-                    "commission_amount": _money(sale.total * rate / Decimal("100")),
+                    "commission_amount": _money(sold * rate / Decimal("100")),
                 },
             )
         payout = None
@@ -333,7 +334,7 @@ class PrescriberCommission(_PrescriberDue):
     )
     # One of the two is set: the counter script this pharmacy wrote up, or the
     # clinician's drug order — possibly another facility's — that a sale here
-    # filled (see raise_order_commission).
+    # filled (see raise_order_dues).
     prescription = models.ForeignKey(
         Prescription, null=True, blank=True, on_delete=models.CASCADE,
         related_name="commissions",
@@ -366,42 +367,90 @@ class PrescriberCommission(_PrescriberDue):
                 f"({self.commission_rate}%)")
 
 
-def raise_order_commission(sale):
-    """Commission on a clinician's drug order that a sale here filled. Idempotent.
+def drugs_sold(sale):
+    """What a sale sold in drugs: the bill less the consultation fee riding on
+    it. Commission is a share of what left the shelf, never of the fee that is
+    owed on in full."""
+    return _money(Decimal(sale.total) - Decimal(sale.consultation_fee))
+
+
+def prescriber_for_order(tenant_id, order):
+    """This pharmacy's terms with whoever wrote ``order``, matched by licence.
 
     The order names its writer by licence; the pharmacy names the prescribers
     it pays by licence too. Where the two meet, this pharmacy owes that doctor
-    its rate on what the sale sold — the same as a script written up at the
-    counter, whichever facility the order was written at. A writer this
-    pharmacy has no terms with earns nothing here.
+    what its own row says — whichever facility the order was written at. A
+    writer this pharmacy has no terms with earns nothing here.
+    """
+    licence = (getattr(order.reporter, "license_number", "") or "").strip()
+    if not licence:
+        return None
+    return Prescriber.all_objects.filter(
+        tenant_id=tenant_id, license_number__iexact=licence, is_active=True,
+    ).first()
 
-    No consultation payout: a drug order carries no fee band, and the fee is
-    the writing facility's to charge.
+
+def order_consultation_fee(tenant_id, order):
+    """The fee this pharmacy charges for the band on a drug order, or zero.
+
+    Once per prescription: a course of three drugs filled over two visits to
+    the counter was one consultation. A band the pharmacy has no terms for
+    costs the patient nothing.
+    """
+    if not order.consultation_category:
+        return ZERO
+    prescriber = prescriber_for_order(tenant_id, order)
+    if prescriber is None:
+        return ZERO
+    if _order_payout(tenant_id, order).exists():
+        return ZERO
+    return prescriber.fee_for(order.consultation_category)
+
+
+def _order_payout(tenant_id, order):
+    """Payouts already raised here for the prescription ``order`` is part of."""
+    qs = ConsultationPayout.all_objects.filter(tenant_id=tenant_id)
+    if order.group:
+        return qs.filter(order__group=order.group)
+    return qs.filter(order=order)
+
+
+def raise_order_dues(sale):
+    """What a clinician's drug order filled by a sale here earns its writer.
+
+    A commission on the drugs sold at this pharmacy's rate for them, and the
+    consultation fee the sale carried (see order_consultation_fee), both
+    idempotent per sale. A pharmacy with no terms with the writer owes nothing.
     """
     order = sale.prescription
-    licence = (getattr(order.reporter, "license_number", "") or "").strip()
-    if not licence or sale.total <= 0:
-        return None
-    prescriber = Prescriber.all_objects.filter(
-        tenant_id=sale.tenant_id, license_number__iexact=licence,
-        is_active=True, commission_rate__gt=0,
-    ).first()
+    prescriber = prescriber_for_order(sale.tenant_id, order)
     if prescriber is None:
-        return None
+        return None, None
+    commission = None
     rate = Decimal(prescriber.commission_rate)
-    commission, _created = PrescriberCommission.all_objects.get_or_create(
-        tenant_id=sale.tenant_id, order=order, sale=sale,
-        defaults={
-            "prescriber": prescriber,
-            # Who the sale was rung up for, never the writing facility's
-            # record: the pharmacy learned the drug, not the patient.
-            "patient_name": sale.buyer,
-            "sales_amount": sale.total,
-            "commission_rate": rate,
-            "commission_amount": _money(sale.total * rate / Decimal("100")),
-        },
-    )
-    return commission
+    sold = drugs_sold(sale)
+    if rate > 0 and sold > 0:
+        commission, _created = PrescriberCommission.all_objects.get_or_create(
+            tenant_id=sale.tenant_id, order=order, sale=sale,
+            defaults={
+                "prescriber": prescriber,
+                # Who the sale was rung up for, never the writing facility's
+                # record: the pharmacy learned the drug, not the patient.
+                "patient_name": sale.buyer,
+                "sales_amount": sold,
+                "commission_rate": rate,
+                "commission_amount": _money(sold * rate / Decimal("100")),
+            },
+        )
+    payout = None
+    if sale.consultation_fee > 0 and not _order_payout(sale.tenant_id, order).exists():
+        payout = ConsultationPayout.all_objects.create(
+            tenant_id=sale.tenant_id, prescriber=prescriber, order=order,
+            patient_name=sale.buyer,
+            consultation_category=order.consultation_category,
+            consultation_fee=sale.consultation_fee,
+        )
+    return commission, payout
 
 
 class ConsultationPayout(_PrescriberDue):
@@ -414,8 +463,15 @@ class ConsultationPayout(_PrescriberDue):
     prescriber = models.ForeignKey(
         Prescriber, on_delete=models.CASCADE, related_name="consultation_payouts"
     )
+    # One of the two is set: the counter script, or the clinician's drug order
+    # — possibly another facility's — whose band a sale here charged.
     prescription = models.OneToOneField(
-        Prescription, on_delete=models.CASCADE, related_name="consultation_payout"
+        Prescription, null=True, blank=True, on_delete=models.CASCADE,
+        related_name="consultation_payout",
+    )
+    order = models.ForeignKey(
+        "analytics.Prescription", null=True, blank=True,
+        on_delete=models.CASCADE, related_name="consultation_payouts",
     )
     patient_name = models.CharField(max_length=200, blank=True)
     consultation_category = models.CharField(max_length=1, blank=True)

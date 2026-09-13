@@ -13,7 +13,9 @@ from django.db.models import Count, Q, Sum
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from apps.accounts.permissions import (
     IsPharmacyAdminOrReadOnly,
@@ -368,3 +370,55 @@ class ConsultationPayoutViewSet(_PrescriberDueViewSet):
     amount_field = "consultation_fee"
     filterset_fields = ("prescriber", "status")
     ordering_fields = ("created_at", "consultation_fee")
+
+
+class MyDuesView(APIView):
+    """What every pharmacy on the platform owes the signed-in prescriber.
+
+    ``GET /api/prescriptions/my-dues/`` — the writer's side of the ledger.
+    A pharmacy books what it owes against its own ``Prescriber`` row, matched
+    to the writer by licence, so this reads every tenant's rows carrying the
+    caller's licence number. No tenant header: an independent prescriber
+    staffs no facility, and a hospital doctor's earnings at the pharmacy down
+    the road are theirs wherever they are standing.
+
+    Only the money and what it was earned on — never a pharmacy's stock,
+    sales or customers.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        licence = (request.user.license_number or "").strip()
+        if not licence:
+            raise PermissionDenied("Only a licensed prescriber has a statement.")
+        by_licence = Q(prescriber__license_number__iexact=licence,
+                       prescriber__is_active=True)
+        commissions = PrescriberCommission.all_objects.filter(
+            by_licence).select_related("tenant", "prescriber", "prescription",
+                                       "order__medication", "order__tenant")
+        payouts = ConsultationPayout.all_objects.filter(
+            by_licence).select_related("tenant", "prescriber", "prescription",
+                                       "order__medication", "order__tenant")
+
+        def total(qs, field, status):
+            return qs.filter(status=status).aggregate(
+                t=Sum(field))["t"] or ZERO
+
+        pending = {
+            "commission": total(commissions, "commission_amount", "pending"),
+            "consultation": total(payouts, "consultation_fee", "pending"),
+        }
+        paid = {
+            "commission": total(commissions, "commission_amount", "paid"),
+            "consultation": total(payouts, "consultation_fee", "paid"),
+        }
+        pending["total"] = pending["commission"] + pending["consultation"]
+        paid["total"] = paid["commission"] + paid["consultation"]
+        return Response({
+            "license_number": licence,
+            "outstanding": pending,
+            "paid": paid,
+            "commissions": PrescriberCommissionSerializer(commissions, many=True).data,
+            "consultation_payouts": ConsultationPayoutSerializer(payouts, many=True).data,
+        })

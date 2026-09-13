@@ -73,6 +73,7 @@ import 'user_management_screen.dart';
 import 'my_health_screen.dart';
 import 'ward_screen.dart';
 import 'profile_screen.dart';
+import 'earnings_screen.dart';
 import 'login_screen.dart';
 
 /// One navigable section: a label + icon for the drawer and the page widget.
@@ -144,6 +145,17 @@ const _reportsGroup = _Group('Reports', [
 const _accountGroup = _Group('Account', [
   _Section('Profile', Icons.person_outline, ProfileScreen()),
 ]);
+
+// What the pharmacies owe a prescriber is theirs to read wherever they stand,
+// so it hangs off the account, not off a facility (same as web/app.js
+// earningsLink). Only a seat carrying a licence has a statement.
+const _earningsSection = _Section(
+    'My earnings', Icons.account_balance_wallet_outlined, EarningsScreen());
+
+_Group _withEarnings(_Group account, Map<String, dynamic>? me) =>
+    '${me?['license_number'] ?? ''}'.trim().isEmpty
+        ? account
+        : _Group(account.label, [...account.sections, _earningsSection]);
 
 /// The groups every signed-in user sees, in drawer order.
 List<_Group> get _baseGroups =>
@@ -459,14 +471,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
     if (Api.isIndependent(me)) {
       if (tenantSlug.isEmpty) {
-        _setGroups([_accountGroup], home: _facilityHome);
+        _setGroups([_withEarnings(_accountGroup, me)], home: _facilityHome);
         return;
       }
       // Picked one: the clinical menu, read as that facility. They are a
       // licensed cadre, so the API narrows every register to their own
       // caseload exactly as it does the facility's own doctors.
       _setGroups([..._prescriberGroups.where((g) => g != _accountGroup),
-        _facilityAccountGroup,
+        _withEarnings(_facilityAccountGroup, me),
       ], home: _Section('Ward', Icons.local_hospital_outlined,
           WardScreen(onOpen: _openSection)));
       return;
@@ -516,9 +528,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // same ward landing the web client gives them. Its tiles jump the drawer,
     // so it is built here where the drawer's index lives.
     if (_wardRoles.contains(role)) {
-      _setGroups(_prescriberGroups,
-          home: _Section('Ward', Icons.local_hospital_outlined,
-              WardScreen(onOpen: _openSection)));
+      _setGroups([
+        for (final g in _prescriberGroups)
+          g == _accountGroup ? _withEarnings(g, me) : g,
+      ], home: _Section('Ward', Icons.local_hospital_outlined,
+          WardScreen(onOpen: _openSection)));
     }
   }
 

@@ -471,13 +471,13 @@ def test_a_pharmacy_fills_another_facilitys_prescription_on_the_number(db_clean)
 
     # The writer earns on it here only if this pharmacy has terms with them,
     # matched by licence — and once, however many times the sale is re-read.
-    from apps.prescriptions.models import Prescriber, PrescriberCommission,         raise_order_commission
+    from apps.prescriptions.models import Prescriber, PrescriberCommission, raise_order_dues
     assert not PrescriberCommission.all_objects.filter(order=order).exists()
     Prescriber.all_objects.create(tenant=pharm, name="Dr Ada", license_number="mdcn1",
                                   commission_rate=Decimal("10.00"))
     sale = Sale.all_objects.get(pk=sold.json()["id"])
-    raise_order_commission(sale)
-    raise_order_commission(sale)
+    raise_order_dues(sale)
+    raise_order_dues(sale)
     [commission] = PrescriberCommission.all_objects.filter(order=order)
     assert commission.tenant_id == pharm.id
     assert commission.commission_amount == Decimal("25.00")   # 10% of 250.00
@@ -488,6 +488,155 @@ def test_a_pharmacy_fills_another_facilitys_prescription_on_the_number(db_clean)
     assert order.dispensed_at is not None
     # The hospital's record stayed the hospital's.
     assert order.tenant_id == hosp.id
+
+
+def test_a_portal_prescription_is_filled_and_pays_its_writer_anywhere(db_clean):
+    """The whole portal flow, end to end.
+
+    An independent prescriber writes a two-drug prescription with a
+    consultation band under a facility; the patient fills it at a pharmacy that
+    has terms with the writer. The sale charges the band silently, marks the
+    order dispensed, raises the writer's commission and consultation payout,
+    and the writer reads what they are owed — and what was paid — from their
+    own statement, with no tenant header.
+    """
+    from decimal import Decimal
+
+    from apps.inventory.models import StockItem, Store, receive_stock
+    from apps.pos.models import Sale
+    from apps.prescriptions.models import (
+        ConsultationPayout, Prescriber, PrescriberCommission,
+    )
+    from apps.tenants.models import Jurisdiction
+
+    lagos = Jurisdiction.objects.create(name="Lagos", level=Jurisdiction.Level.STATE)
+    ikeja = Jurisdiction.objects.create(name="Ikeja", level=Jurisdiction.Level.LOCAL,
+                                        parent=lagos)
+    clinic = Tenant.objects.create(name="Ikeja Clinic", slug="ikeja",
+                                   kind=Tenant.Kind.HOSPITAL, jurisdiction=ikeja)
+    pharm = Tenant.objects.create(name="Bola Pharmacy", slug="bola",
+                                  kind=Tenant.Kind.PHARMACY)
+    doctor = User.objects.create_user(phone="08030000601", password="x",
+                                      role=Role.DOCTOR, username="drada",
+                                      license_number="MDCN9", jurisdiction=lagos)
+    assert doctor.is_independent
+    pharmacist = User.objects.create_user(phone="08030000602", password="x",
+                                          tenant=pharm, role=Role.PHARMACIST)
+    admin = User.objects.create_user(phone="08030000603", password="x",
+                                     tenant=pharm, role=Role.TENANT_ADMIN)
+    patient = Patient.objects.create(tenant=clinic, first_name="Ada",
+                                     last_name="Obi", phone="08031234567",
+                                     registered_by=doctor)
+    amox = Medication.objects.create(generic_name="Amoxicillin")
+    para = Medication.objects.create(generic_name="Paracetamol")
+
+    # 1. The prescriber writes the prescription under the facility, band B.
+    written = _client(doctor, clinic).post("/api/prescriptions/", [
+        {"patient": patient.pk, "medication": amox.pk, "dose": "500 mg",
+         "consultation_category": "B"},
+        {"patient": patient.pk, "medication": para.pk, "dose": "1 g",
+         "consultation_category": "B"},
+    ], format="json")
+    assert written.status_code == 201, written.content
+    orders = list(Prescription.all_objects.filter(patient=patient).order_by("id"))
+    assert [o.consultation_category for o in orders] == ["B", "B"]
+    assert orders[0].group == orders[1].group
+    assert written.json()[0]["consultation_category"] == "B"
+    # A band nobody uses is refused.
+    assert _client(doctor, clinic).post("/api/prescriptions/", {
+        "patient": patient.pk, "medication": amox.pk, "consultation_category": "Z",
+    }, format="json").status_code == 400
+
+    # 2. The pharmacy has terms with the writer: 10% and 2000 for band B.
+    Prescriber.all_objects.create(
+        tenant=pharm, name="Dr Ada", license_number="mdcn9",
+        commission_rate=Decimal("10.00"), consult_fee_b=Decimal("2000.00"),
+    )
+    stock = {}
+    for drug, sku, price in ((amox, "AMOX", "25.00"), (para, "PARA", "5.00")):
+        item = StockItem.all_objects.create(
+            tenant=pharm, name=drug.generic_name, sku=sku, unit="tab",
+            cost_price=Decimal("1.00"), unit_price=Decimal(price),
+            store=Store.RETAIL, medication=drug,
+        )
+        receive_stock(item, 100, batch_number=f"{sku}-1", cost_price=Decimal("1.00"))
+        stock[drug.pk] = item
+    counter = _client(pharmacist, pharm)
+
+    # 3. The counter finds it on the patient's number, band and all.
+    found = counter.get("/api/prescriptions/scripts/by-number/",
+                        {"number": "08031234567", "undispensed": 1}).json()
+    assert {o["medication_name"] for o in found["orders_elsewhere"]} == {
+        "Amoxicillin", "Paracetamol"}
+    assert found["orders_elsewhere"][0]["consultation_category"] == "B"
+    head = found["orders_elsewhere"][0]["id"]
+
+    # 4. The sale fills the prescription. The band fee rides on the bill and
+    #    the consultation fee is never the client's to type.
+    sold = counter.post("/api/pos/sales/", {
+        "items": [{"item": stock[amox.pk].pk, "quantity": 10},
+                  {"item": stock[para.pk].pk, "quantity": 10}],
+        "prescription": head, "patient_number": "08031234567",
+        "consultation_fee": "1.00",
+    }, format="json")
+    assert sold.status_code == 201, sold.content
+    sale = Sale.all_objects.get(pk=sold.json()["id"])
+    assert sale.consultation_fee == Decimal("2000.00")
+    assert sale.subtotal == Decimal("300.00")
+    assert sale.total == Decimal("2300.00")
+    for order in orders:
+        order.refresh_from_db()
+        assert order.status == Prescription.Status.DISPENSED
+
+    # 5. Both dues are booked at the pharmacy: commission on the drugs alone.
+    [commission] = PrescriberCommission.all_objects.filter(order__in=orders)
+    assert commission.sales_amount == Decimal("300.00")
+    assert commission.commission_amount == Decimal("30.00")
+    [payout] = ConsultationPayout.all_objects.filter(order__in=orders)
+    assert payout.consultation_fee == Decimal("2000.00")
+    assert payout.consultation_category == "B"
+    assert payout.tenant_id == pharm.id
+
+    # 6. A second sale off the same prescription charges no second consultation.
+    orders[1].status = Prescription.Status.PRESCRIBED
+    orders[1].save(update_fields=["status"])
+    again = counter.post("/api/pos/sales/", {
+        "items": [{"item": stock[para.pk].pk, "quantity": 2}],
+        "prescription": orders[1].pk, "patient_number": "08031234567",
+    }, format="json")
+    assert again.status_code == 201, again.content
+    assert Sale.all_objects.get(pk=again.json()["id"]).consultation_fee == 0
+    assert ConsultationPayout.all_objects.filter(order__in=orders).count() == 1
+    assert PrescriberCommission.all_objects.filter(order__in=orders).count() == 2
+
+    # 7. The writer reads their statement — no facility picked, no tenant header.
+    me = APIClient()
+    me.force_authenticate(user=doctor)
+    mine = me.get("/api/prescriptions/my-dues/")
+    assert mine.status_code == 200, mine.content
+    body = mine.json()
+    assert Decimal(str(body["outstanding"]["commission"])) == Decimal("31.00")
+    assert Decimal(str(body["outstanding"]["consultation"])) == Decimal("2000.00")
+    assert Decimal(str(body["outstanding"]["total"])) == Decimal("2031.00")
+    assert Decimal(str(body["paid"]["total"])) == 0
+    assert body["consultation_payouts"][0]["pharmacy_name"] == "Bola Pharmacy"
+    assert body["commissions"][0]["order_name"] == "Paracetamol — Ikeja Clinic"
+    # Nobody without a licence has a statement; nobody else's licence shows.
+    assert _client(pharmacist, pharm).get("/api/prescriptions/my-dues/").status_code == 403
+    other = User.objects.create_user(phone="08030000604", password="x",
+                                     role=Role.DOCTOR, license_number="MDCN10",
+                                     jurisdiction=lagos)
+    o = APIClient()
+    o.force_authenticate(user=other)
+    assert o.get("/api/prescriptions/my-dues/").json()["commissions"] == []
+
+    # 8. The pharmacy admin settles the consultation; the writer sees it paid.
+    paid = _client(admin, pharm).post(
+        "/api/prescriptions/consultation-payouts/pay-all/", {}, format="json")
+    assert paid.status_code == 200, paid.content
+    body = me.get("/api/prescriptions/my-dues/").json()
+    assert Decimal(str(body["paid"]["consultation"])) == Decimal("2000.00")
+    assert Decimal(str(body["outstanding"]["total"])) == Decimal("31.00")
 
 
 def test_the_number_lookup_leaves_a_trail(db_clean):
