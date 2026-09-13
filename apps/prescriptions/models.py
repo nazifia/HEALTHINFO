@@ -16,6 +16,7 @@ Both are snapshotted when they are raised, so a later change to a rate or a
 price cannot rewrite what was already earned.
 """
 from decimal import Decimal
+from difflib import SequenceMatcher
 
 from django.db import models, transaction
 from django.utils import timezone
@@ -255,6 +256,12 @@ class Prescription(TenantOwnedModel):
         """
         from apps.analytics.capture import medication_for
 
+        def same_name(a, b):
+            # "Paracetemol" at one counter is "Paracetamol" at another.
+            # ponytail: difflib ratio, 0.9 keeps cefixime/cefotaxime apart;
+            # strip strengths ("500mg") if labels rather than spellings differ.
+            return a == b or SequenceMatcher(None, a, b).ratio() >= 0.9
+
         sold = [(s.item_id, medication_for(sale.tenant_id, s.item, s.name),
                  (s.name or "").strip().lower())
                 for s in sale.lines.select_related("item")]
@@ -262,7 +269,7 @@ class Prescription(TenantOwnedModel):
             drug = medication_for(self.tenant_id, line.item, line.name)
             if any(line.item_id == item_id
                    or (drug is not None and drug == med)
-                   or line.name.strip().lower() == name
+                   or same_name(line.name.strip().lower(), name)
                    for item_id, med, name in sold):
                 line.mark_dispensed(user=sale.served_by)
         return self

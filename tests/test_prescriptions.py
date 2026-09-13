@@ -797,6 +797,20 @@ def test_a_counter_script_written_at_one_pharmacy_fills_at_another(db_clean):
                                       {"number": "08031234567"}).json()
     assert mine["scripts"][0]["status"] == "partial"
 
+    # A misspelt label on this shelf still ticks the line it was written for.
+    typo = StockItem.all_objects.create(
+        tenant=other, name="Paracetemol", sku="PCM", unit="tablet",
+        cost_price=Decimal("1.00"), unit_price=Decimal("5.00"), store=Store.RETAIL,
+    )
+    receive_stock(typo, 50, batch_number="PC-1", cost_price=Decimal("1.00"))
+    again = client.post("/api/pos/sales/", {
+        "items": [{"item": typo.pk, "quantity": 6}], "rx": script.pk,
+        "patient_number": "0803 123 4567",
+    }, format="json")
+    assert again.status_code == 201, again.content
+    script.refresh_from_db()
+    assert [l.is_dispensed for l in script._lines()] == [True, True]
+
 
 def test_a_sale_off_a_counter_script_ticks_its_lines(db_clean):
     """Inside one pharmacy too: selling the drug is what fills the script."""
