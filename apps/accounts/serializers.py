@@ -56,8 +56,11 @@ def apply_admin_scope(actor, attrs, instance=None):
     if actor.is_super_admin:
         return
     if not is_module_admin(actor):
+        # license_number too: the licence is the identity a prescriber's
+        # cross-tenant statement (MyDuesView) is keyed on, so changing it is
+        # changing whose dues you read — an admin's decision, not yours.
         for field in ("tenant", "role", "is_admin", "hmo", "jurisdiction",
-                      "privileges"):
+                      "privileges", "license_number"):
             attrs.pop(field, None)
         return
     if "privileges" in attrs:

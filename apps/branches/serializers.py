@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from apps.accounts.serializers import TenantUserField
+
 from .models import Branch, Shift
 
 
@@ -11,6 +13,8 @@ class BranchSerializer(serializers.ModelSerializer):
 
 
 class ShiftSerializer(serializers.ModelSerializer):
+    # Only this tenant's staff go on its roster.
+    user = TenantUserField()
     username = serializers.CharField(source="user.username", read_only=True)
     # A shift with no branch is the whole facility, so this is "" rather than
     # null — the roster card prints it straight.

@@ -6,7 +6,7 @@ from rest_framework.exceptions import NotFound
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from apps.accounts.permissions import IsSuperAdmin, IsTenantAdmin
+from apps.accounts.permissions import IsSuperAdmin, IsTenantAdmin, IsTenantMember
 from apps.governance.models import AuditLog
 from apps.governance.serializers import AuditLogSerializer
 from config.responses import success
@@ -71,7 +71,9 @@ class TenantViewSet(viewsets.ModelViewSet):
 
     @action(
         detail=False, methods=["get", "patch"],
-        permission_classes=[IsAuthenticated, IsTenantAdmin],
+        # IsTenantMember: the tenant comes from a header the client picks,
+        # so without it an admin of one organization edits another's.
+        permission_classes=[IsAuthenticated, IsTenantMember, IsTenantAdmin],
         url_path="settings",
     )
     # Not named `settings`: an action of that name would shadow APIView.settings
