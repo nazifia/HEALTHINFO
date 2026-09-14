@@ -54,9 +54,16 @@ def _health(request):
 
     try:
         connection.ensure_connection()
+        # SQLite must answer "delete": on a network-mounted disk WAL loses
+        # commits without an error (settings.DATABASES), so the probe names
+        # the mode a deploy actually runs in rather than the one it was told.
+        journal = ""
+        if connection.vendor == "sqlite":
+            with connection.cursor() as c:
+                journal = c.execute("PRAGMA journal_mode").fetchone()[0]
     except Exception as exc:  # pragma: no cover - exercised via the 503 path
         return JsonResponse({"status": "error", "db": str(exc)}, status=503)
-    return JsonResponse({"status": "ok", "db": "ok"})
+    return JsonResponse({"status": "ok", "db": "ok", "journal": journal})
 
 
 urlpatterns = [
