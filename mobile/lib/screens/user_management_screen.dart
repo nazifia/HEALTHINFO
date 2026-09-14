@@ -69,35 +69,31 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
 
   void _reload() => setState(() { _future = api.getList('/api/users/'); });
 
-  Future<void> _edit(Map<String, dynamic> u) async {
+  /// Only the platform admin picks the organization. Every other admin
+  /// writes into their own module, which the API pins from them
+  /// (accounts.serializers.apply_admin_scope), so there is nothing to ask.
+  Future<List<Map<String, dynamic>>?> _tenants() async {
+    if (Api.moduleOf(_me) != null) return const [];
+    try {
+      return (await api.getAll('/api/tenants/')).cast<Map<String, dynamic>>();
+    } catch (e) {
+      if (mounted) showError(context, '$e');
+      return null;
+    }
+  }
+
+  Future<void> _open(Map<String, dynamic>? u) async {
+    final tenants = await _tenants();
+    if (tenants == null || !mounted) return;
     final saved = await showDialog<bool>(
       context: context,
-      builder: (_) => _UserForm(user: u, me: _me),
+      builder: (_) => _UserForm(user: u, tenants: tenants, me: _me),
     );
     if (saved == true) _reload();
   }
 
-  Future<void> _create() async {
-    // Only the platform admin picks the organization. Every other admin mints
-    // into their own module, which the API pins from them
-    // (accounts.serializers.apply_admin_scope), so there is nothing to ask.
-    List<Map<String, dynamic>> tenants = const [];
-    if (Api.moduleOf(_me) == null) {
-      try {
-        tenants =
-            (await api.getAll('/api/tenants/')).cast<Map<String, dynamic>>();
-      } catch (e) {
-        if (mounted) showError(context, '$e');
-        return;
-      }
-    }
-    if (!mounted) return;
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (_) => _UserForm(tenants: tenants, me: _me),
-    );
-    if (saved == true) _reload();
-  }
+  Future<void> _edit(Map<String, dynamic> u) => _open(u);
+  Future<void> _create() => _open(null);
 
   @override
   Widget build(BuildContext context) {
@@ -236,12 +232,14 @@ class _UserFormState extends State<_UserForm> {
       TextEditingController(text: '${widget.user?['username'] ?? ''}');
   late final TextEditingController _phone =
       TextEditingController(text: '${widget.user?['phone'] ?? ''}');
+  late final TextEditingController _email =
+      TextEditingController(text: '${widget.user?['email'] ?? ''}');
   final TextEditingController _password = TextEditingController();
   late final TextEditingController _license =
       TextEditingController(text: '${widget.user?['license_number'] ?? ''}');
   late String _role = '${widget.user?['role'] ?? 'public'}';
   late bool _active = widget.user?['is_active'] != false;
-  int? _tenantId;
+  late int? _tenantId = widget.user?['tenant'] as int?;
   // The scheme an insurer seat answers for. Required by the API for that role,
   // and the list is tenant-scoped: it only answers inside an organization.
   late int? _hmoId = widget.user?['hmo'] as int?;
@@ -267,6 +265,10 @@ class _UserFormState extends State<_UserForm> {
   bool _busy = false;
 
   bool get _isEdit => widget.user != null;
+
+  /// The platform admin: no module, every role, every field, and the only
+  /// seat this form lets move a user between organizations or delete one.
+  bool get _isSuper => widget.me?['role'] == 'super_admin';
 
   /// Which module the writer works in, and so which fields this form needs.
   /// Null is the platform admin: no module, every role, every field.
@@ -338,6 +340,10 @@ class _UserFormState extends State<_UserForm> {
       if (_isEdit) {
         await api.patch('/api/users/${widget.user!['id']}/', {
           'username': _username.text.trim(),
+          'phone': _phone.text.trim(),
+          'email': _email.text.trim(),
+          if (_password.text.isNotEmpty) 'password': _password.text,
+          if (_isSuper) 'tenant': _tenantId,
           'role': _role,
           'is_active': _active,
           'license_number': _license.text.trim(),
@@ -351,6 +357,7 @@ class _UserFormState extends State<_UserForm> {
         await api.post('/api/users/', {
           'username': _username.text.trim(),
           'phone': _phone.text.trim(),
+          'email': _email.text.trim(),
           'password': _password.text,
           'role': _role,
           'is_active': _active,
@@ -374,6 +381,40 @@ class _UserFormState extends State<_UserForm> {
     }
   }
 
+  Future<void> _delete() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete this user?'),
+        content: const Text('They will no longer be able to sign in. '
+            'This cannot be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel')),
+          FilledButton(
+              style: FilledButton.styleFrom(
+                  backgroundColor: EnhancedTheme.errorRed),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      await api.delete('/api/users/${widget.user!['id']}/');
+      if (!mounted) return;
+      showSuccess(context, 'User deleted.');
+      Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _busy = false);
+        showError(context, '$e');
+      }
+    }
+  }
+
   /// The seats that sit outside a facility carry the admin flag; a facility's
   /// own staff are admins by role or by grant instead.
   bool get _seatsOutsideFacility => _role == 'hmo' || _role == 'government';
@@ -382,6 +423,7 @@ class _UserFormState extends State<_UserForm> {
   void dispose() {
     _username.dispose();
     _phone.dispose();
+    _email.dispose();
     _password.dispose();
     _license.dispose();
     super.dispose();
@@ -403,21 +445,36 @@ class _UserFormState extends State<_UserForm> {
                 decoration: const InputDecoration(labelText: 'Display name'),
                 textCapitalization: TextCapitalization.words,
               ),
-              if (!_isEdit) ...[
-                TextFormField(
-                  controller: _phone,
-                  decoration: const InputDecoration(labelText: 'Phone'),
-                  validator: (v) =>
-                      (v == null || v.trim().isEmpty) ? 'Required' : null,
+              TextFormField(
+                controller: _phone,
+                decoration: const InputDecoration(labelText: 'Phone'),
+                keyboardType: TextInputType.phone,
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'Required' : null,
+              ),
+              TextFormField(
+                controller: _email,
+                decoration: const InputDecoration(labelText: 'Email'),
+                keyboardType: TextInputType.emailAddress,
+              ),
+              TextFormField(
+                controller: _password,
+                decoration: InputDecoration(
+                  labelText: _isEdit ? 'New password' : 'Password',
+                  helperText:
+                      _isEdit ? 'Leave blank to keep the current one' : null,
                 ),
-                TextFormField(
-                  controller: _password,
-                  decoration: const InputDecoration(labelText: 'Password'),
-                  obscureText: true,
-                  validator: (v) =>
-                      (v == null || v.length < 8) ? 'Min 8 characters' : null,
-                ),
-                if (_module == null) SearchableDropdown<int>(
+                obscureText: true,
+                validator: (v) => (_isEdit && (v == null || v.isEmpty))
+                    ? null
+                    : (v == null || v.length < 8)
+                        ? 'Min 8 characters'
+                        : null,
+              ),
+              // Where the seat sits. The platform admin picks it on mint and
+              // may move a seat later; every other admin's is pinned.
+              if (_module == null && (!_isEdit || _isSuper)) ...[
+                SearchableDropdown<int>(
                   initialValue: _tenantId,
                   decoration: const InputDecoration(labelText: 'Tenant'),
                   items: [
@@ -563,6 +620,13 @@ class _UserFormState extends State<_UserForm> {
         ),
       ),
       actions: [
+        if (_isEdit && _isSuper)
+          TextButton(
+            onPressed: _busy ? null : _delete,
+            style:
+                TextButton.styleFrom(foregroundColor: EnhancedTheme.errorRed),
+            child: const Text('Delete'),
+          ),
         TextButton(
           onPressed: _busy ? null : () => Navigator.of(context).pop(false),
           child: const Text('Cancel'),
