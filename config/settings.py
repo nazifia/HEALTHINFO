@@ -142,14 +142,15 @@ else:
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": BASE_DIR / "db.sqlite3",
             "CONN_MAX_AGE": 60,
-            # WAL lets readers run while a write is in flight (default DELETE
-            # journal blocks them); NORMAL sync skips an fsync per commit.
-            # WAL needs real shared memory for its -shm file: on a network
-            # filesystem (PythonAnywhere's /home) committed frames are lost
-            # instead of checkpointed, so those hosts set SQLITE_JOURNAL=DELETE.
+            # Rollback journal, never WAL. WAL needs real shared memory for its
+            # -shm file: on a network filesystem (PythonAnywhere's /home) a
+            # commit lands in db.sqlite3-wal and is then discarded instead of
+            # checkpointed — the API answers 201 and the row never exists.
+            # Journal mode is stored in the file, so this is set on every
+            # connection to flip back a database some other process left in
+            # WAL. Full sync: a commit is on disk before the response goes out.
             "OPTIONS": {"init_command":
-                f"PRAGMA journal_mode={os.getenv('SQLITE_JOURNAL', 'WAL')};"
-                " PRAGMA synchronous=NORMAL;"},
+                "PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL;"},
         }
     }
 

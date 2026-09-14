@@ -85,5 +85,14 @@ fields = userFields();
 api.narrowUserFields(fields);
 assert.strictEqual(fields.role.choices.length, 7);
 assert.ok(fields.tenant);
+assert.deepStrictEqual(api.myGrants(), ['manage_users', 'pharmacy_admin', 'decide_claims', 'edit_tariff']);
+
+// Still the platform admin when their own row happens to carry a tenant.
+api = load({ role: 'super_admin', tenant: 1 });
+assert.strictEqual(api.myManageableRoles(), null);
+fields = userFields();
+api.narrowUserFields(fields);
+assert.strictEqual(fields.role.choices.length, 7);
+assert.ok(fields.tenant && fields.jurisdiction && fields.hmo);
 
 console.log('privileges.test.js ok');

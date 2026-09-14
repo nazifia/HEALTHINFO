@@ -574,15 +574,20 @@ const MODULE_ROLES = {
   oversight: ['government'],
 };
 
-const myModule = () => (ME?.role === 'hmo' ? 'scheme'
+/* The platform admin belongs to no module whatever their row carries: a
+   tenant on it is where they sign in, not a fence on who they may mint. */
+const myModule = () => (ME?.role === 'super_admin' ? null
+  : ME?.role === 'hmo' ? 'scheme'
   : ME?.role === 'government' ? 'oversight'
   : ME?.tenant != null ? 'facility' : null);
 
 /* The grants this seat actually holds: its module's whole catalog when it is
-   that module's admin, else what its own row carries, narrowed to the module. */
+   that module's admin, else what its own row carries, narrowed to the module.
+   The platform admin holds every grant (accounts.permissions.granted). */
 function myGrants() {
   const module = myModule();
-  if (!module) return ME?.role === 'super_admin' ? MODULE_PRIVILEGES.facility : [];
+  if (!module) return ME?.role === 'super_admin'
+    ? [...new Set(Object.values(MODULE_PRIVILEGES).flat())] : [];
   const catalog = MODULE_PRIVILEGES[module];
   if (['super_admin', 'tenant_admin'].includes(ME?.role) || ME?.is_admin) return catalog;
   return catalog.filter((p) => (ME?.privileges || []).includes(p));
