@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../api.dart';
@@ -167,6 +170,73 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  /// The receipt logo, for whoever administers the organization. Sent as a
+  /// data URL, the shape the API keeps it in; the picker downscales to 400px
+  /// so a phone photo lands under the 200 KB cap.
+  Future<void> _editLogo() async {
+    String logo;
+    try {
+      final r = await api.get('/api/tenants/settings/');
+      logo = ((r as Map)['logo'] as String?) ?? '';
+    } on ApiException catch (e) {
+      if (mounted) showError(context, e.friendly);
+      return;
+    }
+    if (!mounted) return;
+    Future<void> save(String value) async {
+      try {
+        await api.patch('/api/tenants/settings/', {'logo': value});
+        if (!mounted) return;
+        showSuccess(context, value.isEmpty ? 'Logo removed' : 'Logo saved');
+      } on ApiException catch (e) {
+        if (mounted) showError(context, e.friendly);
+      }
+    }
+    final action = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Receipt logo'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (logo.isNotEmpty)
+              Image.memory(base64Decode(logo.split(',').last), height: 80)
+            else
+              const Text('Printed at the top of every receipt. '
+                  'PNG, JPEG or WebP under 200 KB.'),
+          ],
+        ),
+        actions: [
+          if (logo.isNotEmpty)
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, 'remove'),
+                child: const Text('Remove')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Close')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, 'pick'),
+              child: Text(logo.isEmpty ? 'Choose image' : 'Replace')),
+        ],
+      ),
+    );
+    if (action == 'remove') return save('');
+    if (action != 'pick') return;
+    final file = await ImagePicker().pickImage(
+        source: ImageSource.gallery, maxWidth: 400, maxHeight: 400);
+    if (file == null) return;
+    final bytes = await file.readAsBytes();
+    if (bytes.length > 200 * 1024) {
+      if (mounted) showError(context, 'Logo must be under 200 KB.');
+      return;
+    }
+    final ext = file.name.split('.').last.toLowerCase();
+    final mime = file.mimeType ??
+        {'png': 'image/png', 'webp': 'image/webp'}[ext] ??
+        'image/jpeg';
+    await save('data:$mime;base64,${base64Encode(bytes)}');
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<Map<String, dynamic>>(
@@ -262,6 +332,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           fontWeight: FontWeight.w600)),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: _editIdleLogout,
+                ),
+              ),
+              const SizedBox(height: 16),
+              GlassCard(
+                padding: const EdgeInsets.all(8),
+                child: ListTile(
+                  leading: const Icon(Icons.image_outlined,
+                      color: EnhancedTheme.primaryTeal),
+                  title: Text('Receipt logo',
+                      style: TextStyle(color: context.hintColor, fontSize: 12)),
+                  subtitle: Text('Printed at the top of every receipt',
+                      style: TextStyle(
+                          color: context.labelColor,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600)),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _editLogo,
                 ),
               ),
               const SizedBox(height: 16),

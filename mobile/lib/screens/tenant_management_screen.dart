@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../main.dart';
 import '../config.dart';
@@ -436,6 +439,25 @@ class _TenantFormState extends State<_TenantForm> {
       text: '${widget.tenant?['idle_logout_minutes'] ?? ''}');
   late String _kind = '${widget.tenant?['kind'] ?? widget.defaultKind}';
   bool _busy = false;
+  // null: untouched, not sent. '' clears; a data URL replaces.
+  String? _logo;
+  String get _logoShown => _logo ?? '${widget.tenant?['logo'] ?? ''}';
+
+  Future<void> _pickLogo() async {
+    final file = await ImagePicker().pickImage(
+        source: ImageSource.gallery, maxWidth: 400, maxHeight: 400);
+    if (file == null) return;
+    final bytes = await file.readAsBytes();
+    if (bytes.length > 200 * 1024) {
+      if (mounted) showError(context, 'Logo must be under 200 KB.');
+      return;
+    }
+    final ext = file.name.split('.').last.toLowerCase();
+    final mime = file.mimeType ??
+        {'png': 'image/png', 'webp': 'image/webp'}[ext] ??
+        'image/jpeg';
+    setState(() => _logo = 'data:$mime;base64,${base64Encode(bytes)}');
+  }
 
   bool get _isEdit => widget.tenant != null;
 
@@ -451,6 +473,7 @@ class _TenantFormState extends State<_TenantForm> {
     };
     final idle = _idle.text.trim();
     if (idle.isNotEmpty) body['idle_logout_minutes'] = idle;
+    if (_logo != null) body['logo'] = _logo!;
     try {
       if (_isEdit) {
         await api.patch('/api/tenants/${widget.tenant!['id']}/', body);
@@ -533,6 +556,28 @@ class _TenantFormState extends State<_TenantForm> {
                       ? 'Enter 0 to 1440'
                       : null;
                 },
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  if (_logoShown.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: Image.memory(
+                          base64Decode(_logoShown.split(',').last),
+                          height: 48),
+                    ),
+                  TextButton.icon(
+                    onPressed: _busy ? null : _pickLogo,
+                    icon: const Icon(Icons.image_outlined),
+                    label: Text(_logoShown.isEmpty ? 'Receipt logo' : 'Replace logo'),
+                  ),
+                  if (_logoShown.isNotEmpty)
+                    TextButton(
+                      onPressed: _busy ? null : () => setState(() => _logo = ''),
+                      child: const Text('Remove'),
+                    ),
+                ],
               ),
             ],
           ),

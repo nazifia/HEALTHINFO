@@ -1538,3 +1538,33 @@ def test_item_form_books_stock_in(pharmacy):
     # Blank is nothing, not an error.
     r = admin.patch(f"/api/pharmacy/items/{item_id}/", {"reorder_level": 5})
     assert r.json()["quantity_on_hand"] == 50
+
+
+def test_receipt_as_escpos_bytes_for_a_thermal_printer(pharmacy):
+    tenant, item = pharmacy["tenant"], pharmacy["item"]
+    staff = _client(pharmacy["staff"], tenant)
+    sale_id = staff.post("/api/pharmacy/sales/", {
+        "payment_method": "cash",
+        "items": [{"item": item.id, "quantity": 2}],
+    }, format="json").json()["id"]
+    staff.post(f"/api/pharmacy/sales/{sale_id}/pay/", {"amount": "25.00"},
+               format="json")
+
+    response = staff.get(f"/api/pharmacy/sales/{sale_id}/receipt/?format=escpos")
+    assert response.status_code == 200
+    assert response["Content-Type"] == "application/octet-stream"
+    raw = response.content
+    assert raw.startswith(b"\x1b@") and raw.endswith(b"\x1dV\x01")  # init … cut
+    sale = Sale.all_objects.get(pk=sale_id)
+    assert sale.reference.encode() in raw and b"Paracetamol 500mg" in raw
+    assert b"B-OLD" in raw and b"Ade Pharmacy" in raw
+    # Every text line fits an 80mm roll; a 58mm one narrows to 32 columns.
+    for line in raw.split(b"\n"):
+        assert len(line.lstrip(b"\x1b\x1d@aE!\x00\x01\x11")) <= 48, line
+    narrow = staff.get(f"/api/pharmacy/sales/{sale_id}/receipt/?format=escpos&paper=58").content
+    assert b"-" * 32 + b"\n" in narrow and b"-" * 33 not in narrow
+    assert sale.receipt_printed_at  # served to print, so off the kept list
+
+    # The HTML form takes the same width for @page.
+    html = staff.get(f"/api/pharmacy/sales/{sale_id}/receipt/?paper=58").content.decode()
+    assert "size: 58mm auto" in html and "width: 54mm" in html

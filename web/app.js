@@ -393,8 +393,8 @@ const RESOURCES = {
   // read-only for them too — the API writes it, nobody edits it.
   'patient-access-log':{ title: 'Patient Access Log', group: 'Admin', path: 'patients/access-log',
                           adminOnly: true, readOnly: true, noLink: true },
-  'tenants-hospitals': { title: 'Hospitals',          group: 'Admin', path: 'tenants/hospitals',  superOnly: true, tenantActions: true },
-  'tenants-pharmacies':{ title: 'Pharmacies',         group: 'Admin', path: 'tenants/pharmacies', superOnly: true, tenantActions: true },
+  'tenants-hospitals': { title: 'Hospitals',          group: 'Admin', path: 'tenants/hospitals',  superOnly: true, tenantActions: true, hide: ['logo'] },
+  'tenants-pharmacies':{ title: 'Pharmacies',         group: 'Admin', path: 'tenants/pharmacies', superOnly: true, tenantActions: true, hide: ['logo'] },
 };
 
 // A resource's API path, which is the slug unless the registry overrides it
@@ -1459,7 +1459,7 @@ function pickColumns(rows) {
   const first = keys.filter((k) => ['id', 'reference', 'status', 'name', 'generic_name', 'title', 'phone', 'slug'].includes(k));
   // null is a scalar here, not an object — a column empty on the sampled row
   // still belongs in the table.
-  const rest = keys.filter((k) => !first.includes(k) && !resolved(k)
+  const rest = keys.filter((k) => !first.includes(k) && !resolved(k) && k !== 'logo'
     && (row[k] === null || typeof row[k] !== 'object')
     && !(typeof row[k] === 'string' && row[k].length > 80));
   return [...first, ...rest].slice(0, 8);
@@ -1759,6 +1759,39 @@ function flattenSchemeErrors(errors) {
   return { ...rest, ...scheme };
 }
 
+/* The receipt logo card: the tenant admin's on the Profile page, and the
+   platform admin's on a tenant's record. Saved as a data URL, the shape the
+   API keeps it in, with one PATCH per pick — no separate Save. */
+function logoCardHtml(logo) {
+  return `<div class="card"><h3>Receipt logo</h3>
+    <small class="muted">Printed at the top of every receipt. PNG, JPEG or WebP under 200 KB.</small>
+    <img id="logo-preview" alt="" style="max-height:80px;display:${logo ? 'block' : 'none'}" src="${esc(logo || '')}">
+    <input id="logo-file" type="file" accept="image/png,image/jpeg,image/webp">
+    <button id="logo-clear" class="btn ghost" type="button" ${logo ? '' : 'hidden'}>Remove</button>
+  </div>`;
+}
+
+function wireLogoCard(patchUrl) {
+  const saveLogo = async (logo) => {
+    try {
+      const r = await Api.patch(patchUrl, { logo });
+      $('#logo-preview').src = logo;
+      $('#logo-preview').style.display = logo ? 'block' : 'none';
+      $('#logo-clear').hidden = !logo;
+      toast(r?.message || 'Logo saved.');
+    } catch (err) { toast(err.message, true); }
+  };
+  $('#logo-file').onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 200 * 1024) return toast('Logo must be under 200 KB.', true);
+    const reader = new FileReader();
+    reader.onload = () => saveLogo(reader.result);
+    reader.readAsDataURL(file);
+  };
+  $('#logo-clear').onclick = () => saveLogo('');
+}
+
 async function viewProfile() {
   if (!await ensureChrome()) return;
   spinner();
@@ -1781,34 +1814,12 @@ async function viewProfile() {
                    value="${esc(me.idle_logout_minutes ?? 30)}" required></label>
           <button type="submit">Save</button>
         </form></div>
-      <div class="card"><h3>Receipt logo</h3>
-        <small class="muted">Printed at the top of every receipt. PNG, JPEG or WebP under 200 KB.</small>
-        <img id="logo-preview" alt="" style="max-height:80px;display:${org.logo ? 'block' : 'none'}" src="${esc(org.logo || '')}">
-        <input id="logo-file" type="file" accept="image/png,image/jpeg,image/webp">
-        <button id="logo-clear" class="btn ghost" type="button" ${org.logo ? '' : 'hidden'}>Remove</button>
-      </div>` : ''}
+      ${logoCardHtml(org.logo)}` : ''}
       <div class="actions">
         <button id="logout" class="danger">Sign out</button>
       </div>`);
     if (canSetIdle) {
-      const saveLogo = async (logo) => {
-        try {
-          const r = await Api.patch('/api/tenants/settings/', { logo });
-          $('#logo-preview').src = logo;
-          $('#logo-preview').style.display = logo ? 'block' : 'none';
-          $('#logo-clear').hidden = !logo;
-          toast(r?.message || 'Logo saved.');
-        } catch (err) { toast(err.message, true); }
-      };
-      $('#logo-file').onchange = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        if (file.size > 200 * 1024) return toast('Logo must be under 200 KB.', true);
-        const reader = new FileReader();
-        reader.onload = () => saveLogo(reader.result);
-        reader.readAsDataURL(file);
-      };
-      $('#logo-clear').onclick = () => saveLogo('');
+      wireLogoCard('/api/tenants/settings/');
     }
     if (canSetIdle) $('#idle-form').onsubmit = async (e) => {
       e.preventDefault();
@@ -2117,7 +2128,7 @@ function dlHtml(obj) {
     ? tableHtml(v) : cellHtml(k, v);
   const keys = Object.keys(obj);
   return `<dl class="detail">${Object.entries(obj)
-    .filter(([k]) => !namedElsewhere(keys, k))
+    .filter(([k]) => !namedElsewhere(keys, k) && k !== 'logo') // the logo has its own card
     .map(([k, v]) => `<dt>${esc(colLabel(keys, k))}</dt><dd>${cell(k, v)}</dd>`).join('')}</dl>`;
 }
 
@@ -2154,7 +2165,7 @@ async function viewDetail(slug, id) {
           <button class="btn" data-ta="approve">Approve</button>
           <button class="btn" data-ta="reject">Reject</button>
           <button class="btn danger" data-ta="suspend">Suspend / Reactivate</button>
-        </div><div id="open-log-out"></div></div>`;
+        </div><div id="open-log-out"></div></div>${logoCardHtml(obj.logo)}`;
     }
     const acts = visibleActions(res, obj);
     const actsHtml = acts.map((a) =>
@@ -2279,6 +2290,7 @@ async function viewDetail(slug, id) {
       };
     }
     if ($('#open-as')) {
+      wireLogoCard(rdetail(slug, `${id}/`));
       $('#open-as').onclick = async () => {
         // Record the visit before switching: the trail is the point, and a
         // switch the server never heard about leaves none.

@@ -52,6 +52,9 @@ dependencies:
   # ever read on demand, and a refusal is not an error: the list still
   # answers, unsorted.
   geolocator: ^14.0.3
+  # Receipt logo, from the gallery. Downscaled on pick so it fits the
+  # API's 200 KB cap without a resize step of our own.
+  image_picker: ^1.1.2
 
 dev_dependencies:
   flutter_test:

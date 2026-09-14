@@ -1,6 +1,3 @@
-import base64
-import binascii
-
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Count
 from rest_framework import serializers, viewsets
@@ -14,9 +11,9 @@ from apps.governance.models import AuditLog
 from apps.governance.serializers import AuditLogSerializer
 from config.responses import success
 
-from .models import MAX_IDLE_LOGOUT_MINUTES, MAX_LOGO_BYTES, Tenant
+from .models import MAX_IDLE_LOGOUT_MINUTES, Tenant
 from .scope import scope_to_selection
-from .serializers import TenantSerializer
+from .serializers import TenantSerializer, clean_logo
 
 
 # to_status of the audit row a super-admin writes when they enter a tenant.
@@ -27,31 +24,6 @@ OPENED = "opened"
 # with the OPENED row above, the trail answers how long the visit lasted.
 LEFT = "left"
 
-
-
-def _clean_logo(value):
-    """A data: URL for a PNG/JPEG/WebP under MAX_LOGO_BYTES, or "" to clear it.
-
-    Checked here rather than trusted from the client because the string lands
-    verbatim inside an <img src> on every receipt.
-    """
-    if not value:
-        return ""
-    if not isinstance(value, str):
-        raise serializers.ValidationError({"logo": "Send the image as a data URL."})
-    header, _, payload = value.partition(",")
-    if header not in ("data:image/png;base64", "data:image/jpeg;base64",
-                      "data:image/webp;base64"):
-        raise serializers.ValidationError({"logo": "Use a PNG, JPEG or WebP image."})
-    try:
-        raw = base64.b64decode(payload, validate=True)
-    except (binascii.Error, ValueError):
-        raise serializers.ValidationError({"logo": "That image is not valid base64."})
-    if len(raw) > MAX_LOGO_BYTES:
-        raise serializers.ValidationError(
-            {"logo": f"Logo must be under {MAX_LOGO_BYTES // 1024} KB."}
-        )
-    return value
 
 class TenantViewSet(viewsets.ModelViewSet):
     """Platform-wide tenant administration (super-admin only).
@@ -129,7 +101,7 @@ class TenantViewSet(viewsets.ModelViewSet):
                 )
                 changed.append("idle_logout_minutes")
             if "logo" in request.data:
-                tenant.logo = _clean_logo(request.data["logo"])
+                tenant.logo = clean_logo(request.data["logo"])
                 changed.append("logo")
             if not changed:
                 raise serializers.ValidationError("Nothing to save.")

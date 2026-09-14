@@ -8,6 +8,7 @@ from decimal import Decimal
 
 from django.db import transaction
 from django.db.models import Count, DecimalField, ExpressionWrapper, F, Sum
+from django.http import HttpResponse
 from django.shortcuts import render
 from django.utils import timezone
 from rest_framework import mixins, viewsets
@@ -28,6 +29,7 @@ from apps.inventory.views import PharmacyViewSet, body
 from config.ranges import apply_range as _apply_range, date_range as _range
 from config.responses import success
 
+from . import escpos
 from .models import (
     Cashier,
     DispensingLog,
@@ -184,6 +186,11 @@ class SaleViewSet(mixins.CreateModelMixin, mixins.ListModelMixin,
         Server-rendered HTML sized for an 80mm till roll and for A4 alike — the
         browser's own print dialog is the printer driver, so there is no PDF
         library and no print server to keep alive.
+
+        ``?format=escpos`` is the same receipt as raw ESC/POS bytes for a
+        thermal printer with no browser in front of it (``| nc printer 9100``,
+        or a Bluetooth printer from the phone). ``?paper=58`` narrows either
+        form to a 58mm roll; the default is 80mm.
         """
         sale = self.get_object()
         # Serving the page is the print (it prints itself on load); ?print=0
@@ -191,12 +198,17 @@ class SaleViewSet(mixins.CreateModelMixin, mixins.ListModelMixin,
         if request.query_params.get("print") != "0":
             sale.receipt_printed_at = timezone.now()
             sale.save(update_fields=["receipt_printed_at"])
+        lines = SaleItem.all_objects.filter(sale=sale).select_related("item", "batch")
+        paper = 58 if request.query_params.get("paper") == "58" else 80
+        if request.query_params.get("format") == "escpos":
+            return HttpResponse(
+                escpos.render(sale, list(lines), request.tenant, paper),
+                content_type="application/octet-stream",
+                headers={"Content-Disposition":
+                         f'attachment; filename="{sale.reference}.bin"'},
+            )
         return render(request, "pharmacy/receipt.html", {
-            "sale": sale,
-            "lines": SaleItem.all_objects.filter(sale=sale).select_related(
-                "item", "batch"
-            ),
-            "tenant": request.tenant,
+            "sale": sale, "lines": lines, "tenant": request.tenant, "paper": paper,
         })
 
     @action(detail=True, methods=["post"], url_path="keep-receipt")

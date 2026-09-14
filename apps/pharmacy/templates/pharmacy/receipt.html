@@ -10,7 +10,7 @@
   :root { color-scheme: light; }
   body { font: 12px/1.45 "Courier New", ui-monospace, monospace; margin: 0;
          background: #f4f4f5; color: #111; }
-  .receipt { width: 76mm; max-width: 100%; margin: 8px auto; padding: 10px 12px;
+  .receipt { width: {{ paper|add:"-4" }}mm; max-width: 100%; margin: 8px auto; padding: 10px 12px;
              background: #fff; }
   h1 { font-size: 14px; margin: 0 0 2px; text-align: center; }
   .logo { display: block; max-width: 40mm; max-height: 20mm; margin: 0 auto 4px;
@@ -31,10 +31,16 @@
   button { font: inherit; padding: 6px 14px; cursor: pointer; }
   .void { text-align: center; font-weight: bold; letter-spacing: 2px;
           border: 2px solid #111; padding: 4px; margin: 6px 0; }
+  /* Thermal: tell the driver the roll width so it neither paginates to A4
+     nor feeds a page of blank paper; keep a row on one strip of paper; and
+     a colour logo dithers to mud on a 1-bit head, so print it in greyscale. */
+  @page { size: {{ paper }}mm auto; margin: 3mm; }
   @media print {
     body { background: #fff; }
     .actions { display: none; }
     .receipt { width: auto; margin: 0; padding: 0; }
+    .logo { filter: grayscale(1) contrast(1.4); }
+    tr, .meta div, .totals div { break-inside: avoid; }
   }
 </style>
 </head>
