@@ -616,6 +616,7 @@ class _ItemFormState extends State<_ItemForm> {
   final _price = TextEditingController(text: '0');
   final _cost = TextEditingController(text: '0');
   final _reorder = TextEditingController(text: '0');
+  final _addStock = TextEditingController();
   String _form = 'tablet';
   bool _prescriptionOnly = false;
   bool _isControlled = false;
@@ -647,6 +648,7 @@ class _ItemFormState extends State<_ItemForm> {
     _price.dispose();
     _cost.dispose();
     _reorder.dispose();
+    _addStock.dispose();
     super.dispose();
   }
 
@@ -667,6 +669,7 @@ class _ItemFormState extends State<_ItemForm> {
         'unit_price': _price.text.trim(),
         'cost_price': _cost.text.trim(),
         'reorder_level': int.tryParse(_reorder.text.trim()) ?? 0,
+        'add_stock': int.tryParse(_addStock.text.trim()) ?? 0,
         'prescription_only': _prescriptionOnly,
         'is_controlled': _isControlled,
       };
@@ -751,6 +754,17 @@ class _ItemFormState extends State<_ItemForm> {
               ),
             ),
           ],
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _addStock,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            labelText: _isEdit ? 'Add stock' : 'Opening stock',
+            helperText: _isEdit
+                ? 'Now ${units(widget.existing!['quantity_on_hand'])} on hand; this many more go on the shelf.'
+                : 'Units on the shelf now.',
+          ),
         ),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,

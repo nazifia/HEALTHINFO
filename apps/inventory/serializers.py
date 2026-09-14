@@ -29,11 +29,45 @@ class StockItemSerializer(serializers.ModelSerializer):
         source="medication.generic_name", read_only=True
     )
     branch_name = serializers.CharField(source="branch.name", read_only=True)
+    # The shelf count typed on the item form itself — booked in as a dated
+    # batch through receive_stock, so the ledger still explains the figure.
+    # Optional on both create and edit: on an edit it adds to what is there.
+    add_stock = serializers.IntegerField(
+        min_value=0, required=False, write_only=True,
+        label="Stock to add",
+        help_text="Units to put on the shelf now. Added to the quantity on hand.",
+    )
 
     class Meta:
         model = StockItem
         exclude = ("tenant",)
         read_only_fields = ("created_at", "updated_at")
+
+    def _book_in(self, item, quantity):
+        if quantity:
+            from django.utils import timezone
+            from .models import receive_stock
+            request = self.context.get("request")
+            receive_stock(item, quantity,
+                          batch_number=f"ADD-{timezone.now():%Y%m%d}",
+                          cost_price=item.cost_price,
+                          user=getattr(request, "user", None))
+            # The list annotation on an edited row is now stale; the
+            # property recounts.
+            if hasattr(item, "stock_on_hand"):
+                del item.stock_on_hand
+
+    def create(self, validated_data):
+        quantity = validated_data.pop("add_stock", 0)
+        item = super().create(validated_data)
+        self._book_in(item, quantity)
+        return item
+
+    def update(self, instance, validated_data):
+        quantity = validated_data.pop("add_stock", 0)
+        item = super().update(instance, validated_data)
+        self._book_in(item, quantity)
+        return item
 
     def get_quantity_on_hand(self, obj) -> int:
         return getattr(obj, "stock_on_hand", None) or obj.quantity_on_hand

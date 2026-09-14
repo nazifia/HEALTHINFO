@@ -1486,3 +1486,21 @@ def test_the_insurer_seat_answers_its_own_requests_and_claims(pharmacy):
     # Banking the remittance is the pharmacy's, not the insurer's.
     assert insurer.post(f"/api/pharmacy/claims/{claim.pk}/pay/",
                         {"amount": "80.00"}, format="json").status_code == 403
+
+
+def test_item_form_books_stock_in(pharmacy):
+    """The quantity typed on the item form lands on the shelf, and an edit adds
+    to it — both through the ledger, so the figure is still explained."""
+    admin = _client(pharmacy["admin"], pharmacy["tenant"])
+    r = admin.post("/api/pharmacy/items/", {"name": "Vitamin C", "add_stock": 40})
+    assert r.status_code == 201, r.json()
+    assert r.json()["quantity_on_hand"] == 40
+    item_id = r.json()["id"]
+    r = admin.patch(f"/api/pharmacy/items/{item_id}/", {"add_stock": 10})
+    assert r.status_code == 200, r.json()
+    assert r.json()["quantity_on_hand"] == 50
+    assert "add_stock" not in r.json()
+    assert StockMovement.all_objects.filter(item_id=item_id).count() == 2
+    # Blank is nothing, not an error.
+    r = admin.patch(f"/api/pharmacy/items/{item_id}/", {"reorder_level": 5})
+    assert r.json()["quantity_on_hand"] == 50

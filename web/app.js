@@ -245,7 +245,8 @@ const RESOURCES = {
   'prescriptions':     { title: 'Drug Orders',        group: 'Clinical', report: true, filters: [SEX_FILTER], ...ORDER_SHEET,
                           actions: [{ name: 'cancel', label: 'Cancel prescription', danger: true,
                                       when: ['prescribed', 'partially_dispensed'] }] },
-  'pharmacy-items':         { title: 'Stock Items',     group: 'Pharmacy', path: 'pharmacy/items',           roles: 'admin', search: true },
+  'pharmacy-items':         { title: 'Stock Items',     group: 'Pharmacy', path: 'pharmacy/items',           roles: 'admin', search: true,
+                              actions: [{ name: 'receive', label: 'Receive stock', ask: 'quantity,batch_number' }] },
   // A batch is read-only as a record — stock arrives through the item's
   // receive and leaves through a sale — but the shelf can still be wrong.
   // Correcting it and writing it off are the same endpoint; ``write_off``
