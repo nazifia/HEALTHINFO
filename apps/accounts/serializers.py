@@ -162,6 +162,9 @@ class LoginSerializer(TokenObtainPairSerializer):
                 raise AuthenticationFailed(self._failed, "no_active_account")
             attrs[self.username_field] = matches[0].phone
         elif phone:
+            # Rows are stored normalized (User.save), so "+234 803..." typed
+            # at the login screen has to fold the same way to find its row.
+            phone = normalize_phone(phone)
             holder = users.filter(phone=phone).first()
             # A licensed user whose licence is on file signs in with it and
             # nothing else. One with no licence yet (a row that predates this
@@ -173,6 +176,7 @@ class LoginSerializer(TokenObtainPairSerializer):
                 or holder.role == Role.PHARMACIST
             ):
                 raise AuthenticationFailed(self._failed, "no_active_account")
+            attrs[self.username_field] = phone
         else:
             raise serializers.ValidationError(
                 {"phone": "Provide a phone number or a license number."}

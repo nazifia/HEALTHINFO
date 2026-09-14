@@ -28,7 +28,7 @@ def test_register_cannot_set_super_admin(db_clean):
         HTTP_X_TENANT_ID="clinic",
     )
     assert resp.status_code == 201, resp.content
-    user = User.objects.get(phone="+2348030000001")
+    user = User.objects.get(phone="08030000001")
     assert user.role == Role.PUBLIC          # role ignored, forced to public
     assert user.is_super_admin is False
     assert user.tenant_id == t.id

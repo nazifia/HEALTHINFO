@@ -99,7 +99,7 @@ def test_admin_cannot_create_licensed_user_without_license(tenant):
         HTTP_X_TENANT_ID="clinic",
     )
     assert good.status_code == 201, good.content
-    assert User.objects.get(phone="+2348036666666").license_number == "CHPRBN77"
+    assert User.objects.get(phone="08036666666").license_number == "CHPRBN77"
 
 
 def test_a_license_written_straight_to_the_row_still_signs_in(db):
@@ -109,7 +109,7 @@ def test_a_license_written_straight_to_the_row_still_signs_in(db):
     t = Tenant.objects.create(name="Clinic", slug="clinic")
     try:
         make_user(t, "+2348031000090", Role.DOCTOR, "demo-doctor-002")
-        assert User.objects.get(phone="+2348031000090").license_number == \
+        assert User.objects.get(phone="08031000090").license_number == \
             "DEMODOCTOR002"
         r = token(license_number="DEMO-DOCTOR-002", password=PASSWORD)
         assert r.status_code == 200, r.content

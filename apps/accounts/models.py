@@ -154,6 +154,9 @@ class User(AbstractUser):
         # number up already normalized (see normalize_license), so a row saved
         # with its separators still on it could never be signed in to.
         self.license_number = normalize_license(self.license_number)
+        # Same for the phone: sign-in normalizes what was typed, so a row kept
+        # as "+234 803..." could never match the "0803..." at the login screen.
+        self.phone = normalize_phone(self.phone)
         # A Django superuser IS the platform admin (is_super_admin says so), but
         # createsuperuser leaves the default role behind. The clients read the
         # role, not the flag, so an unaligned row signs in with no platform

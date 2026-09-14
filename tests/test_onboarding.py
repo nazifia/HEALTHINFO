@@ -29,7 +29,7 @@ def test_onboarding_creates_tenant_and_admin(db, client):
     assert resp.data["message"]
     assert resp.data["tenant"]["slug"] == "hospital-a"
     tenant = Tenant.objects.get(slug="hospital-a")
-    user = User.objects.get(phone="+2348031230001")
+    user = User.objects.get(phone="08031230001")
     assert user.tenant_id == tenant.id
     assert user.role == Role.TENANT_ADMIN
     assert user.check_password("Sup3r-Str0ng-Pw!")
