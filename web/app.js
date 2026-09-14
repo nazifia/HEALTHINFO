@@ -26,7 +26,7 @@ function fmtVal(v) {
   return String(v);
 }
 
-const label = (k) => k === 'by_diagnosis_medication' ? 'Medication By Diagnosis' : k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+const label = (k) => k === 'by_diagnosis_medication' ? 'Medication By Diagnosis' : k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).replace(/\bIcd10\b/g, 'ICD10');
 
 /* ------------------------------------------------------------------ theme */
 
@@ -4563,7 +4563,8 @@ function wireStockCount(checkId, reload) {
 /* --------------------------------------------------------------- portal */
 
 /* A patient's own record on one page: their details, the drugs the pharmacy
-   has actually handed over, and where to go and get more.
+   has actually handed over, the ones still waiting at the counter, and where
+   to go and get more.
 
    Deliberately narrow. The clinical timeline — visits, findings, test results
    — is the facility's working record and the portal API does not serve it, so
@@ -4596,13 +4597,11 @@ const myPosition = () => new Promise((resolve) => {
   );
 });
 
-// Only drugs the pharmacy has handed over reach this list — the API sends no
-// others — so an empty table means nothing has been collected, not that
-// nothing was written.
-function portalMedsHtml(rows) {
-  if (!rows.length) {
-    return '<p class="muted">You have not collected any medication yet.</p>';
-  }
+// One table for both lists: what the pharmacy has handed over and what it
+// still owes. The API sorts a row into one or the other, so `empty` says
+// what an empty table means here — nothing collected, or nothing waiting.
+function portalMedsHtml(rows, empty = 'You have not collected any medication yet.') {
+  if (!rows.length) return `<p class="muted">${esc(empty)}</p>`;
   return `<div class="table-wrap"><table><thead><tr>
       <th>Medication</th><th>Dose</th><th>How often</th><th>Days</th>
       <th>Status</th><th></th></tr></thead><tbody>${rows.map((r) => `<tr>
@@ -4682,7 +4681,7 @@ function heroHtml(name, sub, stats, link) {
 
 // The patient's banner: the handful of facts a nurse asks for first. The
 // full record lives under Profile.
-function portalHeroHtml(me, meds) {
+function portalHeroHtml(me, meds, pending) {
   const name = me.full_name || ME.username || 'there';
   const who = [me.sex === 'M' ? 'Male' : me.sex === 'F' ? 'Female' : me.sex,
     me.age != null ? `${me.age} yrs` : '',
@@ -4693,6 +4692,7 @@ function portalHeroHtml(me, meds) {
     ['Scheme', me.patient_type_display],
     ['NHIS number', me.nhis_number],
     ['Medications collected', meds.length],
+    ['Awaiting collection', pending.length],
     ['Allergies', me.allergies],
   ], '<a href="#/profile" class="btn hero-link">View full profile</a>');
 }
@@ -4736,17 +4736,20 @@ function dependentsHtml(cards, rows) {
 async function viewPortal() {
   if (!await ensureChrome()) return;
   spinner();
-  let me, meds, cards, deps;
+  let me, meds, pending, cards, deps;
   try {
-    [me, meds, cards, deps] = await Promise.all([
+    [me, meds, pending, cards, deps] = await Promise.all([
       Api.get('/api/portal/me/'),
       Api.get('/api/portal/medications/'),
+      Api.get('/api/portal/pending/'),
       Api.get('/api/portal/enrollments/').catch(() => []),
       Api.get('/api/portal/dependents/').catch(() => []),
     ]);
   } catch (e) { return errorBox(e); }
 
-  render(`${portalHeroHtml(me, meds)}
+  render(`${portalHeroHtml(me, meds, pending)}
+    <div class="card"><h3>Waiting to be collected</h3>
+      ${portalMedsHtml(pending, 'Nothing is waiting for you at the pharmacy.')}</div>
     <div class="card"><h3>My medications</h3>${portalMedsHtml(meds)}</div>
     <div class="card"><h3>My dependents</h3>${dependentsHtml(cards, deps)}</div>
     <div class="card"><h3>Where to get them</h3>

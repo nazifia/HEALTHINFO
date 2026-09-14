@@ -5,7 +5,8 @@ record". The difference is where the patient id comes from: here it is never
 sent by the caller, only read off the signed-in account (``Patient.user``), so
 a portal account can only ever reach the one record it is linked to. Nothing
 here writes, and it is deliberately narrow: a patient reads their own details,
-the drugs the pharmacy actually handed over, and where to go and get more.
+the drugs the pharmacy actually handed over, the ones still waiting to be
+collected, and where to go and get more.
 
 The clinical timeline — diagnoses, labs, claims, consultation notes — is the
 facility's working record and is not served here. A patient asks the facility
@@ -140,16 +141,35 @@ class PatientPortalViewSet(viewsets.ViewSet):
         One list whichever route the drug came down: an order a clinician wrote
         and a line off a counter script both land in ``analytics.Prescription``
         (see apps.analytics.capture), so reading that is reading both. The
-        caller chooses no status: what is still to be collected is between the
-        patient and the counter, not something this endpoint answers.
+        caller chooses no status: what is still to be collected is ``pending``.
         """
+        from apps.analytics.models import Prescription
+
+        return self._scripts(
+            (Prescription.Status.DISPENSED, Prescription.Status.PARTIAL))
+
+    @action(detail=False, methods=["get"])
+    def pending(self, request):
+        """The drugs written for this patient that the pharmacy still owes.
+
+        An order not yet filled, and the rest of a partly filled one: what the
+        patient can take to a counter and collect. A cancelled order is not
+        owed, and a fully dispensed one is under ``medications``. The order can
+        still change at the counter, so the row is a reminder, not a fact
+        about the patient's treatment.
+        """
+        from apps.analytics.models import Prescription
+
+        return self._scripts(
+            (Prescription.Status.PRESCRIBED, Prescription.Status.PARTIAL))
+
+    def _scripts(self, statuses):
         from apps.analytics.models import Prescription
         from apps.analytics.serializers import PrescriptionSerializer
 
-        dispensed = (Prescription.Status.DISPENSED, Prescription.Status.PARTIAL)
         patient = self._record()
         rows = Prescription.all_objects.filter(
-            patient=patient, status__in=dispensed
+            patient=patient, status__in=statuses
         ).select_related("medication")
         data = PrescriptionSerializer(rows, many=True).data
         self._log(patient, PatientAccessLog.Action.HISTORY, len(data))

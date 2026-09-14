@@ -32,6 +32,8 @@ assert.ok(meds.includes('data-medication="7"'), 'medication id missing');
 assert.ok(meds.includes('Amoxicillin'));
 // The list is dispensed drugs only, so empty means nothing collected.
 assert.ok(portalMedsHtml([]).includes('not collected any medication'));
+// The same table serves the pending list, with its own empty message.
+assert.ok(portalMedsHtml([], 'Nothing is waiting').includes('Nothing is waiting'));
 
 // A branch nobody has geocoded is still listed and still phoneable — it just
 // has no distance and no directions link.

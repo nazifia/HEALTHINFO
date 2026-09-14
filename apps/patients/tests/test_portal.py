@@ -57,7 +57,7 @@ def test_account_with_no_patient_record_is_refused(db_clean):
     stranger = User.objects.create_user("08039999999", "pw", tenant=tenant,
                                         role=Role.PUBLIC)
 
-    for path in ("me", "medications"):
+    for path in ("me", "medications", "pending"):
         assert _portal(stranger).get(f"/api/portal/{path}/").status_code == 403
 
 
@@ -106,6 +106,31 @@ def test_a_pending_script_cannot_be_asked_for(linked):
 
     assert r.status_code == 200
     assert r.data == []
+
+
+def test_pending_lists_what_the_counter_still_owes(linked):
+    """Written and not filled, plus the rest of a partly filled one."""
+    tenant, user, patient = linked
+    waiting = Medication.objects.create(tenant=tenant, generic_name="Ibuprofen")
+    part = Medication.objects.create(tenant=tenant, generic_name="Metformin")
+    done = Medication.objects.create(tenant=tenant, generic_name="Amoxicillin")
+    other = Patient.objects.create(tenant=tenant, first_name="Bola",
+                                   last_name="Eze")
+    for med, st in ((waiting, Prescription.Status.PRESCRIBED),
+                    (part, Prescription.Status.PARTIAL),
+                    (done, Prescription.Status.DISPENSED),
+                    (waiting, Prescription.Status.CANCELLED)):
+        Prescription.objects.create(tenant=tenant, patient=patient,
+                                    medication=med, status=st)
+    Prescription.objects.create(tenant=tenant, patient=other, medication=waiting,
+                                status=Prescription.Status.PRESCRIBED)
+
+    r = _portal(user).get("/api/portal/pending/")
+
+    assert r.status_code == 200
+    assert sorted(row["medication_name"] for row in r.data) == [
+        "Ibuprofen", "Metformin",
+    ]
 
 
 def test_the_clinical_timeline_is_not_served_to_patients(linked):

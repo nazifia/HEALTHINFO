@@ -512,6 +512,10 @@ class Api {
   Future<List<dynamic>> portalMedications() =>
       getList('/api/portal/medications/');
 
+  /// GET /api/portal/pending/ — the drugs written for the patient that the
+  /// pharmacy still owes: not yet filled, or the rest of a partly filled one.
+  Future<List<dynamic>> portalPending() => getList('/api/portal/pending/');
+
   /// GET /api/portal/pharmacies/ — where a script can be filled, nearest
   /// first when the device shares a position. [medication] is a catalog
   /// medication id: pass it to see only the sites holding that drug.
