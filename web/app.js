@@ -2381,7 +2381,11 @@ async function viewForm(slug, id, query) {
     ]);
     const fields = meta?.actions?.PUT || meta?.actions?.POST;
     if (!fields) return errorBox(new Error('You do not have permission to edit this resource.'));
-    if (isUserRes(slug)) narrowUserFields(fields);
+    if (isUserRes(slug)) {
+      narrowUserFields(fields);
+      // Required on the server when minting; optional on edit (blank = keep).
+      if (!id && fields.password) fields.password.required = true;
+    }
     const { hints = {}, labels = {} } = res;
     const parts = Object.fromEntries(Object.entries(fields)
       .filter(([name, f]) => !f.read_only && !res.hide?.includes(name))

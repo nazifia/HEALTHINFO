@@ -70,7 +70,8 @@ def test_admin_cannot_create_two_pharmacists_with_the_same_suffix(tenant):
     client = APIClient()
     client.force_authenticate(admin)
 
-    body = {"phone": "08091111111", "role": Role.PHARMACIST, "tenant": tenant.id}
+    body = {"phone": "08091111111", "role": Role.PHARMACIST, "tenant": tenant.id,
+            "password": PASSWORD}
     clash = client.post("/api/users/", body, format="json", HTTP_X_TENANT_ID="clinic")
     assert clash.status_code == 400, clash.content
     assert "phone" in clash.json()["errors"]

@@ -25,3 +25,16 @@ def test_phone_typed_with_country_code_still_signs_in(tenant):
     )
     assert r.status_code == 200, r.content
 
+
+def test_admin_cannot_mint_a_seat_without_a_password(tenant):
+    admin = User.objects.create_user(
+        phone="08030000001", role=Role.TENANT_ADMIN, tenant=tenant, password="x"
+    )
+    c = APIClient()
+    c.force_authenticate(admin)
+    body = {"phone": "08030000002", "role": "public"}
+    r = c.post("/api/users/", body, format="json", HTTP_X_TENANT_ID=tenant.slug)
+    assert r.status_code == 400 and "password" in r.json()["errors"]
+    r = c.post("/api/users/", {**body, "password": "pass12345!"},
+               format="json", HTTP_X_TENANT_ID=tenant.slug)
+    assert r.status_code == 201, r.content

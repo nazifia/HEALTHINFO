@@ -250,6 +250,12 @@ class UserSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         if request is not None and request.user.is_authenticated:
             apply_admin_scope(request.user, attrs, self.instance)
+        # A seat minted without a password cannot sign in, and nothing on the
+        # form said so: refuse it here instead of opening a dead one.
+        if self.instance is None and not attrs.get("password"):
+            raise serializers.ValidationError({
+                "password": "Set a password so this user can sign in.",
+            })
         # A licensed cadre with no licence number could never sign in, so the
         # licence is required whenever the role is one of theirs.
         role = attrs.get("role", getattr(self.instance, "role", None))
