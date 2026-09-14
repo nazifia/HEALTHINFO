@@ -88,7 +88,8 @@ def test_admin_cannot_create_licensed_user_without_license(tenant):
     client = APIClient()
     client.force_authenticate(admin)
 
-    body = {"phone": "+2348036666666", "role": Role.CHEW, "tenant": tenant.id}
+    body = {"phone": "+2348036666666", "role": Role.CHEW, "tenant": tenant.id,
+            "accept_terms": True}
     bad = client.post("/api/users/", body, format="json", HTTP_X_TENANT_ID="clinic")
     assert bad.status_code == 400, bad.content
     assert "license_number" in bad.json()["errors"]

@@ -86,3 +86,18 @@ def test_tenant_switcher_stays_reachable_inside_a_tenant(tenants, client):
     client.force_authenticate(_super(None))
     # The way back out must not be locked behind the platform scope.
     assert client.get("/api/tenants/", HTTP_X_TENANT_ID=a.slug).status_code == 200
+
+
+def test_super_admin_edits_any_seat_by_id_inside_a_tenant(tenants, client):
+    # The list follows the opened tenant; a seat opened by id does not. Minting
+    # into another organization off the form then landing on a 404 was the
+    # bug this pins.
+    a, b = tenants
+    other = User.objects.create_user(phone="08050000004", password="x", tenant=b)
+    client.force_authenticate(_super(None))
+    hdr = {"HTTP_X_TENANT_ID": a.slug}
+    assert client.get(f"/api/users/{other.id}/", **hdr).status_code == 200
+    resp = client.patch(f"/api/users/{other.id}/", {"username": "renamed"},
+                        format="json", **hdr)
+    assert resp.status_code == 200
+    assert client.delete(f"/api/users/{other.id}/", **hdr).status_code == 204

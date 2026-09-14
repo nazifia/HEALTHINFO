@@ -2366,7 +2366,10 @@ async function viewForm(slug, id, query) {
     if (prefill.back && !prefill.back.startsWith('#/')) delete prefill.back;
     const [meta, current, terms] = await Promise.all([
       Api.options(metaPath),
-      id ? Api.get(rdetail(slug, `${id}/`)) : Promise.resolve({ ...res.defaults, ...prefill }),
+      // A new seat is live unless the admin unticks it: the unchecked box
+      // otherwise minted one that could not sign in.
+      id ? Api.get(rdetail(slug, `${id}/`))
+        : Promise.resolve({ ...(isUserRes(slug) && { is_active: true }), ...res.defaults, ...prefill }),
       // The terms a prescriber agrees to before their seat is opened; the
       // server refuses a licensed seat without the agreement.
       isUserRes(slug) ? Api.public('/api/auth/register/terms/').catch(() => null) : null,

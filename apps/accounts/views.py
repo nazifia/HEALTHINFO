@@ -136,8 +136,12 @@ class UserViewSet(viewsets.ModelViewSet):
             # Inside an organization a super admin reads it and nothing else:
             # the staff list follows the tenant they opened. Only outside one
             # (no tenant on the request) is the platform-wide list theirs.
+            # The list only: a seat they opened by id — their own, or one they
+            # just minted into another organization off the form — is theirs
+            # to read and edit wherever it sits, so the detail routes stay
+            # platform-wide.
             tenant = getattr(self.request, "tenant", None)
-            if tenant is None:
+            if tenant is None or self.action != "list":
                 # Outside an organization the list is platform-wide, or one
                 # state's when they have picked a state to work in. A seat
                 # belongs to that state either through the facility it staffs
