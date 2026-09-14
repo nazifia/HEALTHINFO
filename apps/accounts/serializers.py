@@ -11,6 +11,7 @@ from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.validators import UniqueValidator
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from apps.tenants.current import get_current_tenant
@@ -18,6 +19,7 @@ from apps.tenants.models import Jurisdiction, Tenant
 
 from .models import (
     LICENSED_ROLES, Role, User, normalize_license, normalize_phone,
+    phone_validator,
 )
 from .permissions import (
     ALL_PRIVILEGES, granted, is_module_admin, manageable_roles,
@@ -98,6 +100,32 @@ def apply_admin_scope(actor, attrs, instance=None):
         attrs["hmo"] = actor.hmo
     elif role != Role.HMO:
         attrs["hmo"] = None
+
+
+class FoldedField(serializers.CharField):
+    """A text field folded to one shape *before* its validators run.
+
+    User.save stores the phone and the licence normalized, so a uniqueness
+    check on what was typed ("+234 803...", "mdcn/1") misses the row already
+    holding "0803..." / "MDCN1" and the insert dies on the DB constraint
+    instead of answering a 400. Folding first makes the validators see the
+    same shape the table does.
+    """
+
+    def __init__(self, fold, **kwargs):
+        self.fold = fold
+        super().__init__(**kwargs)
+
+    def to_internal_value(self, data):
+        return self.fold(super().to_internal_value(data))
+
+
+def phone_field(**kwargs):
+    return FoldedField(normalize_phone, validators=[
+        phone_validator,
+        UniqueValidator(User.objects.all(),
+                        message="This phone number is already taken."),
+    ], **kwargs)
 
 
 class TenantUserField(serializers.PrimaryKeyRelatedField):
@@ -208,8 +236,13 @@ class UserSerializer(serializers.ModelSerializer):
     # sets it; a user without one (super-admin) falls back to the platform
     # default. 0 means never sign out on idle.
     idle_logout_minutes = serializers.SerializerMethodField()
-    license_number = serializers.CharField(
-        required=False, allow_blank=True, allow_null=True
+    phone = phone_field()
+    license_number = FoldedField(
+        normalize_license, required=False, allow_blank=True, allow_null=True,
+        validators=[UniqueValidator(
+            User.objects.all(),
+            message="Another user already holds this license number.",
+        )],
     )
     # Named grants, checked against the catalog so a typo is a 400 rather than
     # a row carrying a privilege no gate will ever read.
@@ -399,6 +432,7 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class RegisterSerializer(serializers.ModelSerializer):
+    phone = phone_field()
     password = serializers.CharField(write_only=True)
 
     class Meta:
@@ -449,18 +483,13 @@ class OnboardingSerializer(serializers.Serializer):
     jurisdiction = serializers.PrimaryKeyRelatedField(
         queryset=Jurisdiction.objects.all(), required=False, allow_null=True
     )
-    phone = serializers.CharField()
+    phone = phone_field()
     email = serializers.EmailField(required=False, allow_blank=True)
     password = serializers.CharField(write_only=True, validators=[validate_password])
 
     def validate_org_slug(self, value):
         if Tenant.objects.filter(slug=value).exists():
             raise serializers.ValidationError("This slug is already taken.")
-        return value
-
-    def validate_phone(self, value):
-        if User.objects.filter(phone=value).exists():
-            raise serializers.ValidationError("This phone number is already taken.")
         return value
 
     @transaction.atomic
