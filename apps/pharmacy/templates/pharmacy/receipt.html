@@ -13,6 +13,8 @@
   .receipt { width: 76mm; max-width: 100%; margin: 8px auto; padding: 10px 12px;
              background: #fff; }
   h1 { font-size: 14px; margin: 0 0 2px; text-align: center; }
+  .logo { display: block; max-width: 40mm; max-height: 20mm; margin: 0 auto 4px;
+          -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .muted { color: #555; }
   .center { text-align: center; }
   .meta { margin: 8px 0; }
@@ -38,6 +40,7 @@
 </head>
 <body>
 <div class="receipt">
+  {% if tenant.logo %}<img class="logo" src="{{ tenant.logo }}" alt="">{% endif %}
   <h1>{{ tenant.name|default:"Pharmacy" }}</h1>
   {% if tenant.address %}<p class="center muted">{{ tenant.address }}</p>{% endif %}
   {% if tenant.contact %}<p class="center muted">{{ tenant.contact }}</p>{% endif %}
@@ -101,5 +104,11 @@
   <p class="center muted">Goods dispensed are checked before leaving the counter.<br>Thank you.</p>
 </div>
 <div class="actions"><button onclick="window.print()">Print</button></div>
+<script>
+  // Opened from the counter to be printed: raise the dialog once the logo has
+  // painted. ?print=0 opens it quietly for a look or a reprint later.
+  if (new URLSearchParams(location.search).get("print") !== "0")
+    window.addEventListener("load", () => window.print());
+</script>
 </body>
 </html>

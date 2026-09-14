@@ -9,6 +9,7 @@ from decimal import Decimal
 from django.db import transaction
 from django.db.models import Count, DecimalField, ExpressionWrapper, F, Sum
 from django.shortcuts import render
+from django.utils import timezone
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -95,9 +96,15 @@ class SaleViewSet(mixins.CreateModelMixin, mixins.ListModelMixin,
     ordering_fields = ("created_at", "total")
 
     def get_queryset(self):
-        return Sale.objects.select_related(
+        qs = Sale.objects.select_related(
             "patient", "customer", "served_by", "branch"
         ).prefetch_related("lines", "payments")
+        # ?kept=1: the receipts waiting to be printed, on whichever screen has
+        # the printer.
+        if self.request.query_params.get("kept") == "1":
+            qs = qs.filter(receipt_kept_at__isnull=False,
+                           receipt_printed_at__isnull=True)
+        return qs
 
     def perform_create(self, serializer):
         # One transaction for the basket: a line that can't be filled rolls back
@@ -179,6 +186,11 @@ class SaleViewSet(mixins.CreateModelMixin, mixins.ListModelMixin,
         library and no print server to keep alive.
         """
         sale = self.get_object()
+        # Serving the page is the print (it prints itself on load); ?print=0
+        # is a look, and leaves a kept receipt in the queue.
+        if request.query_params.get("print") != "0":
+            sale.receipt_printed_at = timezone.now()
+            sale.save(update_fields=["receipt_printed_at"])
         return render(request, "pharmacy/receipt.html", {
             "sale": sale,
             "lines": SaleItem.all_objects.filter(sale=sale).select_related(
@@ -186,6 +198,16 @@ class SaleViewSet(mixins.CreateModelMixin, mixins.ListModelMixin,
             ),
             "tenant": request.tenant,
         })
+
+    @action(detail=True, methods=["post"], url_path="keep-receipt")
+    def keep_receipt(self, request, pk=None):
+        """Set the receipt aside to print later, from any device."""
+        sale = self.get_object()
+        sale.receipt_kept_at = timezone.now()
+        sale.receipt_printed_at = None
+        sale.save(update_fields=["receipt_kept_at", "receipt_printed_at"])
+        return success("Receipt kept — print it from Receipts to print.",
+                       SaleSerializer(sale).data)
 
     @action(detail=False, methods=["get"], url_path="summary")
     def summary(self, request):

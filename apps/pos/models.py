@@ -298,6 +298,12 @@ class Sale(TenantOwnedModel):
     # Cash handed over the counter, which can exceed what is owed. The excess is
     # change given back, never money banked on the sale.
     amount_tendered = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # A receipt set aside to print later — from a phone with no printer, or a
+    # counter whose roll ran out. ``kept`` is the request, ``printed`` clears
+    # it. The sale row itself is the copy: every line is frozen at dispensing
+    # time, so the receipt re-renders the same whenever it is printed.
+    receipt_kept_at = models.DateTimeField(null=True, blank=True)
+    receipt_printed_at = models.DateTimeField(null=True, blank=True)
     served_by = models.ForeignKey(
         "accounts.User", null=True, blank=True, on_delete=models.SET_NULL,
         related_name="pharmacy_sales",

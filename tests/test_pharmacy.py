@@ -515,12 +515,46 @@ def test_receipt_prints_the_sale(pharmacy):
     assert sale.reference in html
     assert "Paracetamol 500mg" in html and "B-OLD" in html
     assert "Ade Pharmacy" in html
+    assert "<img" not in html  # no logo set, no broken image
+
+    tenant.logo = "data:image/png;base64,iVBORw0KGgo="
+    tenant.save(update_fields=["logo"])
+    assert 'src="data:image/png;base64,iVBORw0KGgo="' in staff.get(
+        f"/api/pharmacy/sales/{sale_id}/receipt/"
+    ).content.decode()
 
     # A cancelled sale still prints, stamped so it cannot pass as a live receipt.
     staff.post(f"/api/pharmacy/sales/{sale_id}/cancel/", {}, format="json")
     assert "CANCELLED" in staff.get(
         f"/api/pharmacy/sales/{sale_id}/receipt/"
     ).content.decode()
+
+
+def test_receipt_kept_on_a_phone_prints_later_at_the_counter(pharmacy):
+    tenant, item = pharmacy["tenant"], pharmacy["item"]
+    staff = _client(pharmacy["staff"], tenant)
+    sale_id = staff.post("/api/pharmacy/sales/", {
+        "payment_method": "cash",
+        "items": [{"item": item.id, "quantity": 1}],
+    }, format="json").json()["id"]
+    queue = "/api/pharmacy/sales/?kept=1"
+    assert staff.get(queue).json()["count"] == 0
+
+    assert staff.post(f"/api/pharmacy/sales/{sale_id}/keep-receipt/", {},
+                      format="json").status_code == 200
+    assert [r["id"] for r in staff.get(queue).json()["results"]] == [sale_id]
+
+    # A look at it (print=0) leaves it queued; serving it to print clears it.
+    staff.get(f"/api/pharmacy/sales/{sale_id}/receipt/?print=0")
+    assert staff.get(queue).json()["count"] == 1
+    staff.get(f"/api/pharmacy/sales/{sale_id}/receipt/")
+    assert staff.get(queue).json()["count"] == 0
+    sale = Sale.all_objects.get(pk=sale_id)
+    assert sale.receipt_kept_at and sale.receipt_printed_at
+
+    # Kept again (the roll ran out mid-print): back on the list.
+    staff.post(f"/api/pharmacy/sales/{sale_id}/keep-receipt/", {}, format="json")
+    assert staff.get(queue).json()["count"] == 1
 
 
 def test_insured_patient_is_billed_without_naming_the_card(pharmacy):

@@ -39,6 +39,11 @@ class PharmacySalesScreen extends StatelessWidget {
           'transfer': 'Transfer',
           'hmo': 'HMO',
         }),
+        // Receipts kept from a phone are printed on the web, where the
+        // printer is; this narrows the list to the ones still waiting.
+        ReportFilter(param: 'kept', anyLabel: 'All receipts', options: {
+          '1': 'Receipts to print',
+        }),
       ],
       header: (items) => _Header(items: items),
       card: (row, reload, edit) => _SaleCard(row: row),
@@ -257,6 +262,9 @@ class _SaleSheetState extends State<SaleSheet> {
     await _run('/api/pharmacy/sales/${_sale['id']}/cancel/', {'reason': reason});
   }
 
+  Future<void> _keepReceipt() =>
+      _run('/api/pharmacy/sales/${_sale['id']}/keep-receipt/', {});
+
   Future<void> _run(String path, Map<String, dynamic> body) async {
     setState(() => _busy = true);
     try {
@@ -368,6 +376,22 @@ class _SaleSheetState extends State<SaleSheet> {
                 icon: const Icon(Icons.receipt_long_outlined, size: 18),
                 label: const Text('Receipt'),
               ),
+              // No printer on a phone: keep the receipt for the web counter
+              // ("Receipts to print"), where printing takes it off the list.
+              if (!cancelled)
+                OutlinedButton.icon(
+                  onPressed: _busy ? null : _keepReceipt,
+                  icon: Icon(
+                      _sale['receipt_kept_at'] != null &&
+                              _sale['receipt_printed_at'] == null
+                          ? Icons.print_outlined
+                          : Icons.print_disabled_outlined,
+                      size: 18),
+                  label: Text(_sale['receipt_kept_at'] != null &&
+                          _sale['receipt_printed_at'] == null
+                      ? 'Waiting to print'
+                      : 'Keep to print later'),
+                ),
               if (!cancelled && !settled)
                 FilledButton.icon(
                   onPressed: _busy ? null : _pay,

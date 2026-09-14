@@ -141,7 +141,8 @@ class SaleSerializer(NamedRelationsMixin, serializers.ModelSerializer):
         read_only_fields = ("reference", "served_by", "status", "subtotal",
                             "discount", "consultation_fee", "total",
                             "patient_payable", "hmo_payable", "amount_paid",
-                            "amount_tendered", "created_at", "updated_at")
+                            "amount_tendered", "receipt_kept_at",
+                            "receipt_printed_at", "created_at", "updated_at")
 
     def validate(self, attrs):
         self._check_outside_order(attrs)

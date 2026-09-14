@@ -103,3 +103,37 @@ def test_super_admin_sets_any_tenants_timeout(tenant):
     assert resp.status_code == 200
     tenant.refresh_from_db()
     assert tenant.idle_logout_minutes == 45
+
+
+# 1x1 transparent PNG: the smallest real image the logo check will accept.
+PNG_DATA_URL = (
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4"
+    "2mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+)
+
+
+def test_tenant_admin_uploads_receipt_logo(tenant):
+    admin = User.objects.create_user(
+        phone="08030000015", password="x", role=Role.TENANT_ADMIN, tenant=tenant,
+    )
+    c = _client(admin, tenant.slug)
+    resp = c.patch("/api/tenants/settings/", {"logo": PNG_DATA_URL}, format="json")
+    assert resp.status_code == 200
+    tenant.refresh_from_db()
+    assert tenant.logo == PNG_DATA_URL
+    # Only the logo moved: the timeout is optional on the same endpoint now.
+    assert tenant.idle_logout_minutes == 30
+
+    # Not an image, not base64, or too big: refused, logo untouched.
+    for bad in ("https://evil/logo.png", "data:text/html;base64,PHNjcmlwdD4=",
+                "data:image/png;base64,***",
+                "data:image/png;base64," + "A" * 280_000):
+        assert c.patch("/api/tenants/settings/", {"logo": bad},
+                       format="json").status_code == 400, bad
+    tenant.refresh_from_db()
+    assert tenant.logo == PNG_DATA_URL
+
+    assert c.patch("/api/tenants/settings/", {"logo": ""},
+                   format="json").status_code == 200
+    tenant.refresh_from_db()
+    assert tenant.logo == ""

@@ -7,6 +7,8 @@ from .current import get_current_tenant
 
 # A day. Anything longer is "off", which is what 0 is for.
 MAX_IDLE_LOGOUT_MINUTES = 1440
+# Decoded size cap for Tenant.logo. 200 KB is a 400px PNG several times over.
+MAX_LOGO_BYTES = 200 * 1024
 
 
 class Jurisdiction(models.Model):
@@ -86,7 +88,10 @@ class Tenant(models.Model):
     )
     address = models.TextField(blank=True)
     contact = models.CharField(max_length=120, blank=True)
-    logo = models.URLField(blank=True)
+    # The pharmacy's logo as a data: URL, printed at the top of every receipt.
+    # ponytail: inlined rather than a media file so PythonAnywhere serves it
+    # with no MEDIA_ROOT and no Pillow; MAX_LOGO_BYTES keeps the row small.
+    logo = models.TextField(blank=True)
     domain = models.CharField(max_length=255, blank=True, db_index=True)
     # Where this tenant sits in the gov hierarchy (usually a local gov). Central
     # rollup folds up from here. Nullable so existing tenants migrate clean.

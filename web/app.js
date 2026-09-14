@@ -304,7 +304,12 @@ const RESOURCES = {
                               actions: [{ name: 'cancel', label: 'Withdraw request', ask: 'reason', danger: true, when: ['requested', 'approved'] }] },
   'pharmacy-sales':         { title: 'Sales',           group: 'Pharmacy', path: 'pharmacy/sales',           roles: 'staff', search: true, readOnly: true, receipt: true,
                               actions: [{ name: 'pay', label: 'Take payment', ask: 'amount', choose: 'method:cash,card,transfer', when: ['pending'] },
+                                        { name: 'keep-receipt', label: 'Keep receipt for later' },
                                         { name: 'cancel', label: 'Cancel sale', danger: true, when: ['pending', 'paid'] }] },
+  // Receipts set aside from a phone or a counter with no printer. Printing
+  // one takes it off the list; the sale itself stays under Sales.
+  'pharmacy-receipts':      { title: 'Receipts to print', group: 'Pharmacy', path: 'pharmacy/sales', query: { kept: '1' }, roles: 'staff', search: true, readOnly: true, receipt: true,
+                              actions: [{ name: 'pay', label: 'Take payment', ask: 'amount', choose: 'method:cash,card,transfer', when: ['pending'] }] },
   'pharmacy-till':          { title: 'Cash Drawer',    group: 'Pharmacy', path: 'pharmacy/till-sessions',   roles: 'staff', createOnly: true,
                               actions: [{ name: 'close', label: 'Close drawer', ask: 'amount,notes', when: ['open'] }] },
   'pharmacy-claims':        { title: 'Claims',          group: 'Pharmacy', hmo: true, path: 'pharmacy/claims',          roles: 'staff', search: true, readOnly: true,
@@ -1765,6 +1770,7 @@ async function viewProfile() {
     // The tenant's admin sets the idle timeout for everyone in it; a
     // super-admin sets it for whichever organization they have open.
     const canSetIdle = ['tenant_admin', 'super_admin'].includes(me.role) && Api.tenant;
+    const org = canSetIdle ? await Api.get('/api/tenants/settings/').catch(() => ({})) : {};
     render(`<h2>Profile</h2>
       ${patient ? `<div class="card"><h3>My details</h3>${dlHtml(portalDetails(patient))}</div>` : ''}
       <div class="card">${patient ? '<h3>Account</h3>' : ''}${dlHtml(me)}</div>
@@ -1774,10 +1780,36 @@ async function viewProfile() {
             <input name="idle_logout_minutes" type="number" min="0" max="1440"
                    value="${esc(me.idle_logout_minutes ?? 30)}" required></label>
           <button type="submit">Save</button>
-        </form></div>` : ''}
+        </form></div>
+      <div class="card"><h3>Receipt logo</h3>
+        <small class="muted">Printed at the top of every receipt. PNG, JPEG or WebP under 200 KB.</small>
+        <img id="logo-preview" alt="" style="max-height:80px;display:${org.logo ? 'block' : 'none'}" src="${esc(org.logo || '')}">
+        <input id="logo-file" type="file" accept="image/png,image/jpeg,image/webp">
+        <button id="logo-clear" class="btn ghost" type="button" ${org.logo ? '' : 'hidden'}>Remove</button>
+      </div>` : ''}
       <div class="actions">
         <button id="logout" class="danger">Sign out</button>
       </div>`);
+    if (canSetIdle) {
+      const saveLogo = async (logo) => {
+        try {
+          const r = await Api.patch('/api/tenants/settings/', { logo });
+          $('#logo-preview').src = logo;
+          $('#logo-preview').style.display = logo ? 'block' : 'none';
+          $('#logo-clear').hidden = !logo;
+          toast(r?.message || 'Logo saved.');
+        } catch (err) { toast(err.message, true); }
+      };
+      $('#logo-file').onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        if (file.size > 200 * 1024) return toast('Logo must be under 200 KB.', true);
+        const reader = new FileReader();
+        reader.onload = () => saveLogo(reader.result);
+        reader.readAsDataURL(file);
+      };
+      $('#logo-clear').onclick = () => saveLogo('');
+    }
     if (canSetIdle) $('#idle-form').onsubmit = async (e) => {
       e.preventDefault();
       const mins = Number(new FormData(e.target).get('idle_logout_minutes'));
@@ -2017,7 +2049,7 @@ async function viewList(slug) {
       ${res.report ? reportSummaryHtml(slug, rows) : ''}
       ${rows.length ? tableHtml(slug === 'prescriptions' ? collapseByGroup(rows) : slug === 'consultations' ? visitRows(rows) : rows,
         res.noLink ? null : (r) => `#/r/${slug}/${r.id}`,
-        slug === 'prescriptions' && canWrite ? cancelButtonHtml : null,
+        slug === 'prescriptions' && canWrite ? cancelButtonHtml : res.receipt ? printButtonHtml : null,
         canWrite && res.inline ? { slug, fields: res.inline } : null) : '<p class="muted">Nothing here yet.</p>'}
       <div class="pager">
         <button id="prev" ${st.page <= 1 ? 'disabled' : ''}>&larr; Prev</button>
@@ -2062,6 +2094,15 @@ async function viewList(slug) {
           toast(r?.message || 'Cancelled.');
           viewList(slug);
         } catch (err) { toast(err.message, true); }
+      };
+    }
+    // Printing from the row: the receipt page marks itself printed, so the
+    // queue redraws without it once the markup has been handed over.
+    for (const b of document.querySelectorAll('[data-print]')) {
+      b.onclick = async (e) => {
+        e.stopPropagation();
+        await printReceipt(b.dataset.print);
+        if (res.query?.kept) viewList(slug);
       };
     }
     $('#prev').onclick = () => { st.page--; viewList(slug); };
@@ -2196,6 +2237,8 @@ async function viewDetail(slug, id) {
           if (!options.includes(picked)) return toast(`${key} must be one of ${options.join(', ')}.`, true);
           body[key] = picked;
         }
+        // Taking payment on a sale reprints the receipt, now marked paid.
+        const w = res.receipt && b.dataset.pa === 'pay' ? receiptWindow() : null;
         try {
           // The duplicate is named by hospital number; the API wants its id.
           if (slug === 'patients' && b.dataset.pa === 'merge') {
@@ -2216,8 +2259,9 @@ async function viewDetail(slug, id) {
           // Most visits end with something to take home, so the toast carries
           // the next step; the "+ Prescription" link is on the page below.
           toast(r?.message || 'Done.');
+          if (w) printReceipt(id, w);
           viewDetail(slug, id);
-        } catch (e) { toast(e.message, true); }
+        } catch (e) { w?.close(); toast(e.message, true); }
       };
     }
     if (canWrite) {
@@ -2643,6 +2687,8 @@ function collapseByGroup(rows) {
 
 /* Nothing to stop once every drug on the prescription is dispensed or
  * cancelled, so the row offers no button at all. */
+const printButtonHtml = (row) => `<button class="btn ghost" data-print="${row.id}">Print</button>`;
+
 function cancelButtonHtml(row) {
   const live = ['prescribed', 'partially_dispensed', 'part-dispensed'];
   return live.includes(row.status)
@@ -3733,15 +3779,27 @@ const money = (v) => '₦' + Number(v || 0).toLocaleString(undefined, {
 });
 
 /* Receipts come back as HTML, not JSON: fetch with the JWT, then hand the
-   markup to a new window so the browser's own print dialog does the printing. */
-async function printReceipt(saleId) {
+   markup to a new window; the page prints itself on load, so the browser's
+   own print dialog is the printer driver.
+
+   The window opens *before* anything is awaited — pop-up blockers only let a
+   window through inside the click that asked for it, and a fetch first would
+   spend that. Callers that must await something else first (the sale being
+   posted) open it themselves with receiptWindow() and pass it in. */
+function receiptWindow() {
+  const w = window.open('', '_blank');
+  if (w) w.document.write('<p style="font:14px sans-serif;padding:16px">Preparing receipt…</p>');
+  return w;
+}
+
+async function printReceipt(saleId, w = receiptWindow()) {
+  if (!w) return toast('Allow pop-ups to print the receipt.', true);
   try {
     const html = await Api.text(`/api/pharmacy/sales/${saleId}/receipt/`);
-    const w = window.open('', '_blank');
-    if (!w) return toast('Allow pop-ups to print the receipt.', true);
+    w.document.open();
     w.document.write(html);
     w.document.close();
-  } catch (e) { toast(e.message, true); }
+  } catch (e) { w.close(); toast(e.message, true); }
 }
 
 /* The counter's own home: what to reorder, what is about to expire, what was
@@ -4067,6 +4125,7 @@ async function viewSell() {
         <label>Scheme membership<select name="enrollment">${schemeOptions()}</select></label>
         <label>Authorisation (only for a covered sale above the insurer's threshold)
           <select name="authorization">${authOptions()}</select></label>
+        <label><input type="checkbox" name="keep_receipt"> Keep the receipt to print later (no printer here)</label>
         <div class="actions">
           <button type="button" class="btn ghost" id="ask-auth">Ask the insurer</button>
           <button type="button" class="btn ghost" id="to-cashier">Send to a cashier</button>
@@ -4209,11 +4268,19 @@ async function viewSell() {
       Object.assign(body, sellFillBody(filling, rxNumber));
       if (fd.get('enrollment')) body.enrollment = Number(fd.get('enrollment'));
       if (fd.get('authorization')) body.authorization = Number(fd.get('authorization'));
+      // The receipt prints as the sale lands: the window is claimed now,
+      // while this is still the cashier's click, and filled once the sale has
+      // a number. Closed again if the sale is refused. Or, with no printer at
+      // this screen, the receipt is kept for whichever screen has one.
+      const keep = fd.get('keep_receipt');
+      const w = keep ? null : receiptWindow();
       try {
         const sale = await Api.post('/api/pharmacy/sales/', body);
         toast(`Sale ${sale.reference} — patient pays ${money(sale.patient_payable)}.`);
+        if (keep) await Api.post(`/api/pharmacy/sales/${sale.id}/keep-receipt/`, {});
+        else printReceipt(sale.id, w);
         location.hash = `#/r/pharmacy-sales/${sale.id}`;
-      } catch (err) { toast(err.message, true); }
+      } catch (err) { w?.close(); toast(err.message, true); }
     };
   };
   draw();
