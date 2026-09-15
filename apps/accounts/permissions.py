@@ -211,6 +211,16 @@ class IsSelfOrModuleAdmin(BasePermission):
     tenant could reset a colleague's password through /api/users/.
     """
 
+    def has_permission(self, request, view):
+        # Minting a user into an arbitrary tenant is a platform action. A
+        # module admin mints into their own module only — the serializer pins
+        # the tenant, scheme or jurisdiction from them (apply_admin_scope) —
+        # and self-serve signup (register/onboarding) covers everyone else.
+        if request.method != "POST":
+            return True
+        self.message = "You cannot create users here."
+        return request.user.is_super_admin or is_module_admin(request.user)
+
     def has_object_permission(self, request, view, obj):
         user = request.user
         if request.method in SAFE_METHODS or obj.pk == user.pk:

@@ -156,7 +156,14 @@ class User(AbstractUser):
         self.license_number = normalize_license(self.license_number)
         # Same for the phone: sign-in normalizes what was typed, so a row kept
         # as "+234 803..." could never match the "0803..." at the login screen.
-        self.phone = normalize_phone(self.phone)
+        # Two spellings of one number that both predate folding are two rows
+        # the unique constraint allows; the second keeps its spelling rather
+        # than fail on save, and sign-in still finds it by the spelling typed.
+        folded = normalize_phone(self.phone)
+        if folded != self.phone and not (
+            User.objects.filter(phone=folded).exclude(pk=self.pk).exists()
+        ):
+            self.phone = folded
         # A Django superuser IS the platform admin (is_super_admin says so), but
         # createsuperuser leaves the default role behind. The clients read the
         # role, not the flag, so an unaligned row signs in with no platform

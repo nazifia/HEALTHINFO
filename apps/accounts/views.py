@@ -1,7 +1,6 @@
 from django.db.models import Q
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.exceptions import TokenError
@@ -16,7 +15,7 @@ from apps.tenants.scope import selected_jurisdiction
 from .models import Role, User
 from .permissions import (
     INSURER_ROLES, OVERSIGHT_ROLES, PATIENT_ROLES, IsSelfOrModuleAdmin,
-    IsTenantMember, is_module_admin,
+    IsTenantMember,
 )
 from .serializers import (
     LoginSerializer, OnboardingSerializer, PasswordResetConfirmSerializer,
@@ -178,15 +177,6 @@ class UserViewSet(viewsets.ModelViewSet):
             return User.objects.filter(pk=user.pk)
         # Tenant-scoped: only see users of your own tenant.
         return User.objects.filter(tenant=user.tenant)
-
-    def create(self, request, *args, **kwargs):
-        # Minting a user into an arbitrary tenant is a platform action. A
-        # module admin mints into their own module only — the serializer pins
-        # the tenant, scheme or jurisdiction from them (apply_admin_scope) —
-        # and self-serve signup (register/onboarding) covers everyone else.
-        if not (request.user.is_super_admin or is_module_admin(request.user)):
-            raise PermissionDenied("You cannot create users here.")
-        return super().create(request, *args, **kwargs)
 
     def get_permissions(self):
         # Everyone reads their own row, including the seats that belong to no

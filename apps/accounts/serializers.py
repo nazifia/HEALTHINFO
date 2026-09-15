@@ -60,9 +60,11 @@ def apply_admin_scope(actor, attrs, instance=None):
     if not is_module_admin(actor):
         # license_number too: the licence is the identity a prescriber's
         # cross-tenant statement (MyDuesView) is keyed on, so changing it is
-        # changing whose dues you read — an admin's decision, not yours.
+        # changing whose dues you read — an admin's decision, not yours. And
+        # is_active: a seat stays open until an admin closes it, so a profile
+        # form echoing the flag back unticked cannot lock its owner out.
         for field in ("tenant", "role", "is_admin", "hmo", "jurisdiction",
-                      "privileges", "license_number"):
+                      "privileges", "license_number", "is_active"):
             attrs.pop(field, None)
         return
     if "privileges" in attrs:
@@ -190,10 +192,16 @@ class LoginSerializer(TokenObtainPairSerializer):
                 raise AuthenticationFailed(self._failed, "no_active_account")
             attrs[self.username_field] = matches[0].phone
         elif phone:
-            # Rows are stored normalized (User.save), so "+234 803..." typed
-            # at the login screen has to fold the same way to find its row.
-            phone = normalize_phone(phone)
-            holder = users.filter(phone=phone).first()
+            # Rows are stored folded (User.save), so "+234 803..." typed at
+            # the login screen folds the same way to find its row — unless a
+            # row minted before folding kept its old spelling because another
+            # row already held the folded one. The spelling typed wins and the
+            # folded one is the fallback, so neither of such a pair is locked
+            # out of the number it has always signed in with.
+            holder = (users.filter(phone=phone).first()
+                      or users.filter(phone=normalize_phone(phone)).first())
+            if holder is not None:
+                phone = holder.phone
             # A licensed user whose licence is on file signs in with it and
             # nothing else. One with no licence yet (a row that predates this
             # field) keeps phone login until an admin fills it in, so nobody is
@@ -226,8 +234,18 @@ class LoginSerializer(TokenObtainPairSerializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
-    # Write-only password: set on create, optional rotation on update. Tenant is
-    # writable but the view only honours it for super-admins (see UserViewSet).
+    """One user row, as an admin's form or the user's own profile writes it.
+
+    Creation: ``password`` is required, the writer's module pins tenant/scheme/
+    jurisdiction (apply_admin_scope), and the role decides what else the row
+    must carry (``_ROLE_CHECKS``). The row itself is minted through
+    ``User.objects.create_user`` so the API, the shell and the seed script all
+    open a seat the same way.
+    """
+
+    # Write-only. Required when minting (validate says so — declaring it
+    # required here would mark it required on the edit form's OPTIONS too);
+    # blank on edit keeps the current one.
     password = serializers.CharField(
         write_only=True, required=False, validators=[validate_password]
     )
@@ -274,156 +292,148 @@ class UserSerializer(serializers.ModelSerializer):
             return settings.IDLE_LOGOUT_MINUTES
         return obj.tenant.idle_logout_minutes
 
-    def validate_license_number(self, value):
-        return normalize_license(value)
-
-    def validate(self, attrs):
-        # Who is writing decides which module the row may land in, before any
-        # of the per-role checks below read tenant, scheme or jurisdiction.
-        request = self.context.get("request")
-        if request is not None and request.user.is_authenticated:
-            apply_admin_scope(request.user, attrs, self.instance)
-        # A seat minted without a password cannot sign in, and nothing on the
-        # form said so: refuse it here instead of opening a dead one.
-        if self.instance is None and not attrs.get("password"):
-            raise serializers.ValidationError({
-                "password": "Set a password so this user can sign in.",
-            })
-        # A licensed cadre with no licence number could never sign in, so the
-        # licence is required whenever the role is one of theirs.
-        role = attrs.get("role", getattr(self.instance, "role", None))
-        if role in LICENSED_ROLES:
-            license_number = attrs.get(
-                "license_number", getattr(self.instance, "license_number", None)
-            )
-            if not license_number:
-                raise serializers.ValidationError({
-                    "license_number":
-                        f"A license number is required for the {role} role.",
-                })
-            # No seat for a prescriber who has not agreed to the terms. Asked
-            # once: a row already stamped is not asked again on edit.
-            agreed = getattr(self.instance, "terms_accepted_at", None)
-            if not agreed and not attrs.get("accept_terms"):
-                raise serializers.ValidationError({
-                    "accept_terms": "The prescriber must agree to the "
-                                    "Healthcare Terms and Conditions before "
-                                    "the account is opened.",
-                })
-        tenant = attrs.get("tenant", getattr(self.instance, "tenant", None))
-        if role in LICENSED_ROLES and tenant is None:
-            # An independent prescriber: no employer, so the state on their
-            # licence is what says where they may write. Without one they
-            # could pick no facility at all (may_prescribe_under fails closed),
-            # so refuse the account here rather than mint a dead seat.
-            jurisdiction = attrs.get(
-                "jurisdiction", getattr(self.instance, "jurisdiction", None)
-            )
-            if not jurisdiction:
-                raise serializers.ValidationError({
-                    "jurisdiction": "An independent prescriber writes under the "
-                                    "facilities of one state — choose it, or "
-                                    "choose the organization they work for.",
-                })
-            if jurisdiction.level != Jurisdiction.Level.STATE:
-                raise serializers.ValidationError({
-                    "jurisdiction": "Choose a state: a licence is registered "
-                                    "state-wide, not per local government.",
-                })
-        # A government seat reads the cross-tenant rollups, and those are
-        # refused inside an organization (IsPlatformReader). One bound to a
-        # tenant would be signed in to a platform that answers it nothing.
-        if role == Role.GOVERNMENT:
-            if tenant is not None:
-                raise serializers.ValidationError({
-                    "tenant": "A government seat belongs to no organization — "
-                              "leave it unset.",
-                })
-            # The rollups it reads narrow to this jurisdiction and everything
-            # under it. Without one the seat reads nothing, so refuse the
-            # account here rather than mint one that answers empty screens.
-            jurisdiction = attrs.get(
-                "jurisdiction", getattr(self.instance, "jurisdiction", None)
-            )
-            if not jurisdiction:
-                raise serializers.ValidationError({
-                    "jurisdiction": "Choose the jurisdiction this health "
-                                    "authority seat answers for.",
-                })
-            # A state, or one local government inside it. The national tier
-            # is the whole country — the platform admin's view, never an
-            # authority's — so it is refused here and fails closed on the
-            # read side too (User.has_patch).
-            if jurisdiction.level == Jurisdiction.Level.NATIONAL:
-                raise serializers.ValidationError({
-                    "jurisdiction": "A health authority answers for a state "
-                                    "or a local government, not the country.",
-                })
-        if role == Role.HMO:
-            # An insurer signs in to the organization whose claims they answer
-            # for, and reads only their own scheme's rows (see insurer_scope).
-            # Either half missing is an account that can never read anything.
-            hmo = attrs.get("hmo", getattr(self.instance, "hmo", None))
-            if not hmo:
-                raise serializers.ValidationError({
-                    "hmo": "Choose the scheme this insurer seat answers for.",
-                })
-            if tenant is None:
-                raise serializers.ValidationError({
-                    "tenant": "Choose the organization whose claims this seat "
-                              "answers for.",
-                })
-            if hmo.tenant_id != tenant.id:
-                raise serializers.ValidationError({
-                    "hmo": "That scheme belongs to another organization.",
-                })
-        if role == Role.PHARMACIST:
-            # Pharmacy staff sign in with the last 6 digits of their phone and
-            # nothing else, so two pharmacists sharing a suffix would lock each
-            # other out. Refuse the second one here, where an admin can still
-            # pick a different number.
-            phone = attrs.get("phone", getattr(self.instance, "phone", "")) or ""
-            # Only inside the tenant they sign in to: two pharmacists in
-            # different organizations share a suffix without ever colliding.
-            tenant = attrs.get("tenant", getattr(self.instance, "tenant", None))
-            clashes = visible_users(tenant).filter(
-                role=Role.PHARMACIST, phone__endswith=phone[-6:]
-            )
-            if self.instance is not None:
-                clashes = clashes.exclude(pk=self.instance.pk)
-            if clashes.exists():
-                raise serializers.ValidationError({
-                    "phone": "Another pharmacy user's phone number ends in "
-                             f"{phone[-6:]}. Their sign-in codes would collide.",
-                })
-        return attrs
-
     def validate_username(self, value):
         # Store blank as NULL (field is null=True) so empty display names are
         # consistently absent, not "" — the client renders absent as "—".
         return value.strip() or None
 
-    @staticmethod
-    def _stamp_terms(validated_data, instance=None):
+    def validate_license_number(self, value):
+        # Blank skips FoldedField (DRF returns "" before to_internal_value), so
+        # fold it here too: the column is NULL for everyone unlicensed.
+        return normalize_license(value)
+
+    # ----- cross-field validation -------------------------------------------
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        if request is not None and request.user.is_authenticated:
+            apply_admin_scope(request.user, attrs, self.instance)
+        errors = {}
+        # A seat minted without a password cannot sign in, and nothing on the
+        # form said so: refuse it here instead of opening a dead one.
+        if self.instance is None and not attrs.get("password"):
+            errors["password"] = "Set a password so this user can sign in."
+        seat = self._seat(attrs)
+        for check in self._ROLE_CHECKS.get(seat["role"], ()):
+            errors.update(check(self, seat, attrs))
+        if errors:
+            raise serializers.ValidationError(errors)
+        return attrs
+
+    def _seat(self, attrs):
+        """The row as it will stand after this write: the body over the instance."""
+        names = ("role", "tenant", "hmo", "jurisdiction", "license_number",
+                 "phone", "terms_accepted_at")
+        seat = {n: attrs[n] if n in attrs else getattr(self.instance, n, None)
+                for n in names}
+        seat["role"] = seat["role"] or Role.PUBLIC   # the model default
+        return seat
+
+    def _check_licence(self, seat, attrs):
+        # A licensed cadre signs in with the licence, so a seat without one
+        # could never sign in; and no seat for a prescriber who has not agreed
+        # to the terms. Asked once: a row already stamped is not asked again.
+        errors = {}
+        if not seat["license_number"]:
+            errors["license_number"] = (
+                f"A license number is required for the {seat['role']} role."
+            )
+        if not seat["terms_accepted_at"] and not attrs.get("accept_terms"):
+            errors["accept_terms"] = (
+                "The prescriber must agree to the Healthcare Terms and "
+                "Conditions before the account is opened."
+            )
+        return errors
+
+    def _check_independent(self, seat, attrs):
+        # A licensed clinician with no employer writes under the facilities of
+        # the state on their licence. Without one they could pick no facility
+        # at all (may_prescribe_under fails closed), so refuse the seat here.
+        if seat["tenant"] is not None:
+            return {}
+        state = seat["jurisdiction"]
+        if not state:
+            return {"jurisdiction": "An independent prescriber writes under the "
+                                    "facilities of one state — choose it, or "
+                                    "choose the organization they work for."}
+        if state.level != Jurisdiction.Level.STATE:
+            return {"jurisdiction": "Choose a state: a licence is registered "
+                                    "state-wide, not per local government."}
+        return {}
+
+    def _check_authority(self, seat, attrs):
+        # A government seat reads the cross-tenant rollups, which are refused
+        # inside an organization (IsPlatformReader), and narrowed to its
+        # jurisdiction and everything under it. Bound to a tenant, or with no
+        # patch, it would sign in to a platform that answers it nothing. The
+        # national tier is the whole country — the platform admin's view — so
+        # it is refused here and fails closed on the read side (User.has_patch).
+        errors = {}
+        if seat["tenant"] is not None:
+            errors["tenant"] = ("A government seat belongs to no organization — "
+                                "leave it unset.")
+        patch = seat["jurisdiction"]
+        if not patch:
+            errors["jurisdiction"] = ("Choose the jurisdiction this health "
+                                      "authority seat answers for.")
+        elif patch.level == Jurisdiction.Level.NATIONAL:
+            errors["jurisdiction"] = ("A health authority answers for a state "
+                                      "or a local government, not the country.")
+        return errors
+
+    def _check_insurer(self, seat, attrs):
+        # An insurer signs in to the organization whose claims they answer for
+        # and reads only their own scheme's rows (see insurer_scope). Either
+        # half missing is an account that can never read anything.
+        hmo, tenant = seat["hmo"], seat["tenant"]
+        if not hmo:
+            return {"hmo": "Choose the scheme this insurer seat answers for."}
+        if tenant is None:
+            return {"tenant": "Choose the organization whose claims this seat "
+                              "answers for."}
+        if hmo.tenant_id != tenant.id:
+            return {"hmo": "That scheme belongs to another organization."}
+        return {}
+
+    def _check_pharmacist_suffix(self, seat, attrs):
+        # Pharmacy staff sign in with the last 6 digits of their phone and
+        # nothing else, so two pharmacists sharing a suffix would lock each
+        # other out. Refuse the second one here, where an admin can still pick
+        # a different number. Only inside the tenant they sign in to: two
+        # pharmacists in different organizations never collide.
+        suffix = (seat["phone"] or "")[-6:]
+        clashes = visible_users(seat["tenant"]).filter(
+            role=Role.PHARMACIST, phone__endswith=suffix
+        )
+        if self.instance is not None:
+            clashes = clashes.exclude(pk=self.instance.pk)
+        if clashes.exists():
+            return {"phone": "Another pharmacy user's phone number ends in "
+                             f"{suffix}. Their sign-in codes would collide."}
+        return {}
+
+    _ROLE_CHECKS = dict.fromkeys(LICENSED_ROLES, (_check_licence, _check_independent))
+    _ROLE_CHECKS.update({
+        Role.GOVERNMENT: (_check_authority,),
+        Role.HMO: (_check_insurer,),
+        Role.PHARMACIST: (_check_pharmacist_suffix,),
+    })
+
+    # ----- persistence ------------------------------------------------------
+
+    def _stamp_terms(self, validated_data):
         # The flag is not a column; agreeing becomes a timestamp, once.
         agreed = validated_data.pop("accept_terms", False)
-        if agreed and not getattr(instance, "terms_accepted_at", None):
+        if agreed and not getattr(self.instance, "terms_accepted_at", None):
             validated_data["terms_accepted_at"] = timezone.now()
 
     def create(self, validated_data):
-        password = validated_data.pop("password", None)
         self._stamp_terms(validated_data)
-        user = User(**validated_data)
-        if password:
-            user.set_password(password)
-        else:
-            user.set_unusable_password()
-        user.save()
-        return user
+        return User.objects.create_user(**validated_data)
 
     def update(self, instance, validated_data):
         password = validated_data.pop("password", None)
-        self._stamp_terms(validated_data, instance)
+        self._stamp_terms(validated_data)
         user = super().update(instance, validated_data)
         if password:
             user.set_password(password)
@@ -432,8 +442,10 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class RegisterSerializer(serializers.ModelSerializer):
+    """Self-serve patient signup into one organization."""
+
     phone = phone_field()
-    password = serializers.CharField(write_only=True)
+    password = serializers.CharField(write_only=True, validators=[validate_password])
 
     class Meta:
         model = User
@@ -455,13 +467,11 @@ class RegisterSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        password = validated_data.pop("password")
-        # New users are bound to the request tenant; role is always public.
-        request = self.context["request"]
-        user = User(tenant=request.tenant, role=Role.PUBLIC, **validated_data)
-        user.set_password(password)
-        user.save()
-        return user
+        # Bound to the request tenant; role is always public.
+        return User.objects.create_user(
+            tenant=self.context["request"].tenant, role=Role.PUBLIC,
+            **validated_data,
+        )
 
 
 class OnboardingSerializer(serializers.Serializer):
@@ -503,14 +513,13 @@ class OnboardingSerializer(serializers.Serializer):
             jurisdiction=validated_data.get("jurisdiction"),
             subscription_status=Tenant.SubscriptionStatus.PENDING,
         )
-        user = User(
+        user = User.objects.create_user(
             phone=validated_data["phone"],
+            password=validated_data["password"],
             email=validated_data.get("email", ""),
             tenant=tenant,
             role=Role.TENANT_ADMIN,
         )
-        user.set_password(validated_data["password"])
-        user.save()
         self.instance = {"tenant": tenant, "user": user}
         return self.instance
 
