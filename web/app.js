@@ -2009,12 +2009,6 @@ function canWriteRes(slug, res) {
   return res.report ? Api.roleCanReport(ME.role) : Api.roleCanWrite(ME.role);
 }
 
-// The platform admin edits and deletes any seat but does not mint one here:
-// people join through signup and onboarding, and each module's own admin
-// staffs their portal. So no "+ New" and no /new route on the user lists.
-const canCreateRes = (slug, res) => canWriteRes(slug, res)
-  && !(isUserRes(slug) && ME?.role === 'super_admin');
-
 // Rows behind a list filter, fetched once per endpoint per session. A filter
 // picks from a list that is short and slow to change (branches, staff), so a
 // re-fetch on every keystroke would buy nothing.
@@ -2051,7 +2045,7 @@ async function viewList(slug) {
     const pages = count != null ? Math.max(1, Math.ceil(count / 25)) : 1;
     render(`
       <div class="page-head"><h2>${esc(res.title)}</h2>
-        ${(canCreateRes(slug, res) || res.createOnly) && !slug.startsWith('tenants') ? `<a class="btn" href="#/r/${slug}/new${res.query ? '?' + new URLSearchParams(res.query) : ''}">+ New</a>` : ''}
+        ${(canWrite || res.createOnly) && !slug.startsWith('tenants') ? `<a class="btn" href="#/r/${slug}/new${res.query ? '?' + new URLSearchParams(res.query) : ''}">+ New</a>` : ''}
         ${res.signUp && ME?.role === 'super_admin' ? '<a class="btn" href="#/scheme-register">+ Register scheme</a>' : ''}
       </div>
       ${slug === 'patients' && isIndependent()
@@ -2368,7 +2362,6 @@ async function viewForm(slug, id, query) {
   const res = RESOURCES[slug];
   if (!res) return errorBox(new Error('Unknown resource: ' + slug));
   if (!await ensureChrome()) return;
-  if (!id && !canCreateRes(slug, res) && !res.createOnly) { location.hash = `#/r/${slug}`; return; }
   spinner();
   try {
     const metaPath = id ? rdetail(slug, `${id}/`) : rpath(slug);

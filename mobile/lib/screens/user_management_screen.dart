@@ -99,18 +99,13 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      // The platform admin edits and deletes any seat but does not mint one
-      // here: people join through signup, and each module's own admin staffs
-      // their portal. Same rule as the web client (canCreateRes).
-      floatingActionButton: _me?['role'] == 'super_admin'
-          ? null
-          : FloatingActionButton.extended(
-              heroTag: 'fab_user',
-              onPressed: _create,
-              backgroundColor: EnhancedTheme.accentPurple,
-              icon: const Icon(Icons.person_add_alt),
-              label: const Text('New user'),
-            ),
+      floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'fab_user',
+        onPressed: _create,
+        backgroundColor: EnhancedTheme.accentPurple,
+        icon: const Icon(Icons.person_add_alt),
+        label: const Text('New user'),
+      ),
       body: _list(),
     );
   }
