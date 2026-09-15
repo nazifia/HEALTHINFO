@@ -270,6 +270,11 @@ class _UserFormState extends State<_UserForm> {
   /// seat this form lets move a user between organizations or delete one.
   bool get _isSuper => widget.me?['role'] == 'super_admin';
 
+  /// A licensed seat with no organization: private practice. The API needs
+  /// the state the licence is registered in, or it refuses the seat.
+  bool get _independent =>
+      _isSuper && _tenantId == null && _licensedRoles.contains(_role);
+
   /// Which module the writer works in, and so which fields this form needs.
   /// Null is the platform admin: no module, every role, every field.
   String? get _module => Api.moduleOf(widget.me);
@@ -290,7 +295,7 @@ class _UserFormState extends State<_UserForm> {
   void initState() {
     super.initState();
     if (_role == 'hmo') _loadHmos();
-    if (_role == 'government') _loadJurisdictions();
+    if (_role == 'government' || _independent) _loadJurisdictions();
     if (_asksTerms) _loadTerms();
   }
 
@@ -349,7 +354,8 @@ class _UserFormState extends State<_UserForm> {
           'license_number': _license.text.trim(),
           if (_asksTerms) 'accept_terms': _acceptTerms,
           if (_role == 'hmo') 'hmo': _hmoId,
-          if (_role == 'government') 'jurisdiction': _jurisdictionId,
+          if (_role == 'government' || _independent)
+            'jurisdiction': _jurisdictionId,
           if (_seatsOutsideFacility) 'is_admin': _isAdmin,
           if (_grantChoices.isNotEmpty) 'privileges': _privileges.toList(),
         });
@@ -365,7 +371,8 @@ class _UserFormState extends State<_UserForm> {
           'license_number': _license.text.trim(),
           if (_asksTerms) 'accept_terms': _acceptTerms,
           if (_role == 'hmo') 'hmo': _hmoId,
-          if (_role == 'government') 'jurisdiction': _jurisdictionId,
+          if (_role == 'government' || _independent)
+            'jurisdiction': _jurisdictionId,
           if (_seatsOutsideFacility) 'is_admin': _isAdmin,
           if (_grantChoices.isNotEmpty) 'privileges': _privileges.toList(),
         });
@@ -484,7 +491,10 @@ class _UserFormState extends State<_UserForm> {
                           value: t['id'] as int,
                           child: Text('${t['name']} · ${t['kind'] ?? ''}')),
                   ],
-                  onChanged: (v) => setState(() => _tenantId = v),
+                  onChanged: (v) {
+                    setState(() => _tenantId = v);
+                    if (_independent) _loadJurisdictions();
+                  },
                 ),
               ],
               SearchableDropdown<String>(
@@ -499,7 +509,7 @@ class _UserFormState extends State<_UserForm> {
                 onChanged: (v) {
                   setState(() => _role = v ?? _role);
                   if (_role == 'hmo') _loadHmos();
-                  if (_role == 'government') _loadJurisdictions();
+                  if (_role == 'government' || _independent) _loadJurisdictions();
                   if (_asksTerms) _loadTerms();
                 },
               ),
@@ -531,6 +541,25 @@ class _UserFormState extends State<_UserForm> {
                       DropdownMenuItem(
                           value: j['id'] as int,
                           child: Text("${j['name']} · ${j['level']}")),
+                  ],
+                  onChanged: (v) => setState(() => _jurisdictionId = v),
+                ),
+              if (_independent)
+                SearchableDropdown<int>(
+                  initialValue: _jurisdictions.any((j) =>
+                          j['id'] == _jurisdictionId && j['level'] == 'state')
+                      ? _jurisdictionId
+                      : null,
+                  decoration: const InputDecoration(
+                    labelText: 'State of licence',
+                    helperText: 'Private practice: they write under any '
+                        'facility in this state',
+                  ),
+                  items: [
+                    for (final j in _jurisdictions)
+                      if (j['level'] == 'state')
+                        DropdownMenuItem(
+                            value: j['id'] as int, child: Text('${j['name']}')),
                   ],
                   onChanged: (v) => setState(() => _jurisdictionId = v),
                 ),
