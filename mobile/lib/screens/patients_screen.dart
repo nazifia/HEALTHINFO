@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../api.dart';
+import '../config.dart';
 import '../main.dart';
 import '../nigeria.dart';
 import '../pharmacy.dart';
@@ -38,12 +39,19 @@ class PatientsScreen extends StatelessWidget {
       path: '/api/patients/',
       fabLabel: 'Register patient',
       emptyIcon: Icons.people_outline,
-      emptyTitle: independent ? 'Search for a patient' : 'No patients yet',
+      emptyTitle: independent
+          ? 'Search for a patient'
+          : tenantSlug.isEmpty ? 'No organization open' : 'No patients yet',
       emptyMessage: independent
           ? 'Type a name, hospital number or phone to open a patient you '
               'registered or wrote for under this facility, or tap '
               '"Register patient" to add one.'
-          : 'Tap "Register patient" to add the first one.',
+          : tenantSlug.isEmpty
+              // A platform admin at platform scope: patients belong to a
+              // facility, so the registry is empty until one is opened.
+              ? 'Open an organization first (Administration → Tenants → '
+                  'Open as) to see its patients.'
+              : 'Tap "Register patient" to add the first one.',
       savedMessage: 'Patient saved.',
       searchHint: 'Search name, hospital number or phone',
       // Server-side, so the counts in the header describe the filtered set.

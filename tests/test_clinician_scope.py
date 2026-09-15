@@ -46,11 +46,17 @@ def caseload(hospital):
 
 def test_clinician_lists_only_own_patients(caseload):
     hospital, doctor, _other, _admin, mine, theirs = caseload
-    body = _client(doctor, hospital).get("/api/patients/").json()
+    c = _client(doctor, hospital)
+    body = c.get("/api/patients/").json()
     names = {r["first_name"] for r in body["results"]}
     assert names == {"Ada"}
-    assert _client(doctor, hospital).get(f"/api/patients/{theirs.id}/").status_code == 404
-    assert _client(doctor, hospital).get(f"/api/patients/{mine.id}/").status_code == 200
+    assert c.get(f"/api/patients/{mine.id}/").status_code == 200
+    # The roster is theirs; the register is the facility's. A patient someone
+    # else registered is found by a search and opened by id — reception
+    # registers, the doctor consults — and the read is logged like any other.
+    assert c.get(f"/api/patients/{theirs.id}/").status_code == 200
+    found = c.get("/api/patients/", {"search": "Eze"}).json()
+    assert [r["id"] for r in found["results"]] == [theirs.id]
 
 
 def test_filing_a_report_puts_the_patient_on_your_list(caseload):

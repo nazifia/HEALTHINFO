@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../config.dart';
 import '../main.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/empty_state.dart';
@@ -556,7 +557,12 @@ class _PatientPickerState extends State<PatientPicker> {
         errorTitle: 'Could not load patients',
         emptyIcon: Icons.person_search_outlined,
         emptyTitle: 'No patients found',
-        emptyMessage: 'Register the patient first, or search again.',
+        // A platform admin at platform scope is in no facility, so the
+        // registry is empty by design: say so rather than "register one".
+        emptyMessage: tenantSlug.isEmpty
+            ? 'Open an organization first (Administration → Tenants → '
+                'Open as) — patients belong to a facility.'
+            : 'Register the patient first, or search again.',
         label: (r) => '${r['full_name']}',
         sub: (r) => [
           '${r['hospital_number'] ?? ''}',

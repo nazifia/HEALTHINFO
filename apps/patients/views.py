@@ -78,9 +78,8 @@ class PatientViewSet(viewsets.ModelViewSet):
     serializer_class = PatientSerializer
     permission_classes = [IsTenantMember, IsClinicalStaff]
     # An independent prescriber reaches this one: you cannot prescribe to a
-    # patient you cannot register or find. They are a clinician, so
-    # visible_patients narrows them to their own caseload the same way it
-    # narrows the facility's own doctors, and every read is still logged.
+    # patient you cannot register or find. visible_patients narrows them to
+    # their own caseload (see get_queryset), and every read is still logged.
     independent_ok = True
     filterset_fields = ("sex", "status", "region", "blood_group", "genotype",
                         "patient_type")
@@ -92,16 +91,21 @@ class PatientViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         # Re-run the tenant-scoped manager per request (frozen-queryset gotcha).
-        qs = visible_patients(self.request.user).prefetch_related(
-            "chronic_conditions"
-        )
-        # An independent prescriber gets no roster at all: the register opens
-        # one patient at a time, to whoever types a name or number. By id and
-        # by search they see their own caseload; an unsearched list is empty.
-        if (self.action == "list" and self.request.user.is_independent
-                and not self.request.query_params.get("search", "").strip()):
-            qs = qs.none()
-        return qs
+        user = self.request.user
+        searched = bool(self.request.query_params.get("search", "").strip())
+        roster = self.action == "list" and not searched
+        # The caseload (visible_patients) is a roster, not a fence. Reception
+        # registers the patient and the doctor consults them, so the file
+        # cannot be on the doctor's list before they open it: a search — the
+        # name or number of the person in front of them — and a read by id
+        # reach anyone on the facility's register, and every read is logged.
+        # An independent prescriber is a visitor, not staff: they stay inside
+        # their own caseload whatever they type, and get no roster at all.
+        if user.is_independent:
+            qs = Patient.objects.none() if roster else visible_patients(user)
+        else:
+            qs = visible_patients(user) if roster else Patient.objects.all()
+        return qs.prefetch_related("chronic_conditions")
 
     def filter_queryset(self, queryset):
         qs = super().filter_queryset(queryset)
