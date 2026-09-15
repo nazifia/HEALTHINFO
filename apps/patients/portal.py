@@ -108,7 +108,9 @@ class PatientPortalViewSet(viewsets.ViewSet):
                 "This account is not linked to a patient record. Ask the "
                 "facility that registered you to link it."
             )
-        return patient
+        # Linked to a duplicate that was since merged away: the records are
+        # on the survivor now (see Patient.merge_from).
+        return patient.merged_into or patient
 
     def _log(self, patient, action_name, count):
         # Tenant stamped from the patient, not from the request: a portal

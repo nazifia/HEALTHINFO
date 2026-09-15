@@ -106,7 +106,7 @@ class PatientSerializer(NamedRelationsMixin, serializers.ModelSerializer):
             first_name__iexact=(self._current(attrs, "first_name") or "").strip(),
             last_name__iexact=(self._current(attrs, "last_name") or "").strip(),
             date_of_birth=dob,
-        )
+        ).exclude(status=Patient.Status.MERGED)  # name the record that survived
         if self.instance is not None:
             rows = rows.exclude(pk=self.instance.pk)
         return rows.first()

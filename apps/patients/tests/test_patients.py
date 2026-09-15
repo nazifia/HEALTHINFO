@@ -640,3 +640,78 @@ def test_a_lookup_can_ask_for_a_short_page(db_clean):
     body = _client(doctor, a).get("/api/patients/",
                                   {"search": "Obi", "page_size": 5}).json()
     assert body["count"] == 7 and len(body["results"]) == 5
+
+
+def test_a_merged_number_resolves_to_the_survivor(db_clean):
+    """The duplicate's card is still in the patient's hand: searching its
+    number, or a pharmacy asking by it, answers with the surviving record."""
+    from apps.patients.models import patients_by_number
+
+    a = Tenant.objects.create(name="A", slug="a")
+    keep = Patient.objects.create(tenant=a, first_name="Ada", last_name="Obi",
+                                  hospital_number="MRN-A")
+    dupe = Patient.objects.create(tenant=a, first_name="Ada", last_name="Obi",
+                                  hospital_number="MRN-B", phone="08031234567")
+    keep.merge_from(dupe)
+    doctor = User.objects.create_user(phone="08030000037", password="x",
+                                      tenant=a, role=Role.DOCTOR)
+    for typed in ("MRN-B", "+234 803 123 4567"):
+        rows = _client(doctor, a).get("/api/patients/", {"search": typed}).json()
+        assert [r["id"] for r in rows["results"]] == [keep.pk], typed
+        assert keep.pk in {p.pk for p in patients_by_number(typed)}, typed
+    # Asked for by status, the tombstone itself is still listed.
+    rows = _client(doctor, a).get("/api/patients/",
+                                  {"search": "MRN-B", "status": "merged"}).json()
+    assert [r["id"] for r in rows["results"]] == [dupe.pk]
+
+
+def test_merge_hands_the_portal_login_to_the_survivor(db_clean):
+    a = Tenant.objects.create(name="A", slug="a")
+    person = User.objects.create_user(phone="08030000038", password="x",
+                                      tenant=a, role=Role.PUBLIC)
+    keep = Patient.objects.create(tenant=a, first_name="Ada", last_name="Obi",
+                                  hospital_number="MRN-A")
+    dupe = Patient.objects.create(tenant=a, first_name="Ada", last_name="Obi",
+                                  hospital_number="MRN-B", user=person)
+    keep.merge_from(dupe)
+    keep.refresh_from_db()
+    dupe.refresh_from_db()
+    assert keep.user_id == person.pk and dupe.user_id is None
+    # A login the survivor already had stays; the duplicate's still reads the
+    # survivor's record through the tombstone.
+    other = User.objects.create_user(phone="08030000039", password="x",
+                                     tenant=a, role=Role.PUBLIC)
+    dupe2 = Patient.objects.create(tenant=a, first_name="Ada", last_name="Obi",
+                                   hospital_number="MRN-C", user=other)
+    keep.merge_from(dupe2)
+    c = APIClient()
+    c.force_authenticate(user=other)
+    assert c.get("/api/portal/me/").json()["hospital_number"] == "MRN-A"
+
+
+def test_a_chain_of_merges_stays_one_hop(db_clean):
+    """A into B, then B into C: A's card still finds C, and nobody can merge
+    into a tombstone."""
+    a = Tenant.objects.create(name="A", slug="a")
+    first = Patient.objects.create(tenant=a, first_name="Ada", last_name="Obi",
+                                   hospital_number="MRN-A")
+    second = Patient.objects.create(tenant=a, first_name="Ada", last_name="Obi",
+                                    hospital_number="MRN-B")
+    third = Patient.objects.create(tenant=a, first_name="Ada", last_name="Obi",
+                                   hospital_number="MRN-C")
+    second.merge_from(first)
+    third.merge_from(second)
+    first.refresh_from_db()
+    assert first.merged_into_id == third.pk
+    doctor = User.objects.create_user(phone="08030000040", password="x",
+                                      tenant=a, role=Role.DOCTOR)
+    rows = _client(doctor, a).get("/api/patients/", {"search": "MRN-A"}).json()
+    assert [r["id"] for r in rows["results"]] == [third.pk]
+    admin = User.objects.create_user(phone="08030000041", password="x",
+                                     tenant=a, role=Role.TENANT_ADMIN)
+    fresh = Patient.objects.create(tenant=a, first_name="Ada", last_name="Obi",
+                                   hospital_number="MRN-D")
+    r = _client(admin, a).post(f"/api/patients/{second.pk}/merge/",
+                               {"source": fresh.pk}, format="json")
+    assert r.status_code == 400, r.content
+    assert "survived" in str(r.json()), r.content

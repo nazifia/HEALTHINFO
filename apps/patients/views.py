@@ -95,10 +95,6 @@ class PatientViewSet(viewsets.ModelViewSet):
         qs = visible_patients(self.request.user).prefetch_related(
             "chronic_conditions"
         )
-        # Merged duplicates are tombstones: still reachable by id or by asking
-        # for ?status=merged, but out of the way of everyday lists and searches.
-        if self.action == "list" and "status" not in self.request.query_params:
-            qs = qs.exclude(status=Patient.Status.MERGED)
         # An independent prescriber gets no roster at all: the register opens
         # one patient at a time, to whoever types a name or number. By id and
         # by search they see their own caseload; an unsearched list is empty.
@@ -106,6 +102,20 @@ class PatientViewSet(viewsets.ModelViewSet):
                 and not self.request.query_params.get("search", "").strip()):
             qs = qs.none()
         return qs
+
+    def filter_queryset(self, queryset):
+        qs = super().filter_queryset(queryset)
+        if self.action != "list" or "status" in self.request.query_params:
+            return qs
+        # Merged duplicates are tombstones: still reachable by id or by asking
+        # for ?status=merged, but out of the way of everyday lists. A search
+        # that lands on one — the number on an old card — answers with the
+        # record it was merged into instead.
+        if self.request.query_params.get("search", "").strip():
+            qs = qs | queryset.filter(
+                pk__in=qs.filter(merged_into__isnull=False).values("merged_into")
+            )
+        return qs.exclude(status=Patient.Status.MERGED)
 
     def perform_create(self, serializer):
         serializer.save(registered_by=self.request.user)
@@ -172,6 +182,11 @@ class PatientViewSet(viewsets.ModelViewSet):
             raise ValidationError({"source": "No such patient in this tenant."})
         if source.pk == target.pk:
             raise ValidationError({"source": "A patient can't merge into itself."})
+        if target.merged_into_id or source.merged_into_id:
+            raise ValidationError(
+                {"source": "One of these records was already merged away — "
+                           "merge into the record that survived."}
+            )
         moved = target.merge_from(source)
         self._log(PatientAccessLog.Action.MERGE, patient=target,
                   count=sum(moved.values()),

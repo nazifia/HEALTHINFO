@@ -72,7 +72,21 @@ def patients_by_number(number):
     tail = number_search_term(typed)
     if len(tail) >= 10:  # a whole mobile number, however it was written
         match |= Q(phone__endswith=tail)
-    return Patient.all_objects.filter(match)
+    return with_survivors(Patient.all_objects.filter(match))
+
+
+def with_survivors(patients):
+    """``patients`` plus the record each merged one was absorbed into.
+
+    A merged duplicate keeps its hospital number so the card in the patient's
+    hand still resolves — but its records now sit on the survivor, so a lookup
+    that lands on the tombstone has to answer with the survivor too.
+
+    One hop is the whole way: merge_from flattens chains, so a tombstone
+    always points at a live record.
+    """
+    survivors = patients.filter(merged_into__isnull=False).values("merged_into")
+    return Patient.all_objects.filter(Q(pk__in=patients) | Q(pk__in=survivors))
 
 
 class Patient(TenantOwnedModel):
@@ -314,12 +328,20 @@ class Patient(TenantOwnedModel):
         """
         if source.pk == self.pk:
             raise ValueError("A patient cannot be merged into itself")
+        if self.merged_into_id or source.merged_into_id:
+            raise ValueError("A merged record cannot take part in a merge")
         # Fields the surviving record keeps whatever the duplicate says: its own
         # identity, its own record state, its own audit stamps.
         keep = {"id", "tenant", "hospital_number", "status", "merged_into",
-                "created_at", "updated_at"}
+                "created_at", "updated_at", "user"}
         moved = {}
         with transaction.atomic():
+            # The portal login follows the records, and it has to let go of the
+            # duplicate before the survivor can take it: an account links to
+            # one record only (OneToOne).
+            if source.user_id and not self.user_id:
+                self.user_id, source.user_id = source.user_id, None
+                source.save(update_fields=["user", "updated_at"])
             for rel in self._clinical_relations():
                 rows = rel.related_model._base_manager.filter(
                     **{rel.field.name: source}
@@ -337,6 +359,9 @@ class Patient(TenantOwnedModel):
             source.status = self.Status.MERGED
             source.merged_into = self
             source.save(update_fields=["status", "merged_into", "updated_at"])
+            # Tombstones the duplicate had collected point here now, so a
+            # number on any old card resolves in one hop (see with_survivors).
+            Patient.all_objects.filter(merged_into=source).update(merged_into=self)
         return moved
 
     def _also_save(self, kwargs, field):

@@ -32,6 +32,7 @@ from apps.patients.models import (
     PatientAccessLog,
     number_search_term,
     patients_by_number,
+    with_survivors,
 )
 from config.responses import success
 
@@ -219,9 +220,9 @@ class PrescriptionViewSet(PharmacyViewSet):
         # The registry is read to match the number, never returned: this
         # endpoint is the pharmacy's, and identifying data is the patient
         # API's (which logs every read of it).
-        here = Patient.objects.filter(
+        here = with_survivors(Patient.objects.filter(
             Q(phone__contains=term) | Q(hospital_number__contains=term)
-        )
+        ))
         scripts = self.get_queryset().filter(
             Q(patient__in=here)
             | Q(customer__phone__contains=term)
