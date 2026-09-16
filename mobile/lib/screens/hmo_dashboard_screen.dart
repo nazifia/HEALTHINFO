@@ -6,6 +6,7 @@ import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/skeleton_cards.dart';
 import '../shared/widgets/stats_kit.dart';
+import '../shared/widgets/bar_chart.dart';
 import '../shared/live_refresh.dart';
 
 /// The pharmacy's side of the insurance desk: what the schemes have been
@@ -41,15 +42,15 @@ Map<String, String> hmoRange(DateTimeRange? range) => range == null
 /// was claimed, which is not the same ranking — a scheme can be the largest
 /// biller and owe nothing.
 List<({String label, num value, Color color})> owedByScheme(
-        List<Map<String, dynamic>> schemes) =>
-    <({String label, num value, Color color})>[
-      for (final h in schemes)
-        (
-          label: '${h['name']}',
-          value: num.tryParse('${h['outstanding']}') ?? 0,
-          color: EnhancedTheme.infoBlue,
-        ),
-    ]..sort((a, b) => b.value.compareTo(a.value));
+  List<Map<String, dynamic>> schemes,
+) => <({String label, num value, Color color})>[
+  for (final (i, h) in schemes.indexed)
+    (
+      label: '${h['name']}',
+      value: num.tryParse('${h['outstanding']}') ?? 0,
+      color: MiniBarChart.palette[i % MiniBarChart.palette.length],
+    ),
+]..sort((a, b) => b.value.compareTo(a.value));
 
 class _HmoData {
   final Map<String, dynamic> claims;
@@ -84,27 +85,38 @@ class _HmoDashboardScreenState extends State<HmoDashboardScreen>
   Future<_HmoData> _load() async {
     // One failed panel is not a failed screen, same as the counter: a call that
     // errors comes back empty and its tiles read "—".
-    Future<Map<String, dynamic>> obj(String path,
-            [Map<String, String>? query]) async =>
-        api
-            .get(path, query)
-            .then((r) => (r as Map).cast<String, dynamic>())
-            .catchError((_) => <String, dynamic>{});
+    Future<Map<String, dynamic>> obj(
+      String path, [
+      Map<String, String>? query,
+    ]) async => api
+        .get(path, query)
+        .then((r) => (r as Map).cast<String, dynamic>())
+        .catchError((_) => <String, dynamic>{});
     Future<List<Map<String, dynamic>>> rows(
-            String path, Map<String, String> query) async =>
-        api
-            .getList(path, query)
-            .then((r) => r.cast<Map<String, dynamic>>())
-            .catchError((_) => <Map<String, dynamic>>[]);
+      String path,
+      Map<String, String> query,
+    ) async => api
+        .getList(path, query)
+        .then((r) => r.cast<Map<String, dynamic>>())
+        .catchError((_) => <Map<String, dynamic>>[]);
 
     final results = await Future.wait([
       obj('/api/pharmacy/claims/summary/', hmoRange(_range)),
-      rows('/api/pharmacy/pre-authorizations/',
-          {'status': 'requested', 'ordering': '-created_at', 'page_size': '8'}),
-      rows('/api/pharmacy/claims/',
-          {'status': 'draft', 'ordering': '-created_at', 'page_size': '8'}),
-      rows('/api/pharmacy/dependents/',
-          {'status': 'pending', 'ordering': '-created_at', 'page_size': '8'}),
+      rows('/api/pharmacy/pre-authorizations/', {
+        'status': 'requested',
+        'ordering': '-created_at',
+        'page_size': '8',
+      }),
+      rows('/api/pharmacy/claims/', {
+        'status': 'draft',
+        'ordering': '-created_at',
+        'page_size': '8',
+      }),
+      rows('/api/pharmacy/dependents/', {
+        'status': 'pending',
+        'ordering': '-created_at',
+        'page_size': '8',
+      }),
     ]);
     return _HmoData(
       results[0] as Map<String, dynamic>,
@@ -115,8 +127,8 @@ class _HmoDashboardScreenState extends State<HmoDashboardScreen>
   }
 
   void _reload() => setState(() {
-        _future = _load();
-      });
+    _future = _load();
+  });
 
   Future<void> _pickRange() async {
     final now = DateTime.now();
@@ -135,7 +147,11 @@ class _HmoDashboardScreenState extends State<HmoDashboardScreen>
 
   String _rowTitle(Map row) {
     for (final k in [
-      'reference', 'claim_number', 'full_name', 'patient_name', 'hmo_name'
+      'reference',
+      'claim_number',
+      'full_name',
+      'patient_name',
+      'hmo_name',
     ]) {
       final v = row[k];
       if (v != null && '$v'.trim().isNotEmpty) return '$v';
@@ -145,8 +161,9 @@ class _HmoDashboardScreenState extends State<HmoDashboardScreen>
 
   String _rowSubtitle(Map row) {
     final at = '${row['created_at'] ?? ''}';
-    final when =
-        at.length >= 16 ? at.substring(0, 16).replaceFirst('T', ' ') : at;
+    final when = at.length >= 16
+        ? at.substring(0, 16).replaceFirst('T', ' ')
+        : at;
     final scheme = '${row['hmo_name'] ?? ''}';
     return [scheme, when].where((s) => s.isNotEmpty).join(' · ');
   }
@@ -170,24 +187,31 @@ class _HmoDashboardScreenState extends State<HmoDashboardScreen>
           ? null
           : TextButton(
               onPressed: () => widget.onOpen!(label),
-              child: const Text('Open')),
+              child: const Text('Open'),
+            ),
       child: rows.isEmpty
-          ? Text(empty,
-              style: TextStyle(color: context.hintColor, fontSize: 13))
-          : Column(children: [
-              for (final r in rows)
-                ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(_rowTitle(r), overflow: TextOverflow.ellipsis),
-                  subtitle: Text(_rowSubtitle(r)),
-                  trailing: Text(trailing(r),
-                      style: const TextStyle(fontWeight: FontWeight.w700)),
-                  onTap: widget.onOpen == null
-                      ? null
-                      : () => widget.onOpen!(label),
-                ),
-            ]),
+          ? Text(
+              empty,
+              style: TextStyle(color: context.hintColor, fontSize: 13),
+            )
+          : Column(
+              children: [
+                for (final r in rows)
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(_rowTitle(r), overflow: TextOverflow.ellipsis),
+                    subtitle: Text(_rowSubtitle(r)),
+                    trailing: Text(
+                      trailing(r),
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    onTap: widget.onOpen == null
+                        ? null
+                        : () => widget.onOpen!(label),
+                  ),
+              ],
+            ),
     );
   }
 
@@ -205,21 +229,26 @@ class _HmoDashboardScreenState extends State<HmoDashboardScreen>
       child: FutureBuilder<_HmoData>(
         future: _future,
         builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
+          if (snap.connectionState == ConnectionState.waiting &&
+              !snap.hasData) {
             return const SkeletonCards(cards: 3, statRow: true);
           }
           if (snap.hasError) {
-            return ListView(children: [
-              const SizedBox(height: 80),
-              EmptyState(
-                icon: Icons.error_outline,
-                title: 'Could not load the HMO desk',
-                message: '${snap.error}',
-                color: EnhancedTheme.errorRed,
-                action:
-                    TextButton(onPressed: _reload, child: const Text('Retry')),
-              ),
-            ]);
+            return ListView(
+              children: [
+                const SizedBox(height: 80),
+                EmptyState(
+                  icon: Icons.error_outline,
+                  title: 'Could not load the HMO desk',
+                  message: '${snap.error}',
+                  color: EnhancedTheme.errorRed,
+                  action: TextButton(
+                    onPressed: _reload,
+                    child: const Text('Retry'),
+                  ),
+                ),
+              ],
+            );
           }
           final d = snap.data!;
           final schemes = ((d.claims['by_hmo'] as List?) ?? [])
@@ -254,43 +283,52 @@ class _HmoDashboardScreenState extends State<HmoDashboardScreen>
                   ),
                 ),
               // The two queues lead: they are work waiting, not figures.
-              KpiRow(tiles: [
-                KpiTile(
+              KpiRow(
+                tiles: [
+                  KpiTile(
                     icon: Icons.verified_user_outlined,
                     label: 'Awaiting authorisation',
                     value: units(d.waiting.length),
-                    color: EnhancedTheme.accentOrange),
-                KpiTile(
+                    color: EnhancedTheme.accentOrange,
+                  ),
+                  KpiTile(
                     icon: Icons.drafts_outlined,
                     label: 'Claims to submit',
                     value: units(d.drafts.length),
-                    color: EnhancedTheme.errorRed),
-                KpiTile(
+                    color: EnhancedTheme.errorRed,
+                  ),
+                  KpiTile(
                     icon: Icons.family_restroom_outlined,
                     label: 'Dependents to approve',
                     value: units(d.dependents.length),
-                    color: EnhancedTheme.accentPurple),
-                KpiTile(
+                    color: EnhancedTheme.accentPurple,
+                  ),
+                  KpiTile(
                     icon: Icons.health_and_safety_outlined,
                     label: 'Schemes billed',
                     value: units(schemes.length),
-                    color: EnhancedTheme.primaryTeal),
-                KpiTile(
+                    color: EnhancedTheme.primaryTeal,
+                  ),
+                  KpiTile(
                     icon: Icons.request_quote_outlined,
                     label: 'Claimed',
                     value: money(d.claims['claimed'] ?? 0),
-                    color: EnhancedTheme.accentCyan),
-                KpiTile(
+                    color: EnhancedTheme.accentCyan,
+                  ),
+                  KpiTile(
                     icon: Icons.payments_outlined,
                     label: 'Paid',
                     value: money(d.claims['paid'] ?? 0),
-                    color: EnhancedTheme.successGreen),
-                KpiTile(
+                    color: EnhancedTheme.successGreen,
+                  ),
+                  KpiTile(
                     icon: Icons.hourglass_bottom,
                     label: 'Owed by insurers',
                     value: money(d.claims['outstanding'] ?? 0),
-                    color: EnhancedTheme.infoBlue),
-              ]),
+                    color: EnhancedTheme.infoBlue,
+                  ),
+                ],
+              ),
               const SizedBox(height: 12),
               _queue(
                 icon: Icons.verified_user_outlined,
@@ -314,7 +352,8 @@ class _HmoDashboardScreenState extends State<HmoDashboardScreen>
               // Schemes screen's Dependents tab.
               _queue(
                 icon: Icons.family_restroom_outlined,
-                heading: 'Dependents awaiting approval (${d.dependents.length})',
+                heading:
+                    'Dependents awaiting approval (${d.dependents.length})',
                 label: 'Schemes',
                 empty: 'Nobody waiting on an answer.',
                 color: EnhancedTheme.accentPurple,
@@ -329,11 +368,16 @@ class _HmoDashboardScreenState extends State<HmoDashboardScreen>
                     ? null
                     : TextButton(
                         onPressed: () => widget.onOpen!('Schemes'),
-                        child: const Text('Open')),
+                        child: const Text('Open'),
+                      ),
                 child: bars.isEmpty
-                    ? Text('No claims in this period.',
-                        style:
-                            TextStyle(color: context.hintColor, fontSize: 13))
+                    ? Text(
+                        'No claims in this period.',
+                        style: TextStyle(
+                          color: context.hintColor,
+                          fontSize: 13,
+                        ),
+                      )
                     : ComparisonBars(
                         rows: bars,
                         onTap: widget.onOpen == null

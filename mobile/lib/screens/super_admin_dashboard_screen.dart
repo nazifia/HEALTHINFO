@@ -6,6 +6,7 @@ import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/skeleton_cards.dart';
 import '../shared/widgets/stats_kit.dart';
+import '../shared/widgets/bar_chart.dart';
 import '../shared/stats_rows.dart';
 import '../shared/live_refresh.dart';
 
@@ -21,9 +22,12 @@ class SuperAdminDashboardScreen extends StatefulWidget {
       _SuperAdminDashboardScreenState();
 }
 
-class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> with LiveRefresh {
+class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen>
+    with LiveRefresh {
   @override
-  void refresh() => setState(() { _future = _load(); });
+  void refresh() => setState(() {
+    _future = _load();
+  });
 
   late Future<Map<String, dynamic>> _future;
   DateTimeRange? _range;
@@ -68,34 +72,43 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> w
     return RefreshIndicator(
       onRefresh: () async {
         final f = _load();
-        setState(() { _future = f; });
+        setState(() {
+          _future = f;
+        });
         await f;
       },
       child: FutureBuilder<Map<String, dynamic>>(
         future: _future,
         builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
+          if (snap.connectionState == ConnectionState.waiting &&
+              !snap.hasData) {
             return const SkeletonCards(cards: 4, statRow: true);
           }
           if (snap.hasError) {
-            return ListView(children: [
-              const SizedBox(height: 80),
-              EmptyState(
-                icon: Icons.error_outline,
-                title: 'Could not load platform dashboard',
-                message: '${snap.error}',
-                color: EnhancedTheme.errorRed,
-              ),
-            ]);
+            return ListView(
+              children: [
+                const SizedBox(height: 80),
+                EmptyState(
+                  icon: Icons.error_outline,
+                  title: 'Could not load platform dashboard',
+                  message: '${snap.error}',
+                  color: EnhancedTheme.errorRed,
+                ),
+              ],
+            );
           }
           final d = snap.data!;
-          final trend =
-              ((d['search_trend'] as List?) ?? []).cast<Map<String, dynamic>>();
+          final trend = ((d['search_trend'] as List?) ?? [])
+              .cast<Map<String, dynamic>>();
           final byTenant = ((d['searches_by_tenant'] as List?) ?? [])
               .cast<Map<String, dynamic>>();
-          final adr = (d['adverse_reactions'] as Map?)?.cast<String, dynamic>() ?? const {};
-          final searchTotal =
-              trend.fold<num>(0, (a, r) => a + ((r['count'] as num?) ?? 0));
+          final adr =
+              (d['adverse_reactions'] as Map?)?.cast<String, dynamic>() ??
+              const {};
+          final searchTotal = trend.fold<num>(
+            0,
+            (a, r) => a + ((r['count'] as num?) ?? 0),
+          );
           final diagnoses = (d['top_diagnoses'] as List?) ?? [];
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
@@ -113,44 +126,48 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> w
                   tooltip: 'Date range',
                 ),
               ),
-              KpiStrip(tiles: [
-                KpiChip(
-                  icon: Icons.apartment_outlined,
-                  label: 'Tenants',
-                  value: '${d['total_tenants'] ?? 0}',
-                  color: EnhancedTheme.accentPurple,
-                ),
-                KpiChip(
-                  icon: Icons.group_outlined,
-                  label: 'Total Users',
-                  value: '${d['total_users'] ?? 0}',
-                  color: EnhancedTheme.primaryTeal,
-                ),
-                KpiChip(
-                  icon: Icons.search,
-                  label: 'Searches',
-                  value: '${d['total_searches'] ?? 0}',
-                  color: EnhancedTheme.accentCyan,
-                ),
-                KpiChip(
-                  icon: Icons.medication_liquid_outlined,
-                  label: 'Adverse Reactions',
-                  value: '${adr['total'] ?? 0}',
-                  color: EnhancedTheme.errorRed,
-                ),
-                KpiChip(
-                  icon: Icons.show_chart,
-                  label: 'Search Vol 90d',
-                  value: '$searchTotal',
-                  color: EnhancedTheme.accentOrange,
-                ),
-              ]),
+              KpiStrip(
+                tiles: [
+                  KpiChip(
+                    icon: Icons.apartment_outlined,
+                    label: 'Tenants',
+                    value: '${d['total_tenants'] ?? 0}',
+                    color: EnhancedTheme.accentPurple,
+                  ),
+                  KpiChip(
+                    icon: Icons.group_outlined,
+                    label: 'Total Users',
+                    value: '${d['total_users'] ?? 0}',
+                    color: EnhancedTheme.primaryTeal,
+                  ),
+                  KpiChip(
+                    icon: Icons.search,
+                    label: 'Searches',
+                    value: '${d['total_searches'] ?? 0}',
+                    color: EnhancedTheme.accentCyan,
+                  ),
+                  KpiChip(
+                    icon: Icons.medication_liquid_outlined,
+                    label: 'Adverse Reactions',
+                    value: '${adr['total'] ?? 0}',
+                    color: EnhancedTheme.errorRed,
+                  ),
+                  KpiChip(
+                    icon: Icons.show_chart,
+                    label: 'Search Vol 90d',
+                    value: '$searchTotal',
+                    color: EnhancedTheme.accentOrange,
+                  ),
+                ],
+              ),
               const SizedBox(height: 14),
               PanelCard(
                 title: 'Search Volume (90d, daily)',
                 accent: EnhancedTheme.accentPurple,
-                trailing: Text('$searchTotal total',
-                    style: TextStyle(color: context.hintColor, fontSize: 12)),
+                trailing: Text(
+                  '$searchTotal total',
+                  style: TextStyle(color: context.hintColor, fontSize: 12),
+                ),
                 child: _Trend(points: trend),
               ),
               PanelCard(
@@ -158,11 +175,12 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> w
                 accent: EnhancedTheme.primaryTeal,
                 child: ComparisonBars(
                   rows: [
-                    for (final r in byTenant.take(12))
+                    for (final (i, r) in byTenant.take(12).indexed)
                       (
                         label: '${r['tenant__name'] ?? '—'}',
                         value: (r['count'] as num?) ?? 0,
-                        color: EnhancedTheme.primaryTeal,
+                        color: MiniBarChart
+                            .palette[i % MiniBarChart.palette.length],
                       ),
                   ],
                 ),
@@ -172,13 +190,16 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> w
                 accent: EnhancedTheme.errorRed,
                 child: ComparisonBars(
                   rows: [
-                    for (final r in ((adr['by_tenant'] as List?) ?? [])
-                        .cast<Map<String, dynamic>>()
-                        .take(12))
+                    for (final (i, r)
+                        in ((adr['by_tenant'] as List?) ?? [])
+                            .cast<Map<String, dynamic>>()
+                            .take(12)
+                            .indexed)
                       (
                         label: '${r['tenant__name'] ?? '—'}',
                         value: (r['count'] as num?) ?? 0,
-                        color: EnhancedTheme.errorRed,
+                        color: MiniBarChart
+                            .palette[i % MiniBarChart.palette.length],
                       ),
                   ],
                 ),
@@ -197,11 +218,12 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> w
                     _diagnosis = _diagnosis == name ? null : name;
                   }),
                   rows: [
-                    for (final r in diagnosisRows(diagnoses))
+                    for (final (i, r) in diagnosisRows(diagnoses).indexed)
                       (
                         label: '${r['diagnosis']}',
                         value: (r['count'] as num?) ?? 0,
-                        color: EnhancedTheme.accentCyan,
+                        color: MiniBarChart
+                            .palette[i % MiniBarChart.palette.length],
                       ),
                   ],
                 ),
@@ -219,12 +241,14 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> w
                       ),
                 child: ComparisonBars(
                   rows: [
-                    for (final r in diagnosisPairRows(
-                        pairsFor(d['by_diagnosis_medication'], _diagnosis)))
+                    for (final (i, r) in diagnosisPairRows(
+                      pairsFor(d['by_diagnosis_medication'], _diagnosis),
+                    ).indexed)
                       (
                         label: '${r['pair']}',
                         value: (r['count'] as num?) ?? 0,
-                        color: EnhancedTheme.successGreen,
+                        color: MiniBarChart
+                            .palette[i % MiniBarChart.palette.length],
                       ),
                   ],
                 ),
@@ -234,13 +258,16 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> w
                 accent: EnhancedTheme.accentOrange,
                 child: ComparisonBars(
                   rows: [
-                    for (final r in ((d['content_gaps'] as List?) ?? [])
-                        .cast<Map<String, dynamic>>()
-                        .take(10))
+                    for (final (i, r)
+                        in ((d['content_gaps'] as List?) ?? [])
+                            .cast<Map<String, dynamic>>()
+                            .take(10)
+                            .indexed)
                       (
                         label: '${r['query'] ?? '—'}',
                         value: (r['count'] as num?) ?? 0,
-                        color: EnhancedTheme.accentOrange,
+                        color: MiniBarChart
+                            .palette[i % MiniBarChart.palette.length],
                       ),
                   ],
                 ),
@@ -261,8 +288,10 @@ class _Trend extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (points.isEmpty) {
-      return Text('No data yet.',
-          style: TextStyle(color: context.hintColor, fontSize: 13));
+      return Text(
+        'No data yet.',
+        style: TextStyle(color: context.hintColor, fontSize: 13),
+      );
     }
     final spots = [
       for (var i = 0; i < points.length; i++)
@@ -271,27 +300,29 @@ class _Trend extends StatelessWidget {
     final maxY = spots.map((s) => s.y).reduce((a, b) => a > b ? a : b);
     return SizedBox(
       height: 160,
-      child: LineChart(LineChartData(
-        minY: 0,
-        maxY: (maxY <= 0 ? 1 : maxY) * 1.2,
-        gridData: const FlGridData(show: false),
-        borderData: FlBorderData(show: false),
-        titlesData: const FlTitlesData(show: false),
-        lineTouchData: const LineTouchData(enabled: false),
-        lineBarsData: [
-          LineChartBarData(
-            spots: spots,
-            isCurved: true,
-            color: EnhancedTheme.accentPurple,
-            barWidth: 2.5,
-            dotData: FlDotData(show: spots.length == 1),
-            belowBarData: BarAreaData(
-              show: true,
-              color: EnhancedTheme.accentPurple.withValues(alpha: 0.12),
+      child: LineChart(
+        LineChartData(
+          minY: 0,
+          maxY: (maxY <= 0 ? 1 : maxY) * 1.2,
+          gridData: const FlGridData(show: false),
+          borderData: FlBorderData(show: false),
+          titlesData: const FlTitlesData(show: false),
+          lineTouchData: const LineTouchData(enabled: false),
+          lineBarsData: [
+            LineChartBarData(
+              spots: spots,
+              isCurved: true,
+              color: EnhancedTheme.accentPurple,
+              barWidth: 2.5,
+              dotData: FlDotData(show: spots.length == 1),
+              belowBarData: BarAreaData(
+                show: true,
+                color: EnhancedTheme.accentPurple.withValues(alpha: 0.12),
+              ),
             ),
-          ),
-        ],
-      )),
+          ],
+        ),
+      ),
     );
   }
 }

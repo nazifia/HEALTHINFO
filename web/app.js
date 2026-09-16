@@ -1234,8 +1234,10 @@ function legendHtml(numKeys) {
 
 const tip = (labelText, entries) => esc(JSON.stringify({ l: labelText, e: entries }));
 
-/* Horizontal bars: one row per category; single series = one hue (magnitude),
- * 2–4 series = grouped with the categorical slots. Values at bar tips. */
+/* Horizontal bars: one row per category; single series = one accent per
+ * category (the same a1–a6 cycle the tiles use), 2–4 series = grouped with
+ * the categorical slots. Values at bar tips. */
+const barColor = (numKeys, ri, si) => numKeys.length > 1 ? VIZ.series[si] : `var(--a${ri % 6 + 1})`;
 function barChartHtml(rows, { labelKey, numKeys }) {
   const W = 640, labelW = 150, valueW = 46, plotW = W - labelW - valueW;
   const barH = numKeys.length > 1 ? 10 : 16;
@@ -1258,14 +1260,14 @@ function barChartHtml(rows, { labelKey, numKeys }) {
       const y = y0 + 5 + si * (barH + 2);
       const w = Math.max(x(v), v > 0 ? 2 : 0);
       // 4px rounded data-end, square at the baseline
-      s += `<path d="M${labelW},${y} h${Math.max(w - 4, 0)} q4,0 4,4 v${barH - 8} q0,4 -4,4 h-${Math.max(w - 4, 0)} z" fill="${VIZ.series[si]}"/>`;
+      s += `<path d="M${labelW},${y} h${Math.max(w - 4, 0)} q4,0 4,4 v${barH - 8} q0,4 -4,4 h-${Math.max(w - 4, 0)} z" fill="${barColor(numKeys, ri, si)}"/>`;
       if (numKeys.length === 1) {
         s += `<text x="${labelW + w + 6}" y="${y + barH / 2}" fill="${VIZ.ink}" font-size="11" dominant-baseline="middle">${fmtNum(v)}</text>`;
       }
     });
     // hit target spans the full row, tooltip lists every series
     s += `<rect class="viz-hit" x="0" y="${y0}" width="${W}" height="${rowH}" fill="transparent"
-      data-tip="${tip(name, numKeys.map((k, si) => [label(k), fmtNum(r[k] || 0), VIZ.series[si]]))}"/>`;
+      data-tip="${tip(name, numKeys.map((k, si) => [label(k), fmtNum(r[k] || 0), barColor(numKeys, ri, si)]))}"/>`;
   });
   return legendHtml(numKeys) +
     `<svg class="viz" viewBox="0 0 ${W} ${H}" role="img">${s}</svg>`;
