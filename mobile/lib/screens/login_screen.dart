@@ -137,7 +137,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                         Text(
-                          'Health Info',
+                          'HealthGrid',
                           textAlign: TextAlign.center,
                           style: GoogleFonts.outfit(
                             color: context.labelColor,

@@ -38,7 +38,7 @@ def _api_endpoints():
 
 def _api_index(request):
     return JsonResponse({
-        "message": "HEALTH INFO API is working",
+        "message": "HealthGrid API is working",
         "endpoints": _api_endpoints(),
     })
 

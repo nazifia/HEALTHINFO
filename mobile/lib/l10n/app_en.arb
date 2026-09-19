@@ -1,7 +1,7 @@
 {
   "@@locale": "en",
 
-  "appTitle": "Health Info",
+  "appTitle": "HealthGrid",
   "@appTitle": { "description": "App name shown in the nav header" },
 
   "signIn": "Sign in",

@@ -9,7 +9,7 @@ class AppLocalizationsIg extends AppLocalizations {
   AppLocalizationsIg([String locale = 'ig']) : super(locale);
 
   @override
-  String get appTitle => 'Ozi Ahụike';
+  String get appTitle => 'HealthGrid';
 
   @override
   String get signIn => 'Banye';

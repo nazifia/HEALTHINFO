@@ -9,7 +9,7 @@ class AppLocalizationsHa extends AppLocalizations {
   AppLocalizationsHa([String locale = 'ha']) : super(locale);
 
   @override
-  String get appTitle => 'Bayanin Lafiya';
+  String get appTitle => 'HealthGrid';
 
   @override
   String get signIn => 'Shiga';

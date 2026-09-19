@@ -105,7 +105,7 @@ abstract class AppLocalizations {
   /// App name shown in the nav header
   ///
   /// In en, this message translates to:
-  /// **'Health Info'**
+  /// **'HealthGrid'**
   String get appTitle;
 
   /// No description provided for @signIn.

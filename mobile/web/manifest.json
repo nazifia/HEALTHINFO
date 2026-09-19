@@ -1,6 +1,6 @@
 {
-    "name": "health_info_app",
-    "short_name": "health_info_app",
+    "name": "HealthGrid",
+    "short_name": "HealthGrid",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

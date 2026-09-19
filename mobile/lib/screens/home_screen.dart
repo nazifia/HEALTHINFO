@@ -690,7 +690,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             Icon(Icons.health_and_safety, color: Colors.white, size: 36),
             SizedBox(width: 12),
             Flexible(
-              child: Text('Health Info',
+              child: Text('HealthGrid',
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: Colors.white,

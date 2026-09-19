@@ -52,7 +52,7 @@ class HealthInfoApp extends ConsumerWidget {
     final locale = ref.watch(localeProvider);
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Health Info',
+      title: 'HealthGrid',
       navigatorKey: navigatorKey,
       locale: locale,
       supportedLocales: supportedLocales,

@@ -1,6 +1,6 @@
 {
-  "name": "HEALTH INFO",
-  "short_name": "HealthInfo",
+  "name": "HealthGrid",
+  "short_name": "HealthGrid",
   "description": "Multi-tenant health information and surveillance platform",
   "start_url": "./",
   "scope": "./",

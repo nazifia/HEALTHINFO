@@ -1481,7 +1481,7 @@ function authShell(title, subtitle, formHtml, footerHtml) {
     <aside class="auth-brand">
       <div class="auth-logo" aria-hidden="true">
         <svg viewBox="0 0 64 64" width="40" height="40"><rect width="64" height="64" rx="14" fill="#fff"/><path d="M28 14h8v14h14v8H36v14h-8V36H14v-8h14z" fill="#0f766e"/></svg>
-        <span>HEALTH INFO</span>
+        <span>HealthGrid</span>
       </div>
       <div class="auth-brand-copy">
         <h1>Health data, organized.</h1>
