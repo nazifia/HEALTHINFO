@@ -69,14 +69,18 @@ class PatientSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     def validate_hospital_number(self, value):
         # unique_together (tenant, hospital_number) can't be checked by DRF's
         # UniqueTogetherValidator here — tenant is excluded from the serializer
-        # and stamped server-side — so check it against the tenant-scoped
-        # manager, which only ever sees this tenant's rows.
+        # and stamped server-side — so check it by hand, against the tenant
+        # the row belongs to: on an edit that is where it was registered,
+        # which need not be the facility editing it.
         value = (value or "").strip()
         if not value:
             return value
-        clash = Patient.objects.filter(hospital_number=value)
-        if self.instance is not None:
-            clash = clash.exclude(pk=self.instance.pk)
+        if self.instance is None:
+            clash = Patient.objects.filter(hospital_number=value)
+        else:
+            clash = Patient.all_objects.filter(
+                tenant_id=self.instance.tenant_id, hospital_number=value
+            ).exclude(pk=self.instance.pk)
         if clash.exists():
             raise serializers.ValidationError(
                 "A patient with this hospital number already exists."
@@ -98,11 +102,14 @@ class PatientSerializer(NamedRelationsMixin, serializers.ModelSerializer):
 
         Name alone is far too common to act on, so the check needs a date of
         birth on both sides; without one the registration goes through.
+
+        Looked for at every facility, not just this one: the register is
+        shared, so a patient on file elsewhere is found, not registered twice.
         """
         dob = self._current(attrs, "date_of_birth")
         if not dob:
             return None
-        rows = Patient.objects.filter(
+        rows = Patient.all_objects.filter(
             first_name__iexact=(self._current(attrs, "first_name") or "").strip(),
             last_name__iexact=(self._current(attrs, "last_name") or "").strip(),
             date_of_birth=dob,

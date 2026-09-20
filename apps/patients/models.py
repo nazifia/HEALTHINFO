@@ -2,9 +2,12 @@
 
 Everything else (case reports, lab results, immunizations, ...) stays
 de-identified: those rows carry an age band and sex so they can be pooled
-centrally, and only an optional FK back to here. A patient row never leaves its
-tenant — the manager is tenant-scoped like the rest of the platform, and the
-API gates reads to clinical staff (see apps.accounts.permissions).
+centrally, and only an optional FK back to here. A patient is registered once,
+at one facility, and is then one record for the whole platform: any facility
+can find them by name or number, consult them and prescribe to them, and the
+records it files stay its own. The roster (``objects``) is still tenant-scoped;
+``all_objects`` is the shared register, and the API gates reads to clinical
+staff (see apps.accounts.permissions).
 """
 import re
 import secrets
@@ -213,6 +216,10 @@ class Patient(TenantOwnedModel):
 
     class Meta:
         ordering = ("last_name", "first_name", "id")
+        # The default manager is what a foreign key validates against, so a
+        # consultation, script or sale at any facility may name any patient.
+        # ``objects`` stays tenant-scoped for the roster.
+        default_manager_name = "all_objects"
         unique_together = ("tenant", "hospital_number")
         indexes = [
             models.Index(fields=["tenant", "last_name"]),

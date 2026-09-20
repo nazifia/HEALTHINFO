@@ -1,7 +1,7 @@
 from django.db.models import Q
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
 from apps.accounts.permissions import (
@@ -10,6 +10,8 @@ from apps.accounts.permissions import (
     IsTenantMember,
     sees_whole_tenant,
 )
+
+from apps.tenants.current import get_current_tenant
 
 from .models import Patient, PatientAccessLog
 from .serializers import PatientAccessLogSerializer, PatientSerializer
@@ -54,25 +56,32 @@ def visible_patients(user):
     facility, not its staff, so they see the patients they registered or wrote
     for and nothing else in the registry.
 
+    A caseload crosses facilities: a patient registered elsewhere whom this
+    clinician has consulted is on their list. The unclaimed fallback does not
+    — it is this facility's own backlog.
+
     ponytail: one OR'd query across the record types, all indexed on the FK.
     Materialize the patient ids into a join table only if a clinician ever
     accumulates enough records for this to show up in a query plan.
     """
-    qs = Patient.objects.all()
     if sees_whole_tenant(user):
-        return qs
+        return Patient.objects.all()
     scope = Q(registered_by=user)
     if not user.is_independent:
-        scope |= Q(registered_by__isnull=True)
+        scope |= Q(registered_by__isnull=True, tenant=get_current_tenant())
     for model, _serializer in _history_sources().values():
         accessor = model._meta.get_field("patient").remote_field.get_accessor_name()
         scope |= Q(**{f"{accessor}__reporter": user})
-    return qs.filter(scope).distinct()
+    return Patient.all_objects.filter(scope).distinct()
 
 
 class PatientViewSet(viewsets.ModelViewSet):
-    """Tenant-scoped patient registry. Clinical staff only — this is the one
-    endpoint that returns identifying data, so plain tenant members can't read it.
+    """The patient register. Clinical staff only — this is the one endpoint
+    that returns identifying data, so plain tenant members can't read it.
+
+    The roster is this facility's; a search or a read by id reaches a patient
+    registered at any facility, so one registration serves every one of them.
+    Deleting and merging stay with the facility that registered the patient.
     """
 
     serializer_class = PatientSerializer
@@ -99,12 +108,14 @@ class PatientViewSet(viewsets.ModelViewSet):
         # cannot be on the doctor's list before they open it: a search — the
         # name or number of the person in front of them — and a read by id
         # reach anyone on the facility's register, and every read is logged.
+        # The register is shared across facilities: a patient registered at
+        # a hospital is found at the pharmacy down the road by the same search.
         # An independent prescriber is a visitor, not staff: they stay inside
         # their own caseload whatever they type, and get no roster at all.
         if user.is_independent:
             qs = Patient.objects.none() if roster else visible_patients(user)
         else:
-            qs = visible_patients(user) if roster else Patient.objects.all()
+            qs = visible_patients(user) if roster else Patient.all_objects.all()
         return qs.prefetch_related("chronic_conditions")
 
     def filter_queryset(self, queryset):
@@ -123,6 +134,13 @@ class PatientViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(registered_by=self.request.user)
+
+    def _must_be_ours(self, patient):
+        """Deleting or merging a record is the registering facility's call."""
+        if patient.tenant_id != getattr(self.request.tenant, "id", None):
+            raise PermissionDenied(
+                "This patient was registered at another facility."
+            )
 
     # --- read audit ------------------------------------------------------
     # Every read of identifying data is recorded. Deliberately fail-closed: if
@@ -153,6 +171,7 @@ class PatientViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         patient = self.get_object()
+        self._must_be_ours(patient)
         # A patient with clinical records can't be deleted: the reports survive
         # (SET_NULL) but silently lose the link, which quietly corrupts every
         # history and rollup that used it. Retire or merge the record instead.
@@ -180,6 +199,7 @@ class PatientViewSet(viewsets.ModelViewSet):
         create duplicates shouldn't be the ones resolving them unreviewed.
         """
         target = self.get_object()
+        self._must_be_ours(target)
         source_id = request.data.get("source")
         source = Patient.objects.filter(pk=source_id).first() if source_id else None
         if source is None:
@@ -229,19 +249,18 @@ class PatientViewSet(viewsets.ModelViewSet):
     def history(self, request, pk=None):
         """Everything filed against this patient, grouped by record type.
 
-        Deliberately the whole timeline, not just this clinician's entries: the
-        gate is get_object(), so they already had to be on the patient's care.
-        A half-history is how a repeat prescription gets written over an
-        allergy someone else recorded.
+        Deliberately the whole timeline, not just this clinician's entries or
+        this facility's: the gate is get_object(), so they already had to be
+        on the patient's care. A half-history is how a repeat prescription
+        gets written over an allergy someone else recorded.
 
-        ponytail: one query per record type (8), each tenant-scoped and indexed
-        on the FK. Fold into a union only if a patient ever accumulates enough
+        ponytail: one query per record type (8), each indexed on the FK. Fold into a union only if a patient ever accumulates enough
         rows for it to matter — a clinical timeline doesn't.
         """
         patient = self.get_object()
         out = {}
         for key, (model, serializer_class) in _history_sources().items():
-            rows = model.objects.filter(patient=patient)
+            rows = model.all_objects.filter(patient=patient)
             out[key] = serializer_class(rows, many=True).data
         out["counts"] = {k: len(v) for k, v in out.items()}
         self._log(PatientAccessLog.Action.HISTORY, patient=patient,

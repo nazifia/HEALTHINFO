@@ -440,16 +440,34 @@ def test_deletion_is_logged_with_the_identity(db_clean):
     assert "MRN-8" in row.query and "Ada" in row.query
 
 
-def test_reports_cannot_link_another_tenants_patient(db_clean):
+def test_patient_registered_elsewhere_is_found_consulted_and_prescribed(db_clean):
+    """One registration serves every facility: found by search or id, and a
+    record filed against them stays the filing facility's."""
     a = Tenant.objects.create(name="A", slug="a")
     b = Tenant.objects.create(name="B", slug="b")
-    theirs = Patient.objects.create(tenant=b, first_name="Bola", last_name="B")
+    theirs = Patient.objects.create(tenant=b, first_name="Bola", last_name="B",
+                                    phone="08031234567")
     doctor = User.objects.create_user(phone="08030000015", password="x",
                                       tenant=a, role=Role.DOCTOR)
+    c = _client(doctor, a)
 
-    r = _client(doctor, a).post("/api/case-reports/", {"patient": theirs.pk},
-                                format="json")
-    assert r.status_code == 400 and "patient" in r.json()["errors"]
+    # Not on the roster, but a search or a read by id reaches them.
+    assert c.get("/api/patients/").json()["results"] == []
+    found = c.get("/api/patients/?search=0803 123 4567").json()["results"]
+    assert [row["id"] for row in found] == [theirs.pk]
+    assert c.get(f"/api/patients/{theirs.pk}/").status_code == 200
+
+    r = c.post("/api/case-reports/", {"patient": theirs.pk}, format="json")
+    assert r.status_code == 201, r.content
+    assert CaseReport.all_objects.get(pk=r.json()["id"]).tenant_id == a.id
+    # Now on this doctor's caseload, and the history shows the record.
+    assert [row["id"] for row in c.get("/api/patients/").json()["results"]]         == [theirs.pk]
+    history = c.get(f"/api/patients/{theirs.pk}/history/").json()
+    assert history["counts"]["case_reports"] == 1
+
+    # Deleting stays with the facility that registered the patient.
+    assert c.delete(f"/api/patients/{theirs.pk}/").status_code == 403
+    assert Patient.all_objects.filter(pk=theirs.pk).exists()
 
 
 @pytest.mark.parametrize(
