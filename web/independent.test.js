@@ -32,13 +32,14 @@ assert.strictEqual(helpers(employed, 'ikeja-clinic').isIndependent(), false);
 // Signed out, before /api/users/me/ has answered.
 assert.strictEqual(helpers(null, '').needsFacility(), false);
 
-/* The redirect ensureChrome makes: everything but the picker and the profile
- * would 403 without a facility, and the profile is where the state on their
- * row reads out. Same literal as app.js — kept in step by the assert below. */
-const REDIRECT = /^\/(facility|profile)/;
-assert.ok(src.includes(String.raw`/^\/(facility|profile)/.test(here)`),
+/* The redirect ensureChrome makes: everything but the picker, the profile and
+ * the earnings statement would 403 without a facility — the profile is where
+ * the state on their row reads out, and the statement is read with no tenant
+ * header at all. Same literal as app.js — kept in step by the assert below. */
+const REDIRECT = /^\/(facility|profile|earnings)/;
+assert.ok(src.includes(String.raw`/^\/(facility|profile|earnings)/.test(here)`),
   'the redirect exemption in ensureChrome has changed');
-for (const path of ['/facility', '/profile']) {
+for (const path of ['/facility', '/profile', '/earnings']) {
   assert.ok(REDIRECT.test(path), `${path} must stay reachable`);
 }
 for (const path of ['/', '/clinical', '/r/patients', '/platform', '/analytics']) {

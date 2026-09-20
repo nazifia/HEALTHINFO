@@ -28,9 +28,11 @@ void main() {
   });
 
   test('the drawer waits for a facility before it offers anything else', () {
-    // Empty tenant: the picker is the home and Account is the only group.
+    // Empty tenant: the picker is the home and Account (with their earnings
+    // statement, which needs no facility) is the only group.
     expect(home, contains('if (tenantSlug.isEmpty) {'));
-    expect(home, contains('_setGroups([_accountGroup], home: _facilityHome);'));
+    expect(home, contains(
+        '_setGroups([_withEarnings(_accountGroup, me)], home: _facilityHome);'));
     // Picked one: the clinical menu, with the way back to the picker in it.
     expect(home, contains('_facilityAccountGroup'));
     expect(home, contains("_Section(\n      'Change facility'"));

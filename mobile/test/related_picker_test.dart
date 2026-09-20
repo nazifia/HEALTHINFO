@@ -90,7 +90,6 @@ void main() {
       'lib/screens/vital_events_screen.dart': "api.getAll('/api/diseases/')",
       'lib/screens/pharmacy_orders_screen.dart': "api.getAll('/api/pharmacy/suppliers/'",
       'lib/screens/pharmacy_stock_screen.dart': "api.getAll('/api/pharmacy/suppliers/'",
-      'lib/screens/pharmacy_claims_screen.dart': "api.getAll('/api/pharmacy/hmos/'",
       'lib/screens/user_management_screen.dart': "api.getAll('/api/pharmacy/hmos/')",
       'lib/api.dart': "getAll('/api/tenants/prescribing/')",
     }.entries) {
