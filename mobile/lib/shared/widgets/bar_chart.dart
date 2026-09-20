@@ -76,6 +76,10 @@ class MiniBarChart extends StatelessWidget {
                     }
                   },
             touchTooltipData: BarTouchTooltipData(
+              // A bar at maxY puts the tooltip above the plot, where fl_chart
+              // clips it to an empty box; keep it inside the chart bounds.
+              fitInsideVertically: true,
+              fitInsideHorizontally: true,
               getTooltipColor: (_) => EnhancedTheme.primaryDark,
               getTooltipItem: (group, _, rod, _) => BarTooltipItem(
                 '${rows[group.x].label}\n',
@@ -206,6 +210,10 @@ class TrendLineChart extends StatelessWidget {
         titlesData: const FlTitlesData(show: false),
         lineTouchData: LineTouchData(
           touchTooltipData: LineTouchTooltipData(
+            // A spike at maxY puts the tooltip above the plot, where fl_chart
+            // clips it to an empty box; keep it inside the chart bounds.
+            fitInsideVertically: true,
+            fitInsideHorizontally: true,
             getTooltipColor: (_) => EnhancedTheme.primaryDark,
             getTooltipItems: (spots) => [
               for (final s in spots)
