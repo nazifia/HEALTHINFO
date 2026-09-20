@@ -58,9 +58,9 @@ _RX_FILLED = (Prescription.Status.DISPENSED, Prescription.Status.PARTIAL)
 def _series(qs, days=30):
     """Time-series counts per day over the trailing window.
 
-    Returns [{"period": iso-date, "count": n}] ordered oldest→newest. Empty
-    buckets are omitted (caller can densify if it needs a continuous axis).
-    ponytail: DB-side TruncDay; gap-filling is a frontend concern.
+    Returns [{"period": iso-date, "count": n}] ordered oldest→newest, one
+    row per day from ``days`` ago through today: a day with nothing filed is
+    a 0, so the chart drops to zero instead of joining the busy days.
     """
     since = timezone.now() - timedelta(days=days)
     rows = (
@@ -68,10 +68,12 @@ def _series(qs, days=30):
         .annotate(period=TruncDay("created_at"))
         .values("period")
         .annotate(count=Count("id"))
-        .order_by("period")
     )
+    counts = {r["period"].date(): r["count"] for r in rows}
+    start = since.date()
     return [
-        {"period": r["period"].date().isoformat(), "count": r["count"]} for r in rows
+        {"period": (start + timedelta(days=i)).isoformat(), "count": counts.get(start + timedelta(days=i), 0)}
+        for i in range(days + 1)
     ]
 
 

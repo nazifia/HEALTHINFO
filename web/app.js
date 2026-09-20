@@ -26,7 +26,9 @@ function fmtVal(v) {
   return String(v);
 }
 
-const label = (k) => k === 'by_diagnosis_medication' ? 'Medication By Diagnosis' : k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).replace(/\bIcd10\b/g, 'ICD10');
+// The time series say what they count: "Trend" over a chart that never touched zero read as a rate.
+const LABELS = { by_diagnosis_medication: 'Medication By Diagnosis', trend: 'Records Per Day, Last 90 Days', search_trend: 'Searches Per Day', birth_trend: 'Births Per Day', death_trend: 'Deaths Per Day' };
+const label = (k) => LABELS[k] || k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).replace(/\bIcd10\b/g, 'ICD10');
 
 /* ------------------------------------------------------------------ theme */
 
@@ -1203,14 +1205,17 @@ const VIZ = {
 
 // An array of objects is chartable when it has exactly one label column and
 // 1–4 numeric columns (id excluded). Anything wider stays a table.
+// A bar chart past 40 categories is unreadable; a daily line over a
+// 90-day window is the normal case, so the row cap applies to bars only.
 function chartable(rows) {
-  if (!Array.isArray(rows) || rows.length < 2 || rows.length > 40) return null;
+  if (!Array.isArray(rows) || rows.length < 2 || rows.length > 400) return null;
   const keys = Object.keys(rows[0]);
   const numeric = keys.filter((k) => rows.every((r) => r[k] === null || typeof r[k] === 'number'));
   const labels = keys.filter((k) => !numeric.includes(k));
   const numKeys = numeric.filter((k) => k !== 'id').slice(0, 4);
   if (labels.length !== 1 || !numKeys.length) return null;
   if (rows.every((r) => typeof r[labels[0]] !== 'string')) return null;
+  if (rows.length > 40 && !timeish(rows.map((r) => String(r[labels[0]])))) return null;
   return { labelKey: labels[0], numKeys };
 }
 
