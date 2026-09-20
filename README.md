@@ -448,7 +448,7 @@ node --test web/*.test.js scripts/deploy_guard.test.js   # PWA self-checks
 cd mobile && flutter test                                # Flutter
 ```
 `tests/test_tenant_isolation.py` is the guard rail — keep it green.
-All three suites run on every push and pull request (`.github/workflows/ci.yml`).
+Nothing runs these for you — run all three before every push.
 
 ## i18n
 Backend serves translated strings via Django `gettext` + `LocaleMiddleware`;
@@ -479,8 +479,7 @@ screen strings fall back to English until translated (mechanical drop-in).
 Done: content modules, draft/review workflow + audit log, knowledge-graph
 relations, semantic search + RAG, Celery (async embeddings, analytics), Flutter
 client (incl. differential dx, interaction checker),
-i18n pipeline (4 languages, UI shell translated), CI (all three suites on
-every push).
-Remaining roadmap: native-reviewed translations for all screens →
+i18n pipeline (4 languages, UI shell translated).
+Remaining roadmap: native-reviewed translations for all screens → CI/CD →
 Nginx/Gunicorn prod compose.
 Add new content modules by copying the catalog app pattern.
