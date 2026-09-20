@@ -12,12 +12,16 @@ class HeroBanner extends StatelessWidget {
   final String name;
   final String subtitle;
   final List<MapEntry<String, Object?>> stats;
+
+  /// Labels of the facts that need acting on: their tiles flash red.
+  final Set<String> alerts;
   final Widget? action;
   const HeroBanner({
     super.key,
     required this.name,
     required this.subtitle,
     required this.stats,
+    this.alerts = const {},
     this.action,
   });
 
@@ -119,7 +123,10 @@ class HeroBanner extends StatelessWidget {
             runSpacing: 10,
             children: [
               for (final (i, s) in stats.indexed)
-                Reveal(index: i + 1, child: _HeroStat(s.key, s.value)),
+                Reveal(
+                    index: i + 1,
+                    child: _HeroStat(s.key, s.value,
+                        alert: alerts.contains(s.key))),
             ],
           ),
           if (action != null) ...[
@@ -132,19 +139,62 @@ class HeroBanner extends StatelessWidget {
   }
 }
 
-class _HeroStat extends StatelessWidget {
+class _HeroStat extends StatefulWidget {
   final String label;
   final Object? value;
-  const _HeroStat(this.label, this.value);
+  final bool alert;
+  const _HeroStat(this.label, this.value, {this.alert = false});
+
+  @override
+  State<_HeroStat> createState() => _HeroStatState();
+}
+
+class _HeroStatState extends State<_HeroStat>
+    with SingleTickerProviderStateMixin {
+  static const _quiet = Color(0x2EFFFFFF);
+  static const _red = Color(0xFFE53935);
+
+  // Same 1.2s on/off as the web tile; solid red under "reduce motion".
+  late final _blink = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1200));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (widget.alert && !MediaQuery.disableAnimationsOf(context)) {
+      _blink.repeat();
+    } else {
+      _blink.stop();
+      _blink.value = 0;
+    }
+  }
+
+  @override
+  void didUpdateWidget(_HeroStat old) {
+    super.didUpdateWidget(old);
+    if (old.alert != widget.alert) didChangeDependencies();
+  }
+
+  @override
+  void dispose() {
+    _blink.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(minWidth: 96),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: const Color(0x2EFFFFFF),
-        borderRadius: BorderRadius.circular(12),
+    final label = widget.label;
+    final value = widget.value;
+    return AnimatedBuilder(
+      animation: _blink,
+      builder: (context, child) => Container(
+        constraints: const BoxConstraints(minWidth: 96),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: widget.alert && _blink.value < .5 ? _red : _quiet,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: child,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

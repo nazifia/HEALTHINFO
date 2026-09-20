@@ -533,6 +533,12 @@ details.tbl summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 }
 .hero-stat span { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; opacity: .8; }
 .hero-stat strong { font-size: 17px; overflow-wrap: anywhere; }
+/* Something waiting at the pharmacy: the tile flashes red until it is collected. */
+@keyframes blink { 50% { background: rgba(255,255,255,.14); border-color: rgba(255,255,255,.22); } }
+.hero-stat.alert {
+  background: #e53935; border-color: #ffcdd2;
+  animation: rise 1.5s cubic-bezier(.2,.7,.2,1) both paused, blink 1.2s step-start infinite paused;
+}
 @media (max-width: 600px) { .hero { padding: 20px; } .hero-link { margin-left: 0; } }
 
 /* The clinical sheets: one narrow column with the app's drag-handle, and the

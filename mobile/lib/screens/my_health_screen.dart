@@ -249,6 +249,8 @@ class _HeroCard extends StatelessWidget {
         MapEntry('Awaiting collection', pending.length),
         MapEntry('Allergies', me['allergies']),
       ],
+      // Flashes red while something waits, so the patient sees it at once.
+      alerts: {if (pending.isNotEmpty) 'Awaiting collection'},
       action: onOpenProfile == null
           ? null
           : OutlinedButton.icon(

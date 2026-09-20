@@ -4767,8 +4767,8 @@ function heroHtml(name, sub, stats, link) {
       </div>
       ${link}
     </div>
-    <div class="hero-stats">${stats.map(([label, v]) =>
-      `<div class="hero-stat"><span>${esc(label)}</span><strong>${esc(fmtVal(v))}</strong></div>`).join('')}
+    <div class="hero-stats">${stats.map(([label, v, cls]) =>
+      `<div class="hero-stat${cls ? ' ' + cls : ''}"><span>${esc(label)}</span><strong>${esc(fmtVal(v))}</strong></div>`).join('')}
     </div>
   </section>`;
 }
@@ -4786,7 +4786,8 @@ function portalHeroHtml(me, meds, pending) {
     ['Scheme', me.patient_type_display],
     ['NHIS number', me.nhis_number],
     ['Medications collected', meds.length],
-    ['Awaiting collection', pending.length],
+    // Red and blinking while something waits, so the patient sees it at once.
+    ['Awaiting collection', pending.length, pending.length ? 'alert' : ''],
     ['Allergies', me.allergies],
   ], '<a href="#/profile" class="btn hero-link">View full profile</a>');
 }
