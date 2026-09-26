@@ -246,12 +246,15 @@ const RESOURCES = {
   // the API refuses anyone else the PATCH.
   'pharmacy-items':         { title: 'Stock Items',     group: 'Pharmacy', path: 'pharmacy/items',           roles: 'admin', search: true,
                               inline: ['unit_price', 'cost_price', 'reorder_level'],
+                              // Markup prices a new item once; a counted total corrects an existing one.
+                              hideNew: ['set_stock'], hideEdit: ['markup'],
                               actions: [{ name: 'receive', label: 'Receive stock', ask: 'quantity,batch_number' }] },
-  // A batch is read-only as a record — stock arrives through the item's
-  // receive and leaves through a sale — but the shelf can still be wrong.
+  // A batch's details (number, expiry, cost, supplier) are edited in place;
+  // its quantity is not — stock arrives through the item's receive and
+  // leaves through a sale — but the shelf can still be wrong.
   // Correcting it and writing it off are the same endpoint; ``write_off``
   // is what tells shrinkage from a miscount in the ledger.
-  'pharmacy-batches':       { title: 'Stock Batches',   group: 'Pharmacy', path: 'pharmacy/batches',         roles: 'staff', search: true, readOnly: true,
+  'pharmacy-batches':       { title: 'Stock Batches',   group: 'Pharmacy', path: 'pharmacy/batches',         roles: 'staff', search: true, editOnly: true, hide: ['item'],
                               actions: [{ name: 'adjust', label: 'Correct counted quantity', ask: 'quantity,reason', adminOnly: true },
                                         { name: 'adjust', label: 'Write this batch off', ask: 'reason', danger: true, adminOnly: true,
                                           body: { quantity: 0, write_off: true } }] },
@@ -1989,6 +1992,7 @@ const visibleActions = (res, obj) => (res.actions || []).filter((a) =>
 
 // ``createOnly`` resources (the cash drawer) are made and then only acted on:
 // the list still offers "+ New", the detail page offers no edit or delete.
+// ``editOnly`` is the other way round: edit, but no "+ New" and no delete.
 function canWriteRes(slug, res) {
   if (res.readOnly || res.createOnly) return false;
   if (res.roles === 'admin') return isPharmacyAdmin();
@@ -2042,7 +2046,7 @@ async function viewList(slug) {
     const pages = count != null ? Math.max(1, Math.ceil(count / 25)) : 1;
     render(`
       <div class="page-head"><h2>${esc(res.title)}</h2>
-        ${(canWrite || res.createOnly) && !slug.startsWith('tenants') ? `<a class="btn" href="#/r/${slug}/new${res.query ? '?' + new URLSearchParams(res.query) : ''}">+ New</a>` : ''}
+        ${(canWrite || res.createOnly) && !res.editOnly && !slug.startsWith('tenants') ? `<a class="btn" href="#/r/${slug}/new${res.query ? '?' + new URLSearchParams(res.query) : ''}">+ New</a>` : ''}
         ${res.signUp && ME?.role === 'super_admin' ? '<a class="btn" href="#/scheme-register">+ Register scheme</a>' : ''}
       </div>
       ${slug === 'patients' && isIndependent()
@@ -2145,7 +2149,7 @@ async function viewDetail(slug, id) {
     let actions = `<a class="btn ghost" href="#/r/${slug}">&larr; ${esc(res.title)}</a>`;
     if (canWrite) {
       actions += `<a class="btn" href="#/r/${slug}/${id}/edit">Edit</a>
-        <button id="del" class="btn danger">Delete</button>`;
+        ${res.editOnly ? '' : '<button id="del" class="btn danger">Delete</button>'}`;
     }
     if (res.graph) actions += `<a class="btn ghost" href="#/graph/${res.graph}/${id}">Graph</a>`;
     let workflowHtml = '';
@@ -2298,7 +2302,7 @@ async function viewDetail(slug, id) {
         } catch (e) { w?.close(); toast(e.message, true); }
       };
     }
-    if (canWrite) {
+    if (canWrite && !res.editOnly) {
       $('#del').onclick = async () => {
         if (!confirm('Delete this record? This cannot be undone.')) return;
         try { await Api.del(rdetail(slug, `${id}/`)); toast('Deleted.'); location.hash = `#/r/${slug}`; }
@@ -2406,7 +2410,8 @@ async function viewForm(slug, id, query) {
     }
     const { hints = {}, labels = {} } = res;
     const parts = Object.fromEntries(Object.entries(fields)
-      .filter(([name, f]) => !f.read_only && !res.hide?.includes(name))
+      .filter(([name, f]) => !f.read_only && !res.hide?.includes(name)
+        && !(id ? res.hideEdit : res.hideNew)?.includes(name))
       .map(([name, f]) => [name, fieldHtml(name,
         { ...f, label: labels[name] || f.label, help_text: f.help_text || hints[name] }, current[name])]));
     if (parts.accept_terms && terms) {

@@ -255,7 +255,9 @@ named patient's claims are commercial and clinical data both.
 - `GET/POST /api/pharmacy/items/` — the item list (drugs and consumables; an
   optional FK to a catalog `Medication`). Admin writes. `POST .../{id}/receive/`
   books in a consignment; `GET .../low-stock/` is the buying list, `.../valuation/`
-  the shelf at cost and at retail.
+  the shelf at cost and at retail. On `PATCH`, `add_stock` books units in and
+  `set_stock` corrects the item to a counted total, spread over its batches as
+  ledger adjustments.
 - `GET /api/pharmacy/batches/` — consignments, each with its own expiry and cost.
   No create and no delete: stock arrives through an item's `receive` and leaves
   through a sale or `POST .../{id}/adjust/` (admin — a stock count or a

@@ -1540,6 +1540,29 @@ def test_item_form_books_stock_in(pharmacy):
     assert r.json()["quantity_on_hand"] == 50
 
 
+def test_item_edit_sets_the_counted_stock(pharmacy):
+    """An edit can correct the shelf to a count, down across batches and back
+    up, each step an adjustment in the ledger."""
+    admin = _client(pharmacy["admin"], pharmacy["tenant"])
+    item_id = admin.post("/api/pharmacy/items/",
+                         {"name": "Zinc", "add_stock": 30}).json()["id"]
+    admin.post(f"/api/pharmacy/items/{item_id}/receive/",
+               {"quantity": 20, "batch_number": "B2"})
+    r = admin.patch(f"/api/pharmacy/items/{item_id}/", {"set_stock": 12})
+    assert r.status_code == 200, r.json()
+    assert r.json()["quantity_on_hand"] == 12
+    r = admin.patch(f"/api/pharmacy/items/{item_id}/", {"set_stock": 15})
+    assert r.json()["quantity_on_hand"] == 15
+    assert StockMovement.all_objects.filter(
+        item_id=item_id, kind=StockMovement.Kind.ADJUSTMENT).count() >= 2
+    r = admin.patch(f"/api/pharmacy/items/{item_id}/",
+                    {"set_stock": 5, "add_stock": 5})
+    assert r.status_code == 400
+    staff = _client(pharmacy["staff"], pharmacy["tenant"])
+    assert staff.patch(f"/api/pharmacy/items/{item_id}/",
+                       {"set_stock": 0}).status_code == 403
+
+
 def test_receipt_as_escpos_bytes_for_a_thermal_printer(pharmacy):
     tenant, item = pharmacy["tenant"], pharmacy["item"]
     staff = _client(pharmacy["staff"], tenant)

@@ -388,6 +388,42 @@ def adjust_stock(batch, new_quantity, *, reason, user=None,
     return locked
 
 
+def set_stock_level(item, counted, *, reason, user=None):
+    """Bring an item's shelf to a counted total, logging each batch it moves.
+
+    A shortfall comes off the batches that would leave first — expired ones
+    before sellable ones, since those are what went missing or got binned.
+    A surplus lands on the newest batch, or a fresh one if the item never had
+    stock. Every change goes through adjust_stock, so the ledger still
+    explains the figure.
+    """
+    if counted < 0:
+        raise ValueError("Quantity cannot be negative.")
+    with transaction.atomic():
+        batches = list(
+            StockBatch.all_objects.select_for_update().filter(item=item)
+            .order_by(models.F("expiry_date").asc(nulls_last=True), "id")
+        )
+        delta = counted - sum(b.quantity for b in batches)
+        if delta > 0:
+            batch = max(batches, key=lambda b: b.id, default=None)
+            if batch is None:
+                batch = StockBatch.all_objects.create(
+                    tenant=item.tenant, item=item,
+                    batch_number=f"COUNT-{timezone.now():%Y%m%d}",
+                    quantity=0, quantity_received=0,
+                    cost_price=item.cost_price,
+                )
+            adjust_stock(batch, batch.quantity + delta, reason=reason, user=user)
+        for batch in batches:
+            if delta >= 0:
+                break
+            take = min(batch.quantity, -delta)
+            if take:
+                adjust_stock(batch, batch.quantity - take, reason=reason, user=user)
+                delta += take
+
+
 def take_stock(item, quantity, *, kind, reason, user=None, sale=None):
     """Draw units off an item first-expiry-first-out. Returns the batches hit.
 

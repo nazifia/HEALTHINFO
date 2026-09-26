@@ -38,10 +38,33 @@ class StockItemSerializer(serializers.ModelSerializer):
         help_text="Units to put on the shelf now. Added to the quantity on hand.",
     )
 
+    # The counted shelf total, for an edit that corrects the figure rather
+    # than adds to it. Spread over the batches as ledger adjustments.
+    set_stock = serializers.IntegerField(
+        min_value=0, required=False, write_only=True, allow_null=True,
+        label="Counted stock",
+        help_text="Sets the quantity on hand to this count. Logged as an adjustment.",
+    )
+
     class Meta:
         model = StockItem
         exclude = ("tenant",)
         read_only_fields = ("created_at", "updated_at")
+
+    def validate(self, attrs):
+        if attrs.get("add_stock") and attrs.get("set_stock") is not None:
+            raise serializers.ValidationError(
+                {"set_stock": "Add stock or set the count, not both."})
+        return attrs
+
+    def _count(self, item, counted):
+        if counted is not None:
+            from .models import set_stock_level
+            request = self.context.get("request")
+            set_stock_level(item, counted, reason="Count corrected on the item",
+                            user=getattr(request, "user", None))
+            if hasattr(item, "stock_on_hand"):
+                del item.stock_on_hand
 
     def _book_in(self, item, quantity):
         if quantity:
@@ -59,14 +82,17 @@ class StockItemSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         quantity = validated_data.pop("add_stock", 0)
+        validated_data.pop("set_stock", None)  # a new item's count is add_stock
         item = super().create(validated_data)
         self._book_in(item, quantity)
         return item
 
     def update(self, instance, validated_data):
         quantity = validated_data.pop("add_stock", 0)
+        counted = validated_data.pop("set_stock", None)
         item = super().update(instance, validated_data)
         self._book_in(item, quantity)
+        self._count(item, counted)
         return item
 
     def get_quantity_on_hand(self, obj) -> int:

@@ -755,6 +755,7 @@ class _ItemFormState extends State<_ItemForm> {
   final _cost = TextEditingController(text: '0');
   final _reorder = TextEditingController(text: '0');
   final _addStock = TextEditingController();
+  final _setStock = TextEditingController();
   final _brand = TextEditingController();
   final _sku = TextEditingController();
   final _barcode = TextEditingController();
@@ -815,6 +816,7 @@ class _ItemFormState extends State<_ItemForm> {
     _cost.dispose();
     _reorder.dispose();
     _addStock.dispose();
+    _setStock.dispose();
     _brand.dispose();
     _sku.dispose();
     _barcode.dispose();
@@ -825,6 +827,12 @@ class _ItemFormState extends State<_ItemForm> {
   Future<void> _submit() async {
     if (_name.text.trim().isEmpty) {
       setState(() => _error = 'Name the item.');
+      return;
+    }
+    final counted = int.tryParse(_setStock.text.trim());
+    final added = int.tryParse(_addStock.text.trim()) ?? 0;
+    if (counted != null && added > 0) {
+      setState(() => _error = 'Add stock or set the count, not both.');
       return;
     }
     setState(() {
@@ -850,7 +858,8 @@ class _ItemFormState extends State<_ItemForm> {
         'unit_price': _price.text.trim(),
         'cost_price': _cost.text.trim(),
         'reorder_level': int.tryParse(_reorder.text.trim()) ?? 0,
-        'add_stock': int.tryParse(_addStock.text.trim()) ?? 0,
+        'add_stock': added,
+        if (_isEdit && counted != null) 'set_stock': counted,
         'prescription_only': _prescriptionOnly,
         'is_controlled': _isControlled,
       };
@@ -1022,6 +1031,17 @@ class _ItemFormState extends State<_ItemForm> {
                 : 'Units on the shelf now.',
           ),
         ),
+        if (_isEdit) ...[
+          const SizedBox(height: 12),
+          TextField(
+            controller: _setStock,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'Counted stock',
+              helperText: 'Sets the quantity on hand to this count. Blank keeps it.',
+            ),
+          ),
+        ],
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           title: const Text('Prescription only'),
