@@ -9,8 +9,8 @@ import '../shared/widgets/stats_kit.dart';
 import '../shared/stats_rows.dart';
 import '../shared/live_refresh.dart';
 
-/// Secondary analytics dashboards in one scroll: conversion funnel, peer
-/// benchmark, daily retention, and adverse-reaction signal.
+/// Secondary analytics dashboards in one scroll: conversion funnel,
+/// daily retention, and adverse-reaction signal.
 /// Each card fetches its own endpoint and degrades independently — one failing
 /// call never blanks the whole screen.
 class AnalyticsScreen extends StatefulWidget {
@@ -50,7 +50,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with LiveRefresh {
         readsPanel(role, panel) ? _one(path) : Future.value(null);
     final r = await Future.wait([
       want('engagement', '/api/analytics/funnel/'),
-      want('engagement', '/api/analytics/benchmark/'),
       want('engagement', '/api/analytics/retention/'),
       want('adr', '/api/analytics/adr/'),
       want('consultations', '/api/analytics/consultations/'),
@@ -58,10 +57,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with LiveRefresh {
     Map<String, dynamic>? m(int i) => (r[i] as Map?)?.cast<String, dynamic>();
     return _Bundle(
       funnel: m(0),
-      benchmark: m(1),
-      retention: (r[2] as List?) ?? const [],
-      adr: m(3),
-      consultations: m(4),
+      retention: (r[1] as List?) ?? const [],
+      adr: m(2),
+      consultations: m(3),
     );
   }
 
@@ -97,7 +95,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with LiveRefresh {
             children: [
               const DashTitleBar(
                 title: 'Analytics',
-                subtitle: 'Funnel, benchmarks & signals',
+                subtitle: 'Funnel & signals',
                 accent: EnhancedTheme.accentPurple,
               ),
               KpiStrip(tiles: [
@@ -140,7 +138,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with LiveRefresh {
               if (b.consultations != null)
                 _ConsultationStatsCard(d: b.consultations!),
               if (b.funnel != null) _FunnelCard(d: b.funnel!),
-              if (b.benchmark != null) _BenchmarkCard(d: b.benchmark!),
               if (b.retention.isNotEmpty) _RetentionCard(rows: b.retention),
               if (b.adr != null) _AdrStatsCard(d: b.adr!),
             ],
@@ -153,13 +150,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with LiveRefresh {
 
 class _Bundle {
   final Map<String, dynamic>? funnel;
-  final Map<String, dynamic>? benchmark;
   final List<dynamic> retention;
   final Map<String, dynamic>? adr;
   final Map<String, dynamic>? consultations;
   _Bundle({
     required this.funnel,
-    required this.benchmark,
     required this.retention,
     required this.adr,
     required this.consultations,
@@ -194,32 +189,6 @@ class _FunnelCard extends StatelessWidget {
                       'cases / view', pctOf(d['case_per_view'] as num?))),
             ],
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _BenchmarkCard extends StatelessWidget {
-  final Map<String, dynamic> d;
-  const _BenchmarkCard({required this.d});
-
-  @override
-  Widget build(BuildContext context) {
-    num n(String k) => (d[k] as num?) ?? 0;
-    return PanelCard(
-      title: 'Peer Benchmark (case reports)',
-      accent: EnhancedTheme.accentOrange,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ComparisonBars(rows: [
-            (label: 'You', value: n('your_case_reports'), color: EnhancedTheme.accentOrange),
-            (label: 'Network median', value: n('platform_median'), color: EnhancedTheme.primaryTeal),
-            (label: 'Network max', value: n('platform_max'), color: EnhancedTheme.accentPurple),
-          ]),
-          Text('Compared across ${d['tenants_compared'] ?? 0} tenants',
-              style: TextStyle(color: context.hintColor, fontSize: 12)),
         ],
       ),
     );

@@ -3,7 +3,6 @@ import pytest
 
 from apps.analytics.models import CaseReport
 from apps.analytics.stats import (
-    benchmark_stats,
     case_report_stats,
     platform_case_report_stats,
 )
@@ -44,25 +43,6 @@ def test_reports_are_tenant_scoped_but_collate_centrally(tenants):
     assert platform["total"] == 3
     by_tenant = {r["tenant__name"]: r["count"] for r in platform["by_tenant"]}
     assert by_tenant == {"Hospital A": 2, "Hospital B": 1}
-
-
-def test_benchmark_ignores_global_rows(tenants):
-    a, b = tenants
-
-    set_current_tenant(a)
-    CaseReport.objects.create(severity="mild")
-    CaseReport.objects.create(severity="mild")
-    set_current_tenant(b)
-    CaseReport.objects.create(severity="mild")
-    # Global row (tenant=None) — must not count as a tenant in the comparison.
-    clear_current_tenant()
-    CaseReport.all_objects.create(tenant=None, severity="mild")
-
-    set_current_tenant(a)
-    stats = benchmark_stats()
-    assert stats["your_case_reports"] == 2
-    assert stats["tenants_compared"] == 2  # A and B only, not the global row
-    assert stats["platform_median"] == 1.5  # median(2, 1), no phantom None bucket
 
 
 def test_platform_export_names_every_tenant(tenants):

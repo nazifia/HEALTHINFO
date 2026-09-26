@@ -87,7 +87,6 @@ All dashboards accept `?from=YYYY-MM-DD&to=YYYY-MM-DD` to window the rollup.
   never be widened past it.
 - `GET /api/analytics/funnel/` — search→view→case counts + conversion ratios.
 - `GET /api/analytics/retention/` — distinct active users per day (30d).
-- `GET /api/analytics/benchmark/` — your case load vs anonymized platform median.
 
 ## Patients
 - `GET/POST /api/patients/` — tenant's own patient registry: names, hospital

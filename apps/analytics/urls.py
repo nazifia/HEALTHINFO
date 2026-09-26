@@ -6,7 +6,6 @@ from .views import (
     AdverseDrugReactionViewSet,
     AppointmentStatsView,
     AppointmentViewSet,
-    BenchmarkView,
     CaseReportExportView,
     CaseReportViewSet,
     ChwStatsView,
@@ -74,7 +73,6 @@ urlpatterns = router.urls + [
     path("analytics/platform/", PlatformDashboardView.as_view(), name="platform-dashboard"),
     path("analytics/funnel/", FunnelView.as_view(), name="funnel"),
     path("analytics/retention/", RetentionView.as_view(), name="retention"),
-    path("analytics/benchmark/", BenchmarkView.as_view(), name="benchmark"),
     path("analytics/surveillance/", TenantSpikesView.as_view(), name="tenant-spikes"),
     path(
         "analytics/platform/surveillance/",

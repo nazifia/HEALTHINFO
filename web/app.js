@@ -467,7 +467,6 @@ const ANALYTICS = [
   { key: 'consultations', label: 'Visit Stats',       path: '/api/analytics/consultations/', dates: true, who: PRESCRIBERS },
   { key: 'funnel',        label: 'Funnel',            path: '/api/analytics/funnel/' },
   { key: 'retention',     label: 'Retention',         path: '/api/analytics/retention/' },
-  { key: 'benchmark',     label: 'Benchmark',         path: '/api/analytics/benchmark/' },
 ];
 
 /* The tenant's analytics as one profession reads them. An administrator runs

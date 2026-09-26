@@ -60,7 +60,6 @@ from .serializers import (
 from .stats import (
     adr_stats,
     appointment_stats,
-    benchmark_stats,
     case_report_stats,
     chw_stats,
     consultation_stats,
@@ -141,15 +140,6 @@ class RetentionView(APIView):
 
     def get(self, request):
         return Response(retention_stats())
-
-
-class BenchmarkView(APIView):
-    """Your case load vs the anonymized platform median."""
-
-    permission_classes = [IsTenantMember]
-
-    def get(self, request):
-        return Response(benchmark_stats())
 
 
 class TenantSpikesView(APIView):

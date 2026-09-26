@@ -5,7 +5,6 @@ rollup serves "last 30 days", "this quarter", or all-time without new code.
 """
 from datetime import timedelta
 from decimal import Decimal
-from statistics import median
 
 from django.db.models import (
     Avg,
@@ -481,29 +480,6 @@ def report_sources(start=None, end=None, platform=False, jurisdiction=None):
         for tier in _tiers_for(jurisdiction):
             out[f"by_{tier}"] = _merge_tier(cases, adrs, tier)
     return out
-
-
-def benchmark_stats():
-    """Current tenant's case load vs the anonymized platform median.
-
-    Lets a tenant see "are we high or low vs the network" without exposing any
-    other tenant's identity or raw numbers.
-    """
-    tenant = get_current_tenant()
-    per_tenant = dict(
-        CaseReport.all_objects.exclude(tenant=None)  # skip global rows, not a real tenant
-        .values_list("tenant")
-        .annotate(count=Count("id"))
-        .values_list("tenant", "count")
-    )
-    counts = list(per_tenant.values())
-    mine = per_tenant.get(tenant.id, 0) if tenant else 0
-    return {
-        "your_case_reports": mine,
-        "platform_median": median(counts) if counts else 0,
-        "platform_max": max(counts) if counts else 0,
-        "tenants_compared": len(counts),
-    }
 
 
 def platform_stats(start=None, end=None, jurisdiction=None):
