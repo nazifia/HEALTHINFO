@@ -250,6 +250,8 @@ class UserSerializer(serializers.ModelSerializer):
         write_only=True, required=False, validators=[validate_password]
     )
     tenant_name = serializers.CharField(source="tenant.name", read_only=True)
+    # "Kano (state)" beside the bare pk, so the web detail shows the place.
+    jurisdiction_name = serializers.StringRelatedField(source="jurisdiction")
     # The client arms its inactivity timer from this. The user's own tenant
     # sets it; a user without one (super-admin) falls back to the platform
     # default. 0 means never sign out on idle.
@@ -282,7 +284,7 @@ class UserSerializer(serializers.ModelSerializer):
         fields = (
             "id", "username", "phone", "email", "role", "tenant", "tenant_name",
             "is_active", "password", "license_number", "idle_logout_minutes",
-            "hmo", "jurisdiction", "is_admin", "privileges", "is_independent",
+            "hmo", "jurisdiction", "jurisdiction_name", "is_admin", "privileges", "is_independent",
             "accept_terms", "terms_accepted_at",
         )
         read_only_fields = ("is_independent", "terms_accepted_at")
