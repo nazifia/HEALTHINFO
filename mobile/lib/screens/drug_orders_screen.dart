@@ -364,7 +364,6 @@ class _DrugOrderFormState extends State<DrugOrderForm> {
   String _region = '';
   // The consultation band (A-E) this visit is charged at, or blank for none.
   // Shared by every drug on the prescription: the patient was consulted once.
-  String _band = '';
   bool _saving = false;
   String? _error;
 
@@ -384,7 +383,6 @@ class _DrugOrderFormState extends State<DrugOrderForm> {
       _duration.text = '${e['duration_days'] ?? ''}';
       _notes.text = '${e['notes'] ?? ''}';
       _region = '${e['region'] ?? ''}';
-      _band = '${e['consultation_category'] ?? ''}';
     }
     final p = widget.patient;
     if (p != null) {
@@ -470,7 +468,6 @@ class _DrugOrderFormState extends State<DrugOrderForm> {
         'patient': _patientId,
         'region': _region,
         'notes': _notes.text.trim(),
-        'consultation_category': _band,
         // Only when the caller knows it: sending null on an edit would strip
         // the case off an order that already has one.
         if (widget.caseReport != null) 'case_report': widget.caseReport,
@@ -583,22 +580,6 @@ class _DrugOrderFormState extends State<DrugOrderForm> {
               label: const Text('Add another drug'),
             ),
           ),
-        // The band is the prescriber's; the price is each pharmacy's terms
-        // with them, folded into the sale and owed back (see EarningsScreen).
-        DropdownButtonFormField<String>(
-          initialValue: _band,
-          decoration: const InputDecoration(
-              labelText: 'Consultation band',
-              helperText: 'The pharmacy that fills this charges its fee for '
-                  'the band and owes it to you'),
-          items: [
-            const DropdownMenuItem(value: '', child: Text('No consultation fee')),
-            for (final c in consultationBands)
-              DropdownMenuItem(value: c, child: Text('Band $c')),
-          ],
-          onChanged: (v) => setState(() => _band = v ?? ''),
-        ),
-        const SizedBox(height: 12),
         RegionPicker(
             initial: _region.isEmpty ? null : _region,
             onChanged: (r) => _region = r),
@@ -612,7 +593,3 @@ class _DrugOrderFormState extends State<DrugOrderForm> {
     );
   }
 }
-
-/// The consultation bands a prescriber can write on an order — the same A-E
-/// a pharmacy prices on its prescriber terms (apps.prescriptions.Prescriber).
-const consultationBands = ['A', 'B', 'C', 'D', 'E'];

@@ -424,9 +424,9 @@ class PrescriptionViewSet(_ReportViewSet):
     # the person it was written for.
     search_fields = ("patient__hospital_number", "patient__first_name",
                      "patient__last_name", "patient__other_names")
-    # Digits only: apps.prescriptions hangs hospitals/, prescribers/ and the
-    # payout lists off the same /api/prescriptions/ prefix, and this detail
-    # route is matched first — a catch-all pk would swallow them as ids.
+    # Digits only: apps.prescriptions hangs scripts/ off the same
+    # /api/prescriptions/ prefix, and this detail route is matched first — a
+    # catch-all pk would swallow it as an id.
     lookup_value_regex = r"[0-9]+"
 
     def get_queryset(self):

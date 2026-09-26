@@ -76,7 +76,7 @@ class PharmacyStockScreen extends StatelessWidget {
           ],
           header: (items) => _Header(items: items),
           card: (row, reload, edit) =>
-              _ItemCard(row: row, admin: admin, edit: edit),
+              _ItemCard(row: row, admin: admin, edit: edit, reload: reload),
           onTap: (row) => _openItem(context, row),
           form: (existing) => _ItemForm(existing: existing),
         );
@@ -154,7 +154,72 @@ class _ItemCard extends StatelessWidget {
   final Map<String, dynamic> row;
   final bool admin;
   final VoidCallback edit;
-  const _ItemCard({required this.row, required this.admin, required this.edit});
+  final VoidCallback reload;
+  const _ItemCard({
+    required this.row,
+    required this.admin,
+    required this.edit,
+    required this.reload,
+  });
+
+  /// Tap-to-edit one number on the card — PATCH /api/pharmacy/items/{id}/
+  /// with just that field. Admin only (the API refuses anyone else).
+  Future<void> _editField(
+    BuildContext context,
+    String field,
+    String label, {
+    bool integer = false,
+  }) async {
+    final controller = TextEditingController(text: '${row[field] ?? ''}');
+    final value = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(label),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.numberWithOptions(decimal: !integer),
+          onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (value == null || value.isEmpty || value == '${row[field]}') return;
+    try {
+      await api.patch('/api/pharmacy/items/${row['id']}/', {field: value});
+      reload();
+      if (context.mounted) showSuccess(context, '$label saved.');
+    } catch (e) {
+      if (context.mounted) showError(context, '$e');
+    }
+  }
+
+  /// A number the admin can tap to change; plain text for everyone else.
+  Widget _editable(BuildContext context, Widget child, VoidCallback onTap) =>
+      admin
+          ? InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(6),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(child: child),
+                  const SizedBox(width: 4),
+                  Icon(Icons.edit, size: 12, color: context.hintColor),
+                ],
+              ),
+            )
+          : child;
 
   @override
   Widget build(BuildContext context) {
@@ -190,18 +255,45 @@ class _ItemCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 6),
-          Text(
-            '${units(row['quantity_on_hand'])} ${row['unit']}(s) on hand'
-            ' · reorder at ${units(row['reorder_level'])}',
-            style: TextStyle(color: context.hintColor, fontSize: 13),
+          _editable(
+            context,
+            Text(
+              '${units(row['quantity_on_hand'])} ${row['unit']}(s) on hand'
+              ' · reorder at ${units(row['reorder_level'])}',
+              style: TextStyle(color: context.hintColor, fontSize: 13),
+            ),
+            () => _editField(
+              context,
+              'reorder_level',
+              'Reorder level',
+              integer: true,
+            ),
           ),
           const SizedBox(height: 4),
-          Text(
-            '${money(row['unit_price'])} each',
-            style: const TextStyle(
-              color: EnhancedTheme.primaryTeal,
-              fontWeight: FontWeight.w700,
-            ),
+          Wrap(
+            spacing: 16,
+            children: [
+              _editable(
+                context,
+                Text(
+                  '${money(row['unit_price'])} each',
+                  style: const TextStyle(
+                    color: EnhancedTheme.primaryTeal,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                () => _editField(context, 'unit_price', 'Sell price'),
+              ),
+              if (admin)
+                _editable(
+                  context,
+                  Text(
+                    'cost ${money(row['cost_price'])}',
+                    style: TextStyle(color: context.hintColor, fontSize: 13),
+                  ),
+                  () => _editField(context, 'cost_price', 'Cost price'),
+                ),
+            ],
           ),
         ],
       ),
@@ -248,6 +340,19 @@ class _ItemSheetState extends State<_ItemSheet> {
     if (booked == true) {
       _reload();
       if (mounted) showSuccess(context, 'Stock received.');
+    }
+  }
+
+  Future<void> _editBatch(Map<String, dynamic> batch) async {
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _ReceiveForm(item: widget.item, batch: batch),
+    );
+    if (saved == true) {
+      _reload();
+      if (mounted) showSuccess(context, 'Batch updated.');
     }
   }
 
@@ -317,6 +422,7 @@ class _ItemSheetState extends State<_ItemSheet> {
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         dense: true,
+                        onTap: () => _editBatch(b),
                         title: Text(
                           'Batch ${b['batch_number']}',
                           style: TextStyle(
@@ -370,10 +476,14 @@ class _ItemSheetState extends State<_ItemSheet> {
   }
 }
 
-/// Booking a consignment in — POST /api/pharmacy/items/{id}/receive/.
+/// Booking a consignment in — POST /api/pharmacy/items/{id}/receive/ — or,
+/// given [batch], correcting its details — PATCH /api/pharmacy/batches/{id}/.
+/// The quantity is never edited here: it moves through receipts, sales and
+/// adjustments only, so the ledger keeps explaining the shelf.
 class _ReceiveForm extends StatefulWidget {
   final Map<String, dynamic> item;
-  const _ReceiveForm({required this.item});
+  final Map<String, dynamic>? batch;
+  const _ReceiveForm({required this.item, this.batch});
 
   @override
   State<_ReceiveForm> createState() => _ReceiveFormState();
@@ -389,9 +499,18 @@ class _ReceiveFormState extends State<_ReceiveForm> {
   bool _saving = false;
   String? _error;
 
+  bool get _isEdit => widget.batch != null;
+
   @override
   void initState() {
     super.initState();
+    final b = widget.batch;
+    if (b != null) {
+      _batch.text = '${b['batch_number'] ?? ''}';
+      _cost.text = '${b['cost_price'] ?? ''}';
+      _expiry = DateTime.tryParse('${b['expiry_date']}');
+      _supplierId = b['supplier'] as int?;
+    }
     _loadSuppliers();
   }
 
@@ -420,8 +539,9 @@ class _ReceiveFormState extends State<_ReceiveForm> {
     final now = DateTime.now();
     final picked = await showDatePicker(
       context: context,
-      initialDate: DateTime(now.year + 1, now.month, now.day),
-      firstDate: now,
+      initialDate: _expiry ?? DateTime(now.year + 1, now.month, now.day),
+      // An edit may be recording a date already past.
+      firstDate: _isEdit ? DateTime(now.year - 15) : now,
       lastDate: DateTime(now.year + 15),
     );
     if (picked != null) setState(() => _expiry = picked);
@@ -429,7 +549,11 @@ class _ReceiveFormState extends State<_ReceiveForm> {
 
   Future<void> _submit() async {
     final quantity = int.tryParse(_quantity.text.trim()) ?? 0;
-    if (quantity <= 0 || _batch.text.trim().isEmpty) {
+    if (_isEdit && _batch.text.trim().isEmpty) {
+      setState(() => _error = 'A batch needs a batch number.');
+      return;
+    }
+    if (!_isEdit && (quantity <= 0 || _batch.text.trim().isEmpty)) {
       setState(
         () => _error = 'A delivery needs a quantity and a batch number.',
       );
@@ -440,6 +564,16 @@ class _ReceiveFormState extends State<_ReceiveForm> {
       _error = null;
     });
     try {
+      if (_isEdit) {
+        await api.patch('/api/pharmacy/batches/${widget.batch!['id']}/', {
+          'batch_number': _batch.text.trim(),
+          'expiry_date': _expiry?.toIso8601String().substring(0, 10),
+          'cost_price': _cost.text.trim().isEmpty ? '0' : _cost.text.trim(),
+          'supplier': _supplierId,
+        });
+        if (mounted) Navigator.of(context).pop(true);
+        return;
+      }
       await api.post('/api/pharmacy/items/${widget.item['id']}/receive/', {
         'quantity': quantity,
         'batch_number': _batch.text.trim(),
@@ -459,22 +593,26 @@ class _ReceiveFormState extends State<_ReceiveForm> {
   @override
   Widget build(BuildContext context) {
     return ReportFormSheet(
-      title: 'Receive ${widget.item['name']}',
+      title: _isEdit
+          ? 'Edit batch ${widget.batch!['batch_number']}'
+          : 'Receive ${widget.item['name']}',
       saving: _saving,
       error: _error,
-      submitLabel: 'Book in',
+      submitLabel: _isEdit ? 'Save changes' : 'Book in',
       onSubmit: _submit,
       children: [
         Row(
           children: [
-            Expanded(
-              child: TextField(
-                controller: _quantity,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Quantity'),
+            if (!_isEdit) ...[
+              Expanded(
+                child: TextField(
+                  controller: _quantity,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Quantity'),
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
+              const SizedBox(width: 12),
+            ],
             Expanded(
               child: TextField(
                 controller: _batch,
@@ -617,9 +755,18 @@ class _ItemFormState extends State<_ItemForm> {
   final _cost = TextEditingController(text: '0');
   final _reorder = TextEditingController(text: '0');
   final _addStock = TextEditingController();
+  final _brand = TextEditingController();
+  final _sku = TextEditingController();
+  final _barcode = TextEditingController();
+  final _markup = TextEditingController();
+  List<Map<String, dynamic>> _branches = [];
+  int? _branchId;
+  String _barcodeType = '';
   String _form = 'tablet';
+  String _store = 'retail';
   bool _prescriptionOnly = false;
   bool _isControlled = false;
+  bool _isActive = true;
   bool _saving = false;
   String? _error;
 
@@ -635,10 +782,29 @@ class _ItemFormState extends State<_ItemForm> {
       _price.text = '${e['unit_price'] ?? 0}';
       _cost.text = '${e['cost_price'] ?? 0}';
       _reorder.text = '${e['reorder_level'] ?? 0}';
+      _brand.text = '${e['brand'] ?? ''}';
+      _sku.text = '${e['sku'] ?? ''}';
+      _barcode.text = '${e['barcode'] ?? ''}';
+      _barcodeType = '${e['barcode_type'] ?? ''}';
+      _branchId = e['branch'] as int?;
       _form = '${e['form'] ?? 'tablet'}';
+      _store = '${e['store'] ?? 'retail'}';
+      _isActive = e['is_active'] != false;
       _prescriptionOnly = e['prescription_only'] == true;
       _isControlled = e['is_controlled'] == true;
     }
+    _loadBranches();
+  }
+
+  /// Branch is optional (blank means tenant-wide), so a failed list must not
+  /// stop the item saving.
+  Future<void> _loadBranches() async {
+    try {
+      final rows = await api.getAll('/api/branches/');
+      if (mounted) {
+        setState(() => _branches = rows.cast<Map<String, dynamic>>());
+      }
+    } catch (_) {}
   }
 
   @override
@@ -649,6 +815,10 @@ class _ItemFormState extends State<_ItemForm> {
     _cost.dispose();
     _reorder.dispose();
     _addStock.dispose();
+    _brand.dispose();
+    _sku.dispose();
+    _barcode.dispose();
+    _markup.dispose();
     super.dispose();
   }
 
@@ -664,7 +834,18 @@ class _ItemFormState extends State<_ItemForm> {
     try {
       final body = {
         'name': _name.text.trim(),
+        'brand': _brand.text.trim(),
+        'sku': _sku.text.trim(),
+        'barcode': _barcode.text.trim(),
+        'barcode_type': _barcodeType,
+        'branch': _branchId,
+        // Applied by the server once, on create, and only while the sell
+        // price is 0 — so it is not offered on an edit.
+        if (!_isEdit && _markup.text.trim().isNotEmpty)
+          'markup': _markup.text.trim(),
         'form': _form,
+        'store': _store,
+        'is_active': _isActive,
         'unit': _unit.text.trim().isEmpty ? 'unit' : _unit.text.trim(),
         'unit_price': _price.text.trim(),
         'cost_price': _cost.text.trim(),
@@ -698,6 +879,70 @@ class _ItemFormState extends State<_ItemForm> {
         TextField(
           controller: _name,
           decoration: const InputDecoration(labelText: 'Name'),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _brand,
+          decoration: const InputDecoration(labelText: 'Brand'),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _sku,
+                decoration: const InputDecoration(labelText: 'SKU'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextField(
+                controller: _barcode,
+                decoration: const InputDecoration(labelText: 'Barcode'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SearchableDropdown<String>(
+          initialValue: _barcodeType,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Barcode type'),
+          items: const [
+            DropdownMenuItem(value: '', child: Text('— none —')),
+            DropdownMenuItem(value: 'UPC', child: Text('UPC')),
+            DropdownMenuItem(value: 'EAN13', child: Text('EAN-13')),
+            DropdownMenuItem(value: 'CODE128', child: Text('Code 128')),
+            DropdownMenuItem(value: 'QR', child: Text('QR code')),
+            DropdownMenuItem(value: 'OTHER', child: Text('Other')),
+          ],
+          onChanged: (v) => setState(() => _barcodeType = v ?? ''),
+        ),
+        const SizedBox(height: 12),
+        SearchableDropdown<int?>(
+          initialValue: _branchId,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Branch'),
+          items: [
+            const DropdownMenuItem(value: null, child: Text('All branches')),
+            for (final b in _branches)
+              DropdownMenuItem(
+                value: b['id'] as int,
+                child: Text('${b['name']}'),
+              ),
+          ],
+          onChanged: (v) => setState(() => _branchId = v),
+        ),
+        const SizedBox(height: 12),
+        SearchableDropdown<String>(
+          initialValue: _store,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Store'),
+          items: const [
+            DropdownMenuItem(value: 'retail', child: Text('Retail')),
+            DropdownMenuItem(value: 'wholesale', child: Text('Wholesale')),
+          ],
+          onChanged: (v) => setState(() => _store = v ?? 'retail'),
         ),
         const SizedBox(height: 12),
         SearchableDropdown<String>(
@@ -736,6 +981,17 @@ class _ItemFormState extends State<_ItemForm> {
             ),
           ],
         ),
+        if (!_isEdit) ...[
+          const SizedBox(height: 12),
+          TextField(
+            controller: _markup,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'Markup (%)',
+              helperText: 'Sets the sell price from cost when sell price is 0.',
+            ),
+          ),
+        ],
         const SizedBox(height: 12),
         Row(
           children: [
@@ -781,6 +1037,14 @@ class _ItemFormState extends State<_ItemForm> {
           value: _isControlled,
           onChanged: (v) => setState(() => _isControlled = v),
         ),
+        if (_isEdit)
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Active'),
+            subtitle: const Text('Off retires the item from sale and pickers.'),
+            value: _isActive,
+            onChanged: (v) => setState(() => _isActive = v),
+          ),
       ],
     );
   }

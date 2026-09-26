@@ -92,7 +92,7 @@ def test_visit_to_counter_on_the_phone_number(world):
                     {"diagnosis": "Malaria"}, format="json").status_code == 200
     order = doc.post("/api/prescriptions/", {
         "patient": patient["id"], "medication": world["drug"].id,
-        "dose": "500 mg", "consultation_category": "A",
+        "dose": "500 mg",
     }, format="json")
     assert order.status_code == 201, order.content
     oid = order.json()["id"]

@@ -34,13 +34,7 @@ from apps.pos.models import (
     TillSession,
     record_return,
 )
-from apps.prescriptions.models import (
-    ConsultationPayout,
-    Hospital,
-    Prescriber,
-    PrescriberCommission,
-    Prescription,
-)
+from apps.prescriptions.models import Prescription
 from apps.tenants.current import clear_current_tenant
 from apps.tenants.models import Tenant
 
@@ -271,47 +265,6 @@ def test_a_transfer_the_shelf_cannot_cover_moves_nothing(counter):
     assert retail.quantity_on_hand == 100
 
 
-# --- prescriber dues ------------------------------------------------------
-
-def test_a_script_pays_its_prescriber_once_per_sale_and_once_per_script(counter):
-    tenant = counter["tenant"]
-    prescriber = Prescriber.all_objects.create(
-        tenant=tenant, name="Dr Ada Eze", commission_rate=Decimal("10.00"),
-        consult_fee_b=Decimal("2000.00"),
-    )
-    rx = Prescription.all_objects.create(
-        tenant=tenant, prescriber=prescriber, customer_name="Chidi Okafor",
-        consultation_category="B",
-    )
-    # The band's fee is snapshotted when the script is written up.
-    assert rx.consultation_fee == Decimal("2000.00")
-
-    sale = _sell(counter, quantity=4, rx=rx.pk, consultation_fee="1.00")
-    sale.refresh_from_db()
-    # The fee rides on the bill silently — never typed at the till, and never
-    # itemised: the subtotal is the drugs, the total carries the fee.
-    assert sale.consultation_fee == Decimal("2000.00")
-    assert sale.subtotal == Decimal("100.00")
-    assert sale.total == Decimal("2100.00")
-
-    commission = PrescriberCommission.all_objects.get(prescription=rx)
-    payout = ConsultationPayout.all_objects.get(prescription=rx)
-    assert commission.commission_amount == Decimal("10.00")   # 10% of the drugs
-    assert commission.sales_amount == Decimal("100.00")
-    assert payout.consultation_fee == Decimal("2000.00")
-
-    # Filling more off the same script raises another commission, never a
-    # second consultation fee — the patient was consulted once.
-    rx.raise_prescriber_dues(sale)
-    assert PrescriberCommission.all_objects.filter(prescription=rx).count() == 1
-    again = _sell(counter, quantity=2, rx=rx.pk)
-    assert again.consultation_fee == Decimal("0.00")
-    assert again.total == Decimal("50.00")
-    assert PrescriberCommission.all_objects.filter(prescription=rx).count() == 2
-    assert ConsultationPayout.all_objects.filter(prescription=rx).count() == 1
-    assert prescriber.outstanding["total"] == Decimal("2015.00")
-
-
 # --- till and reports -----------------------------------------------------
 
 def test_a_cash_expense_comes_out_of_the_drawer_it_was_paid_from(counter):
@@ -373,18 +326,3 @@ def test_profit_flags_lines_that_carry_no_cost(counter):
     assert report["revenue"] == Decimal("200.00")    # 100 + 100
     assert report["cost"] == Decimal("40.00")        # only the costed line
     assert 0 < report["cost_coverage"] < 1
-
-
-def test_hospital_list_counts_its_prescribers(counter):
-    """The hospitals list carries how many doctors write from each one."""
-    tenant = counter["tenant"]
-    clinic = Hospital.all_objects.create(tenant=tenant, name="Ikeja General")
-    Hospital.all_objects.create(tenant=tenant, name="Empty Clinic")
-    for name in ("Dr Ada Eze", "Dr Musa Bello"):
-        Prescriber.all_objects.create(tenant=tenant, name=name, hospital=clinic)
-
-    rows = _client(counter["staff"], tenant).get(
-        "/api/prescriptions/hospitals/"
-    ).data["results"]
-    counts = {r["name"]: r["prescriber_count"] for r in rows}
-    assert counts == {"Ikeja General": 2, "Empty Clinic": 0}

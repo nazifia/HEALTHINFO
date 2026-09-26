@@ -286,11 +286,6 @@ class Sale(TenantOwnedModel):
     is_wholesale = models.BooleanField(default=False)
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     discount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    # A prescriber's consultation fee, folded into the total and owed on to
-    # them. Never itemised on the customer's receipt — see
-    # ``prescriptions.ConsultationPayout``.
-    consultation_fee = models.DecimalField(max_digits=12, decimal_places=2,
-                                           default=0)
     total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     patient_payable = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     hmo_payable = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -507,8 +502,6 @@ class Sale(TenantOwnedModel):
                 # so the percentage is taken of the tariff instead.
                 covered = min(covered, _money(tariff * line.quantity))
             share += covered * rate / Decimal("100")
-        # The consultation fee is not a drug, so no item rule reaches it.
-        share += Decimal(self.consultation_fee) * percent / Decimal("100")
         # Never bill the insurer more than the bill: rounding per line, and a
         # discount larger than one line's own gross, must not add up past it.
         share = min(_money(share), total)
@@ -528,11 +521,7 @@ class Sale(TenantOwnedModel):
         for line in SaleItem.all_objects.filter(sale=self):
             subtotal += line.gross
             discount += line.discount
-        # The consultation fee rides on the bill without appearing on it, so it
-        # is added after the discount rather than being discountable.
-        total = _money(
-            max(subtotal - discount, ZERO) + Decimal(self.consultation_fee)
-        )
+        total = _money(max(subtotal - discount, ZERO))
         hmo_share = self._insurer_share(total)
         self.subtotal = _money(subtotal)
         self.discount = _money(discount)

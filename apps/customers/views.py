@@ -35,12 +35,12 @@ class CustomerViewSet(PharmacyViewSet):
 
     model = Customer
     serializer_class = CustomerSerializer
-    filterset_fields = ("is_wholesale", "is_active", "patient", "prescriber")
+    filterset_fields = ("is_wholesale", "is_active", "patient")
     search_fields = ("name", "phone", "email")
     ordering_fields = ("name", "created_at", "wallet_balance", "outstanding_debt")
 
     def get_queryset(self):
-        return Customer.objects.select_related("patient", "prescriber")
+        return Customer.objects.select_related("patient")
 
     def _wallet_action(self, request, call, message):
         customer = self.get_object()

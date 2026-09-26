@@ -10,7 +10,7 @@ import 'report_scaffold.dart';
 
 /// Counter scripts — GET /api/prescriptions/scripts/.
 ///
-/// The counter's script: a named prescriber, a list of drugs, and a line-by-
+/// The counter's script: who it is for, a list of drugs, and a line-by-
 /// line record of what has actually been handed over. Status is never set by
 /// hand — it follows the lines, because "partly dispensed" is a fact about
 /// which drugs went out, not a flag someone remembers to tick.
@@ -74,8 +74,7 @@ class _RxCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final lines = ((row['lines'] ?? []) as List).cast<Map<String, dynamic>>();
     final out = lines.where((l) => l['is_dispensed'] == true).length;
-    final prescriber =
-        '${row['prescriber_name'] ?? row['doctor_name'] ?? 'No prescriber'}';
+    final prescriber = scriptWriter(row);
     return GlassCard(
       borderRadius: 16,
       padding: const EdgeInsets.all(14),
@@ -97,14 +96,6 @@ class _RxCard extends StatelessWidget {
         const SizedBox(height: 4),
         Text('$out of ${lines.length} line(s) dispensed',
             style: TextStyle(color: context.hintColor, fontSize: 13)),
-        if ((num.tryParse('${row['consultation_fee']}') ?? 0) > 0)
-          Text(
-              'Consultation ${row['consultation_category']} · '
-              '${money(row['consultation_fee'])}',
-              style: const TextStyle(
-                  color: EnhancedTheme.accentCyan,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600)),
       ]),
     );
   }
@@ -178,17 +169,11 @@ class _RxSheetState extends State<RxSheet> {
                 text: '${_rx['status']}', color: statusColor(_rx['status'])),
           ]),
           Text(
-              'Rx${_rx['id']} · '
-              '${_rx['prescriber_name'] ?? _rx['doctor_name'] ?? 'No prescriber'}',
+              'Rx${_rx['id']} · ${scriptWriter(_rx)}',
               style: TextStyle(color: context.hintColor, fontSize: 13)),
           if ('${_rx['diagnosis'] ?? ''}'.trim().isNotEmpty)
             Text('${_rx['diagnosis']}',
                 style: TextStyle(color: context.hintColor, fontSize: 13)),
-          if ((num.tryParse('${_rx['consultation_fee']}') ?? 0) > 0) ...[
-            const SizedBox(height: 8),
-            FactRow('Consultation ${_rx['consultation_category']}',
-                money(_rx['consultation_fee'])),
-          ],
           const Divider(),
           Flexible(
             child: ListView.builder(
@@ -275,10 +260,9 @@ class _RxFormState extends State<_RxForm> {
   final _name = TextEditingController();
   final _phone = TextEditingController();
   final _diagnosis = TextEditingController();
+  final _doctor = TextEditingController();
   final _lines = <RxLineDraft>[];
-  Map<String, dynamic>? _prescriber;
   Map<String, dynamic>? _customer;
-  String _category = '';
   bool _saving = false;
   String? _error;
 
@@ -297,22 +281,8 @@ class _RxFormState extends State<_RxForm> {
     _name.dispose();
     _phone.dispose();
     _diagnosis.dispose();
+    _doctor.dispose();
     super.dispose();
-  }
-
-  Future<void> _pickPrescriber() async {
-    final row = await pickRow(
-      context,
-      path: '/api/prescriptions/prescribers/',
-      title: 'Who wrote it?',
-      hint: 'Name, licence or clinic…',
-      label: (r) => '${r['name']}',
-      subtitle: (r) => [
-        '${r['license_number'] ?? ''}',
-        '${r['hospital_name'] ?? r['clinic'] ?? ''}',
-      ].where((v) => v.trim().isNotEmpty).join(' · '),
-    );
-    if (row != null) setState(() => _prescriber = row);
   }
 
   Future<void> _pickCustomer() async {
@@ -367,11 +337,10 @@ class _RxFormState extends State<_RxForm> {
           customerName: _name.text,
           customerPhone: _phone.text,
           lines: _lines,
-          prescriberId: _prescriber?['id'] as int?,
           customerId: _customer?['id'] as int?,
           patientId: widget.patient?['id'] as int?,
+          doctorName: _doctor.text,
           diagnosis: _diagnosis.text,
-          consultationCategory: _category,
         ),
       );
       if (mounted) Navigator.of(context).pop(true);
@@ -384,9 +353,6 @@ class _RxFormState extends State<_RxForm> {
 
   @override
   Widget build(BuildContext context) {
-    final fee = _prescriber == null
-        ? 0.0
-        : consultationFee(_prescriber!, _category);
     final patient = widget.patient;
     return ReportFormSheet(
       title: patient == null
@@ -422,44 +388,12 @@ class _RxFormState extends State<_RxForm> {
           decoration: const InputDecoration(labelText: 'Phone (optional)'),
         ),
         const SizedBox(height: 12),
-        InputDecorator(
-          decoration: const InputDecoration(labelText: 'Prescriber'),
-          child: Row(children: [
-            Expanded(
-              child: Text(
-                _prescriber == null
-                    ? 'Not linked'
-                    : '${_prescriber!['name']}',
-                style: TextStyle(
-                    color: _prescriber == null
-                        ? context.hintColor
-                        : context.labelColor),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            TextButton(
-                onPressed: _pickPrescriber,
-                child: Text(_prescriber == null ? 'Link' : 'Change')),
-          ]),
-        ),
-        const SizedBox(height: 12),
-        // The band the doctor prices; the server snapshots the fee, so what is
-        // shown here is a preview, never what gets charged.
-        DropdownButtonFormField<String>(
-          initialValue: _category.isEmpty ? null : _category,
-          decoration: InputDecoration(
-            labelText: 'Consultation band (optional)',
-            helperText: fee > 0 ? 'Charges ${money(fee)} at the till' : null,
+        TextField(
+          controller: _doctor,
+          decoration: const InputDecoration(
+            labelText: 'Written by (optional)',
+            helperText: 'Leave blank when you are prescribing it yourself',
           ),
-          items: const [
-            DropdownMenuItem(value: '', child: Text('None')),
-            DropdownMenuItem(value: 'A', child: Text('A')),
-            DropdownMenuItem(value: 'B', child: Text('B')),
-            DropdownMenuItem(value: 'C', child: Text('C')),
-            DropdownMenuItem(value: 'D', child: Text('D')),
-            DropdownMenuItem(value: 'E', child: Text('E')),
-          ],
-          onChanged: (v) => setState(() => _category = v ?? ''),
         ),
         const SizedBox(height: 12),
         TextField(

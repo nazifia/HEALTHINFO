@@ -193,16 +193,11 @@ const VISIT_SHEET = {
 };
 const ORDER_SHEET = {
   form: { title: 'Prescribe', submit: 'Write orders' },
-  layout: ['patient', 'medication', 'dose', 'frequency', 'duration_days', 'consultation_category',
-           'region', 'notes'],
-  labels: { medication: 'Drug', duration_days: 'Duration in days', patient: 'Patient (optional)',
-            consultation_category: 'Consultation band' },
+  layout: ['patient', 'medication', 'dose', 'frequency', 'duration_days', 'region', 'notes'],
+  labels: { medication: 'Drug', duration_days: 'Duration in days', patient: 'Patient (optional)' },
   // The counter moves the status and stamps the dispensing, not the prescriber.
   hide: ['patient_age_group', 'patient_sex', 'status', 'dispensed_at'],
-  hints: { duration_days: 'Leave blank for an open-ended course',
-           // The band is the prescriber's; the price is each pharmacy's terms
-           // with them, folded into the sale and owed back (see #/earnings).
-           consultation_category: 'The pharmacy that fills this charges its fee for the band and owes it to you' },
+  hints: { duration_days: 'Leave blank for an open-ended course' },
 };
 
 const ORG_FILTERS = [
@@ -247,7 +242,10 @@ const RESOURCES = {
   'prescriptions':     { title: 'Drug Orders',        group: 'Clinical', report: true, filters: [SEX_FILTER], ...ORDER_SHEET,
                           actions: [{ name: 'cancel', label: 'Cancel prescription', danger: true,
                                       when: ['prescribed', 'partially_dispensed'] }] },
+  // ``inline``: the admin moves a price or a reorder level on the list itself;
+  // the API refuses anyone else the PATCH.
   'pharmacy-items':         { title: 'Stock Items',     group: 'Pharmacy', path: 'pharmacy/items',           roles: 'admin', search: true,
+                              inline: ['unit_price', 'cost_price', 'reorder_level'],
                               actions: [{ name: 'receive', label: 'Receive stock', ask: 'quantity,batch_number' }] },
   // A batch is read-only as a record — stock arrives through the item's
   // receive and leaves through a sale — but the shelf can still be wrong.
@@ -270,14 +268,10 @@ const RESOURCES = {
   // "all of it" shortcut, which is what an empty body means to the API.
   'pharmacy-scripts':       { title: 'Prescriptions',   group: 'Pharmacy', path: 'prescriptions/scripts',    roles: 'staff', search: true, extra: 'script',
                               hide: ['medications'], filters: [SCRIPT_STATUS_FILTER, SCRIPT_SOURCE_FILTER],
-                              labels: { customer_name: 'Patient name', customer_phone: 'Patient phone', consultation_category: 'Consultation band' },
+                              labels: { customer_name: 'Patient name', customer_phone: 'Patient phone', doctor_name: 'Written by' },
                               hints: { customer_phone: 'Any pharmacy finds and fills the script by this number' },
                               actions: [{ name: 'dispense', label: 'Dispense everything still open', when: ['pending', 'partial'] },
                                         { name: 'cancel', label: 'Cancel script', danger: true, when: ['pending', 'partial'] }] },
-  'pharmacy-hospitals':     { title: 'Hospitals',      group: 'Pharmacy', path: 'prescriptions/hospitals',   roles: 'admin', search: true },
-  // What a prescriber has earned and what is still owed them, on their own
-  // page (extra: 'statement') — the two ledgers are settled from there.
-  'pharmacy-prescribers':   { title: 'Prescribers',    group: 'Pharmacy', path: 'prescriptions/prescribers', roles: 'admin', search: true, extra: 'statement' },
   // ``signUp``: a scheme joins the platform with the seat that will run its
   // desk, so the two are made together on a page of their own (#/scheme-register)
   // rather than by minting a scheme here and then hunting for its admin.
@@ -357,12 +351,6 @@ const RESOURCES = {
                                         { name: 'complete', label: 'Turn into a sale', choose: 'payment_method:cash,card,transfer,wallet,hmo,split', when: ['accepted'] }] },
   'pharmacy-expense-cats':  { title: 'Expense Types',   group: 'Pharmacy', path: 'pharmacy/expense-categories', roles: 'admin', search: true },
   'pharmacy-expenses':      { title: 'Expenses',        group: 'Pharmacy', path: 'pharmacy/expenses',        roles: 'staff', search: true },
-  // Money owed to a prescriber, raised by a sale. Read is staff-wide; paying
-  // it out is the pharmacy's money leaving, so it is the admin's.
-  'pharmacy-commissions':   { title: 'Prescriber Commissions', group: 'Pharmacy', path: 'prescriptions/commissions', roles: 'staff', readOnly: true,
-                              actions: [{ name: 'pay', label: 'Mark paid', adminOnly: true, when: ['pending'] }] },
-  'pharmacy-payouts':       { title: 'Consultation Payouts',   group: 'Pharmacy', path: 'prescriptions/consultation-payouts', roles: 'staff', readOnly: true,
-                              actions: [{ name: 'pay', label: 'Mark paid', adminOnly: true, when: ['pending'] }] },
   'pharmacy-commission-configs': { title: 'Staff Commission Rates', group: 'Pharmacy', path: 'reports/commission-configs', roles: 'admin' },
   'branches':          { title: 'Branches',           group: 'Pharmacy', roles: 'admin', search: true },
   // Merging asks for the duplicate's hospital number — what reception has in
@@ -665,7 +653,7 @@ function navHtml() {
   }
   if (needsFacility()) {
     return `<a href="#/facility" data-route="/facility" class="nav-home">${ico('shield')}Choose Facility</a>`
-      + navGroup('Account', `<a href="#/profile" data-route="/profile">${ico('users')}Profile</a>${earningsLink()}`);
+      + navGroup('Account', `<a href="#/profile" data-route="/profile">${ico('users')}Profile</a>`);
   }
   const iconFor = (slug, r) => slug.endsWith('users') || slug === 'patients' ? 'users'
     : r.hmo ? 'shield'
@@ -757,18 +745,12 @@ function navHtml() {
   // The only route the sidebar did not reach: the topbar badge opens it, which
   // is not obvious on a phone where the badge is a username and nothing else.
   html += navGroup('Account', `<a href="#/profile" data-route="/profile">${ico('users')}Profile</a>`
-    + earningsLink()
     + (isIndependent()
       ? `<a href="#/facility" data-route="/facility">${ico('shield')}Change Facility</a>` : '')
     + (PHARMACY_STAFF_ROLES.has(ME?.role)
       ? `<a href="#/notifications" data-route="/notifications">${ico('flag')}Notifications</a>` : ''));
   return html;
 }
-
-// What the pharmacies owe a prescriber is theirs to read wherever they stand,
-// so the link hangs off the account, not off a facility.
-const earningsLink = () => ME?.license_number
-  ? `<a href="#/earnings" data-route="/earnings">${ico('chart')}My Earnings</a>` : '';
 
 /* The state a platform admin is working in. Empty is the whole country; a
    pick narrows every cross-tenant read — the rollups, the facility list they
@@ -1038,7 +1020,7 @@ async function ensureChrome() {
   // rather than to a page of 403s. Their own profile stays reachable: it is
   // where the state on their row reads out.
   const here = location.hash.slice(1) || '/';
-  if (needsFacility() && !/^\/(facility|profile|earnings)/.test(here)) {
+  if (needsFacility() && !/^\/(facility|profile)/.test(here)) {
     location.hash = '#/facility';
     return false;
   }
@@ -1425,7 +1407,7 @@ function renderData(data, depth = 0, linkFor = null) {
 // ``inline``: {slug, fields} — those columns become click-to-edit cells that
 // PATCH the row in place (see the #main click handler below).
 function tableHtml(rows, linkFor, rowAction, inline) {
-  const cols = pickColumns(rows);
+  const cols = pickColumns(rows, inline?.fields);
   const keys = Object.keys(mergedRow(rows));
   const head = cols.map((c) => `<th>${esc(colLabel(keys, c))}</th>`).join('')
     + (rowAction ? '<th></th>' : '');
@@ -1470,11 +1452,12 @@ function mergedRow(rows) {
 // Sampled across every row, not just the first: a resolved name is absent from
 // a row whose foreign key is null (DRF drops it), and one such row at the top
 // would otherwise bring the bare pk column back for the whole table.
-function pickColumns(rows) {
+// ``keep``: columns that must make the cut (a list's click-to-edit fields).
+function pickColumns(rows, keep = []) {
   const row = mergedRow(rows);
   const keys = Object.keys(row);
   const resolved = (k) => namedElsewhere(keys, k);
-  const first = keys.filter((k) => ['id', 'reference', 'status', 'name', 'generic_name', 'title', 'phone', 'slug'].includes(k));
+  const first = keys.filter((k) => ['id', 'reference', 'status', 'name', 'generic_name', 'title', 'phone', 'slug', ...keep].includes(k));
   // null is a scalar here, not an object — a column empty on the sampled row
   // still belongs in the table.
   // age_group only repeats `age` as a band — the exact age is the column.
@@ -2231,7 +2214,7 @@ async function viewDetail(slug, id) {
       ${res.extra === 'close' ? closeVisitHtml(obj) : ''}
       ${res.extra === 'preauth' ? preauthItemsHtml(obj) + preauthDecisionHtml(obj)
         + preauthTrailHtml() : ''}
-      ${res.extra === 'statement' ? '<div id="statement"><p class="loading">Loading…</p></div>' : ''}`);
+`);
     if (res.receipt) $('#receipt').onclick = () => printReceipt(id);
     if (sendHtml) {
       Api.get(rdetail(slug, 'prescribers/')).then((rows) => {
@@ -2258,7 +2241,6 @@ async function viewDetail(slug, id) {
     if (res.extra === 'count') wireStockCount(id, () => viewDetail(slug, id));
     if (res.extra === 'script') wireScriptDispense(id, () => viewDetail(slug, id));
     if (res.extra === 'close') wireCloseVisit(id, () => viewDetail(slug, id));
-    if (res.extra === 'statement') loadStatement(slug, id);
     if (res.extra === 'preauth') {
       wirePreauthItems(() => viewDetail(slug, id));
       wirePreauthDecision(slug, id, () => viewDetail(slug, id));
@@ -3789,50 +3771,6 @@ async function viewFacility() {
   }
 }
 
-/* The prescriber's side of the ledger: what every pharmacy on the platform
-   owes them for the scripts it filled, matched by licence, and what has been
-   paid. Read with no facility picked — the API takes no tenant header here —
-   so an independent prescriber sees it before choosing where to write. The
-   pharmacy settles; this page only reads. */
-async function viewEarnings() {
-  if (!await ensureChrome()) return;
-  if (!ME?.license_number) return errorBox(new Error('Licensed prescribers only.'));
-  spinner();
-  let st;
-  try { st = await Api.get('/api/prescriptions/my-dues/'); }
-  catch (e) { return errorBox(e); }
-  const tile = (k, v) =>
-    `<div class="tile kpi-tile"><span class="tile-label">${esc(k)}</span><span class="tile-val">${esc(v)}</span></div>`;
-  const ledger = (title, rows) => `<div class="card"><h3>${esc(title)}</h3>
-    ${rows.length ? tableHtml(rows.map(earningsRow)) : '<p class="muted">Nothing here yet.</p>'}</div>`;
-  render(`<div class="page-head"><h2>My Earnings</h2></div>
-    <p class="muted">Licence ${esc(st.license_number)}. A pharmacy that fills your
-      prescription owes you its commission on the drugs and the fee for the
-      consultation band you wrote — on its own terms with you, so the figures
-      are theirs to settle.</p>
-    <div class="tiles">
-      ${tile('Commission owed', money(st.outstanding.commission))}
-      ${tile('Consultations owed', money(st.outstanding.consultation))}
-      ${tile('Total owed', money(st.outstanding.total))}
-      ${tile('Paid to date', money(st.paid.total))}
-    </div>
-    ${ledger('Commissions', st.commissions || [])}
-    ${ledger('Consultation fees', st.consultation_payouts || [])}`);
-}
-
-// One row of a prescriber's statement, as they read it: the pharmacy, what it
-// was earned on, the figure, and whether it has been paid.
-const earningsRow = (r) => ({
-  pharmacy: r.pharmacy_name,
-  earned_on: r.order_name || (r.prescription ? `Script ${r.prescription}` : ''),
-  ...(r.commission_amount !== undefined
-    ? { sales: money(r.sales_amount), rate: `${Number(r.commission_rate)}%`, amount: money(r.commission_amount) }
-    : { band: r.consultation_category || '', amount: money(r.consultation_fee) }),
-  status: r.status,
-  paid_at: r.paid_at ? String(r.paid_at).slice(0, 10) : '',
-  date: String(r.created_at || '').slice(0, 10),
-});
-
 /* ------------------------------------------------------------- pharmacy */
 
 const PHARMACY_ADMIN_ROLES = new Set(['super_admin', 'tenant_admin']);
@@ -4040,7 +3978,7 @@ function sellRxRows(found) {
 function sellRxLabel(o) {
   if (o.kind === 'script') {
     const lines = (o.lines || []).map((l) => `${l.name} ×${l.quantity}`).join(', ');
-    return [lines || `Rx${o.id}`, o.prescriber_name || o.doctor_name].filter(Boolean).join(' — ');
+    return [lines || `Rx${o.id}`, o.doctor_name].filter(Boolean).join(' — ');
   }
   return [o.medication_name, o.dose, o.frequency,
     o.duration_days ? `${o.duration_days} days` : ''].filter(Boolean).join(' · ');
@@ -4122,8 +4060,7 @@ async function viewSell() {
     if (!rows.length) return '<p class="muted">Nothing outstanding for that number.</p>';
     return `<table><thead><tr><th>Prescribed</th><th>From</th><th></th></tr></thead>
       <tbody>${rows.map((o) => `<tr>
-        <td>${esc(rxLabel(o))}${o.consultation_category
-          ? ` <span class="muted">· consultation band ${esc(o.consultation_category)}</span>` : ''}</td>
+        <td>${esc(rxLabel(o))}</td>
         <td>${esc(o.facility || '—')}</td>
         <td>${filling?.key === o.key ? '<b>Filling</b>'
           : `<button class="btn ghost" data-fill="${o.key}">Fill this</button>`}</td>
@@ -4168,8 +4105,7 @@ async function viewSell() {
         </form>
         <div id="rx-hits">${rxHtml()}</div>
         ${filling ? `<p class="muted">This sale fills: ${esc(filling.label)}
-          — ${filling.kind === 'script' ? 'the script' : 'the order'} is marked dispensed when the sale completes${
-          filling.consultation_category ? `, and the prescriber's band ${esc(filling.consultation_category)} fee is added to the bill` : ''}.</p>` : ''}
+          — ${filling.kind === 'script' ? 'the script' : 'the order'} is marked dispensed when the sale completes.</p>` : ''}
       </div>
       <form id="scan" class="toolbar">
         <label>Scan a barcode
@@ -4430,45 +4366,6 @@ function wirePreauthItems(reload) {
    seat, or recorded by the admin from a call. Rendered under its detail page —
    the answer is what the pharmacy is later allowed to bill against, so the API
    refuses anyone else. A request already decided has nothing left to record. */
-/* A prescriber's statement: what each ledger owes them, the rows behind it,
- * and — for the admin, whose money it is — one button that settles both.
- *
- * Paying is two calls because commissions and consultation fees are two
- * ledgers; the second only runs if the first went through, so a half-failure
- * leaves a figure on screen that still says what is left. */
-async function loadStatement(slug, id) {
-  const box = $('#statement');
-  if (!box) return;
-  let st;
-  try { st = await Api.get(rdetail(slug, `${id}/statement/`)); }
-  catch (e) { box.innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
-  const owed = st.outstanding || {};
-  const pending = Number(owed.total || 0) > 0;
-  const tile = (k, v) =>
-    `<div class="tile kpi-tile"><span class="tile-label">${esc(k)}</span><span class="tile-val">${esc(v)}</span></div>`;
-  const ledger = (title, rows) => `<div class="card"><h3>${esc(title)}</h3>
-    ${rows.length ? tableHtml(rows) : '<p class="muted">Nothing here yet.</p>'}</div>`;
-  box.innerHTML = `<div class="tiles">
-      ${tile('Commission due', money(owed.commission))}
-      ${tile('Consultations due', money(owed.consultation))}
-      ${tile('Total owed', money(owed.total))}
-    </div>
-    ${pending && isPharmacyAdmin()
-      ? `<div class="actions"><button id="pay-all" class="btn">Pay everything owed</button></div>` : ''}
-    ${ledger('Commissions', st.commissions || [])}
-    ${ledger('Consultation payouts', st.consultation_payouts || [])}`;
-  const btn = $('#pay-all');
-  if (btn) btn.onclick = async () => {
-    btn.disabled = true;
-    try {
-      await Api.post('/api/prescriptions/commissions/pay-all/', { prescriber: id });
-      await Api.post('/api/prescriptions/consultation-payouts/pay-all/', { prescriber: id });
-      toast('Paid.');
-    } catch (e) { toast(e.message, true); }
-    loadStatement(slug, id);
-  };
-}
-
 function preauthDecisionHtml(auth) {
   if (!answersForInsurer()) return '';
   // An itemised request is answered drug by drug and settles itself once every
@@ -4998,7 +4895,6 @@ const routes = [
   [/^\/graph\/([a-z]+)\/(\d+)$/, (m) => viewGraph(m[1], m[2])],
   [/^\/clinical$/, viewClinical],
   [/^\/facility$/, viewFacility],
-  [/^\/earnings$/, viewEarnings],
   [/^\/portal$/, viewPortal],
   [/^\/insurer$/, viewInsurer],
   [/^\/gov$/, viewGov],
@@ -5025,7 +4921,7 @@ const homeHash = (role) => role === 'super_admin' && !Api.tenant ? '#/platform'
 // Forms, the till and the detail pages hold what the user is doing; they stay
 // as loaded. ponytail: 10s poll, route() clears it; swap for SSE only if the
 // poll load ever shows on the server.
-const LIVE_RE = /^\/(?:|clinical|facility|earnings|portal|insurer|gov|pharmacy|hmo|notifications|notifiable|r\/[a-z-]+|(?:analytics|platform|trading)(?:\/[a-z-]+)?)$/;
+const LIVE_RE = /^\/(?:|clinical|facility|portal|insurer|gov|pharmacy|hmo|notifications|notifiable|r\/[a-z-]+|(?:analytics|platform|trading)(?:\/[a-z-]+)?)$/;
 const LIVE_MS = 10000;
 let liveTimer = null;  // every navigation stops it
 function live(tick) {
@@ -5089,6 +4985,7 @@ $('#main').addEventListener('click', (e) => {
   const input = document.createElement('input');
   input.type = 'number'; input.step = '0.01'; input.min = '0';
   if (field === 'coverage_percent') input.max = '100';
+  if (field === 'reorder_level') input.step = '1';
   input.value = old === '—' ? '' : old;
   td.replaceChildren(input);
   input.focus(); input.select();

@@ -18,12 +18,12 @@ const { sellRxRows, sellRxLabel, sellFillBody, sellMatchItem } = new Function(
 
 assert.deepStrictEqual(sellRxRows(null), []);
 const found = {
-  scripts: [{ id: 3, prescriber_name: 'Dr Ada', consultation_category: 'B',
+  scripts: [{ id: 3, doctor_name: 'Dr Ada',
     lines: [{ name: 'Amoxicillin', quantity: 10 }, { name: 'Paracetamol', quantity: 6 }] }],
   orders: [{ id: 7, medication_name: 'Artemether', dose: '80 mg', frequency: 'twice daily' }],
   orders_elsewhere: [{ id: 9, medication_name: 'Amoxicillin', dose: '500 mg',
-    duration_days: 5, facility: 'Ikeja Clinic', consultation_category: 'B' }],
-  scripts_elsewhere: [{ id: 4, prescriber_name: 'Dr Bala', facility: 'Corner Pharmacy',
+    duration_days: 5, facility: 'Ikeja Clinic' }],
+  scripts_elsewhere: [{ id: 4, doctor_name: 'Dr Bala', facility: 'Corner Pharmacy',
     lines: [{ name: 'ORS', quantity: 3 }] }],
 };
 const rows = sellRxRows(found);

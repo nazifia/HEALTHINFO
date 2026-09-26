@@ -8,11 +8,7 @@ from apps.accounts.serializers import TenantUserField
 from apps.analytics.models import Prescription as DrugOrder
 from apps.inventory.models import OutOfStock, StockItem, Supplier
 from apps.patients.models import patients_by_number
-from apps.prescriptions.models import (
-    Prescription as CounterScript,
-    order_consultation_fee,
-    raise_order_dues,
-)
+from apps.prescriptions.models import Prescription as CounterScript
 from apps.inventory.serializers import StockBatchSerializer  # noqa: F401
 from config.serializers import NamedRelationsMixin
 
@@ -136,10 +132,8 @@ class SaleSerializer(NamedRelationsMixin, serializers.ModelSerializer):
         exclude = ("tenant",)
         # Every money field is derived from the lines and the coverage — a
         # client that could post its own total could bill an HMO anything.
-        # The consultation fee is derived too: from the script or order the
-        # sale fills, never typed at the till (see _consultation_fee).
         read_only_fields = ("reference", "served_by", "status", "subtotal",
-                            "discount", "consultation_fee", "total",
+                            "discount", "total",
                             "patient_payable", "hmo_payable", "amount_paid",
                             "amount_tendered", "receipt_kept_at",
                             "receipt_printed_at", "created_at", "updated_at")
@@ -237,21 +231,6 @@ class SaleSerializer(NamedRelationsMixin, serializers.ModelSerializer):
                                    "only dispensable to the patient holding it."}
             )
 
-    @staticmethod
-    def _consultation_fee(sale):
-        """The prescriber's consultation fee this sale carries, silently.
-
-        Charged once per prescription however many times it is part-filled:
-        the patient was consulted once. A counter script carries its own
-        snapshot; a clinician's drug order carries a band, priced by this
-        pharmacy's terms with its writer (order_consultation_fee).
-        """
-        if sale.rx_id:
-            return sale.rx.consultation_fee_at(sale.tenant_id)
-        if sale.prescription_id:
-            return order_consultation_fee(sale.tenant_id, sale.prescription)
-        return ZERO
-
     def create(self, validated_data):
         """Dispense the whole basket or none of it, then raise any HMO claim.
 
@@ -263,10 +242,6 @@ class SaleSerializer(NamedRelationsMixin, serializers.ModelSerializer):
         lines = validated_data.pop("items")
         sale = Sale(**validated_data)
         sale.save()
-        fee = self._consultation_fee(sale)
-        if fee > 0:
-            sale.consultation_fee = fee
-            sale.save(update_fields=["consultation_fee", "updated_at"])
         user = sale.served_by
         for line in lines:
             try:
@@ -290,14 +265,8 @@ class SaleSerializer(NamedRelationsMixin, serializers.ModelSerializer):
         claim_for_sale(sale)
         if sale.rx_id:
             # The sale is what fills the script — this pharmacy's own or
-            # another's — and the prescriber earns on what it actually sold,
-            # so both follow the sale rather than the writing of the script.
+            # another's — so it follows the sale, not the writing of the script.
             sale.rx.fill_from(sale)
-            sale.rx.raise_prescriber_dues(sale)
-        elif sale.prescription_id:
-            # A clinician's order filled here — another facility's included —
-            # pays its writer if this pharmacy has terms with them.
-            raise_order_dues(sale)
         sale.refresh_from_db()
         return sale
 

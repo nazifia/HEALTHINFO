@@ -30,12 +30,11 @@ import 'pharmacy_schemes_screen.dart';
 import 'pharmacy_suppliers_screen.dart';
 import 'pharmacy_orders_screen.dart';
 import 'pharmacy_reports_screen.dart';
+import 'pharmacy_dashboard_screen.dart';
 import 'branches_screen.dart';
 import 'customers_screen.dart';
 import 'drug_orders_screen.dart';
 import 'prescriptions_screen.dart';
-import 'prescribers_screen.dart';
-import 'hospitals_screen.dart';
 import 'stock_checks_screen.dart';
 import 'stock_ledger_screen.dart';
 import 'transfers_screen.dart';
@@ -73,7 +72,6 @@ import 'user_management_screen.dart';
 import 'my_health_screen.dart';
 import 'ward_screen.dart';
 import 'profile_screen.dart';
-import 'earnings_screen.dart';
 import 'login_screen.dart';
 
 /// One navigable section: a label + icon for the drawer and the page widget.
@@ -145,17 +143,6 @@ const _reportsGroup = _Group('Reports', [
 const _accountGroup = _Group('Account', [
   _Section('Profile', Icons.person_outline, ProfileScreen()),
 ]);
-
-// What the pharmacies owe a prescriber is theirs to read wherever they stand,
-// so it hangs off the account, not off a facility (same as web/app.js
-// earningsLink). Only a seat carrying a licence has a statement.
-const _earningsSection = _Section(
-    'My earnings', Icons.account_balance_wallet_outlined, EarningsScreen());
-
-_Group _withEarnings(_Group account, Map<String, dynamic>? me) =>
-    '${me?['license_number'] ?? ''}'.trim().isEmpty
-        ? account
-        : _Group(account.label, [...account.sections, _earningsSection]);
 
 /// The groups every signed-in user sees, in drawer order.
 List<_Group> get _baseGroups =>
@@ -285,8 +272,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _Section('Cash drawer', Icons.point_of_sale_outlined, PharmacyTillScreen()),
     _Section('Expenses', Icons.receipt_outlined, ExpensesScreen()),
     _Section('Customers', Icons.people_alt_outlined, CustomersScreen()),
-    _Section('Prescribers', Icons.badge_outlined, PrescribersScreen()),
-    _Section('Hospitals', Icons.local_hospital_outlined, HospitalsScreen()),
     _Section('Suppliers', Icons.local_shipping_outlined,
         PharmacySuppliersScreen()),
     _Section('Purchase orders', Icons.receipt_long_outlined,
@@ -299,6 +284,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _Section('Cashiers', Icons.badge_outlined, CashiersScreen()),
     _Section('Staff commissions', Icons.percent_outlined, CommissionsScreen()),
   ]);
+
+  // A pharmacy opens on its counter and shelf, not the tenant health analytics.
+  _Section get _pharmacyHome => _Section('Dashboard', Icons.insights_outlined,
+      PharmacyDashboardScreen(onOpen: _openSection));
 
   // The insurance desk. Its own block rather than a run of rows inside the
   // pharmacy one: schemes, what they authorise, and what they owe are one job,
@@ -504,14 +493,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
     if (Api.isIndependent(me)) {
       if (tenantSlug.isEmpty) {
-        _setGroups([_withEarnings(_accountGroup, me)], home: _facilityHome);
+        _setGroups([_accountGroup], home: _facilityHome);
         return;
       }
       // Picked one: the clinical menu, read as that facility. They are a
       // licensed cadre, so the API narrows every register to their own
       // caseload exactly as it does the facility's own doctors.
       _setGroups([..._professionGroups(role!).where((g) => g != _accountGroup),
-        _withEarnings(_facilityAccountGroup, me),
+        _facilityAccountGroup,
       ], home: _Section('Ward', Icons.local_hospital_outlined,
           WardScreen(onOpen: _openSection)));
       return;
@@ -544,7 +533,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         const _Group('Administration', [_usersSection, _accessLogSection]),
         ...pharmacy,
         ..._baseGroups,
-      ]);
+      ], home: me?['tenant_kind'] == 'pharmacy' ? _pharmacyHome : null);
       return;
     }
     // Staff carrying the manage_users grant: the user list is the one admin
@@ -556,7 +545,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         _withUsers(pharmacy.first, manages),
         ...pharmacy.skip(1),
         ..._baseGroups,
-      ]);
+      ], home: _pharmacyHome);
       return;
     }
     final granted = manages
@@ -570,10 +559,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // same ward landing the web client gives them. Its tiles jump the drawer,
     // so it is built here where the drawer's index lives.
     if (_wardRoles.contains(role)) {
-      _setGroups([
-        for (final g in _professionGroups(role!))
-          g == _accountGroup ? _withEarnings(g, me) : g,
-      ], home: _Section('Ward', Icons.local_hospital_outlined,
+      _setGroups(_professionGroups(role!), home: _Section('Ward', Icons.local_hospital_outlined,
           WardScreen(onOpen: _openSection)));
     }
   }

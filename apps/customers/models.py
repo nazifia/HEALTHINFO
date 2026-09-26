@@ -40,10 +40,6 @@ class Customer(TenantOwnedModel):
         "patients.Patient", null=True, blank=True, on_delete=models.SET_NULL,
         related_name="pharmacy_customers",
     )
-    prescriber = models.ForeignKey(
-        "prescriptions.Prescriber", null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="patients",
-    )
     blood_group = models.CharField(max_length=5, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
     allergies = models.JSONField(default=list, blank=True)

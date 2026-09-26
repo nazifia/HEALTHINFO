@@ -6,8 +6,8 @@
 Fills the operational side of a pharmacy so every screen has rows: staff
 roster, customers with wallets and debt, a stocktake, a retail-to-wholesale
 transfer, an HMO price list and a pre-authorisation, cashiers and a payment
-request, a return, expenses, notifications, prescribers with a script that
-raised commission and a consultation payout, and commission terms.
+request, a return, expenses, notifications, counter scripts (one part-filled)
+and commission terms.
 
 Run after seed_dev and seed_pharmacy: it draws items, users and HMOs from them.
 
@@ -36,9 +36,7 @@ from apps.pos.models import (
     Cashier, Expense, ExpenseCategory, Notification, PaymentRequest,
     PaymentRequestItem, Sale, SaleItem, TillSession, record_return,
 )
-from apps.prescriptions.models import (
-    Hospital, Prescriber, Prescription, PrescriptionItem,
-)
+from apps.prescriptions.models import Prescription, PrescriptionItem
 from apps.reports.models import CommissionConfig
 from apps.tenants.models import Jurisdiction, Tenant
 
@@ -46,7 +44,7 @@ PASSWORD = "devpass123"  # ponytail: dev-only shared password, never ships to pr
 
 
 class Command(BaseCommand):
-    help = "Seed operational demo data: roster, customers, stocktake, POS, prescribers."
+    help = "Seed operational demo data: roster, customers, stocktake, POS, scripts."
 
     def add_arguments(self, parser):
         parser.add_argument("--tenant", default="demo", help="Tenant slug.")
@@ -292,37 +290,14 @@ class Command(BaseCommand):
             Notification.all_objects.filter(tenant=tenant, kind=K.SYSTEM).update(is_read=True)
         log("notifications", Notification.all_objects)
 
-        # --- prescribers, a script that earned them money ----------------------
-        if not Prescriber.all_objects.filter(tenant=tenant).exists():
-            luth, _ = Hospital.all_objects.get_or_create(
-                tenant=tenant, name="Lagos University Teaching Hospital",
-                defaults={"city": "Lagos", "phone": "01-2345678",
-                          "address": "Idi-Araba, Surulere"})
-            Hospital.all_objects.get_or_create(
-                tenant=tenant, name="Reddington Hospital",
-                defaults={"city": "Lagos", "address": "Victoria Island"})
-            dr_okoro = Prescriber.all_objects.create(
-                tenant=tenant, hospital=luth, name="Dr. Ifeoma Okoro",
-                license_number="MDCN-44127", specialty="Internal medicine",
-                phone="08051110001", is_verified=True,
-                commission_rate=Decimal("5.00"),
-                consult_fee_a=Decimal("2000"), consult_fee_b=Decimal("3500"),
-                consult_fee_c=Decimal("5000"), consult_fee_d=Decimal("8000"),
-                consult_fee_e=Decimal("12000"))
-            Prescriber.all_objects.create(
-                tenant=tenant, name="Dr. Yusuf Danladi", specialty="Paediatrics",
-                clinic="Danladi Clinic, Kano", license_number="MDCN-51902",
-                commission_rate=Decimal("3.00"), consult_fee_a=Decimal("1500"))
-            Prescriber.all_objects.create(
-                tenant=tenant, name="Dr. Bola Fashola", is_active=False,
-                license_number="MDCN-38820", is_verified=False)
+        # --- counter scripts, one part-filled --------------------------------
+        if not Prescription.all_objects.filter(tenant=tenant).exists():
             patient = Patient.all_objects.filter(tenant=tenant, first_name="Bola").first()
             rx = Prescription.all_objects.create(
                 tenant=tenant, branch=branch, patient=patient,
                 customer_name=patient.full_name if patient else "Bola Eze",
-                customer_phone="08041110005", prescriber=dr_okoro,
-                doctor_name=dr_okoro.name, diagnosis="Community-acquired pneumonia",
-                consultation_category="B", created_by=pharmacist,
+                customer_phone="08041110005", doctor_name="Dr. Ifeoma Okoro",
+                diagnosis="Community-acquired pneumonia", created_by=pharmacist,
                 source=Prescription.Source.PORTAL)
             amox_line = PrescriptionItem.all_objects.create(
                 tenant=tenant, prescription=rx, item=items["Amoxicillin 500mg caps"],
@@ -332,27 +307,23 @@ class Command(BaseCommand):
                 tenant=tenant, prescription=rx, item=items["Cough syrup 100ml"],
                 name="Cough syrup 100ml", quantity=1, dosage="10 ml TID",
                 duration="5 days")
-            # Fill the antibiotic only: PARTIAL, commission on that sale,
-            # the consultation fee raised once.
+            # Fill the antibiotic only: PARTIAL.
             sale = Sale.all_objects.create(
                 tenant=tenant, patient=patient, rx=rx, served_by=pharmacist,
-                payment_method=Sale.PaymentMethod.CASH, branch=branch,
-                consultation_fee=rx.consultation_fee)
+                payment_method=Sale.PaymentMethod.CASH, branch=branch)
             sale.add_line(amox_line.item, 21, user=pharmacist)
             sale.record_payment(sale.patient_payable, till=open_till(), user=pharmacist)
             amox_line.mark_dispensed(user=pharmacist)
-            rx.raise_prescriber_dues(sale)
             # A second, untouched script from the portal so the queue has one.
             pending = Prescription.all_objects.create(
                 tenant=tenant, branch=branch, customer_name="Emeka Nwosu",
-                customer_phone="08041110006", prescriber=dr_okoro,
-                doctor_name=dr_okoro.name, diagnosis="Type 2 diabetes",
-                consultation_category="A", source=Prescription.Source.PORTAL)
+                customer_phone="08041110006", doctor_name="Dr. Ifeoma Okoro",
+                diagnosis="Type 2 diabetes", source=Prescription.Source.PORTAL)
             PrescriptionItem.all_objects.create(
                 tenant=tenant, prescription=pending, item=items["Metformin 500mg"],
                 name="Metformin 500mg", quantity=60, dosage="500 mg BID",
                 duration="30 days")
-        log("prescribers", Prescriber.all_objects)
+        log("counter scripts", Prescription.all_objects)
 
         # --- staff commission terms ---------------------------------------------
         for who, rate, bonus in ((pharmacist, "2.50", "5000.00"),

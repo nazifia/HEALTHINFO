@@ -5,7 +5,7 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
-from apps.accounts.models import LICENSED_ROLES, Role, User
+from apps.accounts.models import LICENSED_ROLES, PRESCRIBER_ROLES, Role, User
 from apps.accounts.permissions import (
     IsClinicalStaff,
     IsPatientRegistrar,
@@ -200,7 +200,7 @@ class PatientViewSet(viewsets.ModelViewSet):
         return super().destroy(request, *args, **kwargs)
 
     def _prescribers(self):
-        """This facility's active licensed clinicians, least busy first.
+        """This facility's active prescribers, least busy first.
 
         ``waiting`` is how many patients are sent to them today and not yet
         seen (scheduled appointments they hold), so the desk can spread the
@@ -212,7 +212,7 @@ class PatientViewSet(viewsets.ModelViewSet):
 
         return (User.objects
                 .filter(tenant=self.request.tenant, is_active=True,
-                        role__in=LICENSED_ROLES)
+                        role__in=PRESCRIBER_ROLES)
                 .annotate(waiting=Count(
                     "appointment",
                     filter=Q(appointment__status=Appointment.Status.SCHEDULED,

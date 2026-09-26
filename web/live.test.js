@@ -12,7 +12,7 @@ assert.ok(line, 'LIVE_RE not found in app.js');
 const LIVE_RE = new Function(`${line}; return LIVE_RE;`)();
 
 // Every dashboard, register and report is live.
-for (const p of ['/', '/clinical', '/facility', '/earnings', '/portal', '/insurer', '/gov',
+for (const p of ['/', '/clinical', '/facility', '/portal', '/insurer', '/gov',
   '/pharmacy', '/hmo', '/notifications', '/notifiable', '/r/patients', '/r/case-reports',
   '/analytics', '/analytics/sales', '/platform', '/platform/idsr', '/trading', '/trading/controlled']) {
   assert.ok(LIVE_RE.test(p), `${p} is not live`);

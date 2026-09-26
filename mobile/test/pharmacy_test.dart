@@ -83,7 +83,7 @@ void main() {
       'scripts': [
         {
           'id': 3,
-          'prescriber_name': 'Dr Ada',
+          'doctor_name': 'Dr Ada',
           'lines': [
             {'name': 'Amoxicillin', 'quantity': 10},
             {'name': 'Paracetamol', 'quantity': 6},
@@ -100,13 +100,12 @@ void main() {
           'dose': '500 mg',
           'duration_days': 5,
           'facility': 'Ikeja Clinic',
-          'consultation_category': 'B',
         }
       ],
       'scripts_elsewhere': [
         {
           'id': 4,
-          'prescriber_name': 'Dr Bala',
+          'doctor_name': 'Dr Bala',
           'facility': 'Corner Pharmacy',
           'lines': [
             {'name': 'ORS', 'quantity': 3},
@@ -251,21 +250,18 @@ void main() {
     expect(body.containsKey('patient'), isFalse);
   });
 
-  test('a script never sends the consultation fee it was quoted', () {
+  test('a script body names its writer and lines', () {
     final body = prescriptionBody(
       customerName: '  ',
       lines: [
         const RxLineDraft(
             name: 'Amoxicillin', quantity: 15, itemId: 3, dosage: '1 tds'),
       ],
-      prescriberId: 8,
-      consultationCategory: 'b',
+      doctorName: ' Dr Ada ',
     );
     // A blank name is a walk-in, not an empty string on the record.
     expect(body['customer_name'], 'Walk-in');
-    // The band travels; the money it implies is the server's to snapshot.
-    expect(body['consultation_category'], 'B');
-    expect(body.containsKey('consultation_fee'), isFalse);
+    expect(body['doctor_name'], 'Dr Ada');
     expect((body['medications'] as List).first, {
       'name': 'Amoxicillin',
       'quantity': 15,
@@ -274,14 +270,11 @@ void main() {
     });
   });
 
-  test('a consultation band prices off the prescriber row', () {
-    final doctor = {
-      'consultation_fees': {'A': '1500.00', 'B': '2500.00'},
-    };
-    expect(consultationFee(doctor, 'b'), 2500);
-    // Anything outside A-E costs nothing, same as the server.
-    expect(consultationFee(doctor, 'Z'), 0);
-    expect(consultationFee(doctor, ''), 0);
+  test('a script with no doctor on it names the pharmacist who wrote it', () {
+    expect(scriptWriter({'doctor_name': 'Dr Ada', 'created_by_name': 'ph'}),
+        'Dr Ada');
+    expect(scriptWriter({'doctor_name': '', 'created_by_name': 'ph'}), 'ph');
+    expect(scriptWriter({}), 'No prescriber');
   });
 
   test('a wallet movement only carries a method when money arrived', () {

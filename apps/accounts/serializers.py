@@ -38,7 +38,9 @@ def visible_users(tenant):
     qs = User.objects.all()
     if tenant is None:
         return qs
-    return qs.filter(Q(tenant=tenant) | Q(tenant__isnull=True))
+    # A super-admin reaches every organization even when their row names one.
+    return qs.filter(Q(tenant=tenant) | Q(tenant__isnull=True)
+                     | Q(is_superuser=True) | Q(role=Role.SUPER_ADMIN))
 
 
 def apply_admin_scope(actor, attrs, instance=None):
@@ -58,9 +60,9 @@ def apply_admin_scope(actor, attrs, instance=None):
     if actor.is_super_admin:
         return
     if not is_module_admin(actor):
-        # license_number too: the licence is the identity a prescriber's
-        # cross-tenant statement (MyDuesView) is keyed on, so changing it is
-        # changing whose dues you read — an admin's decision, not yours. And
+        # license_number too: the licence is the credential a clinician signs
+        # in with and is verified against, so changing it is an admin's
+        # decision, not yours. And
         # is_active: a seat stays open until an admin closes it, so a profile
         # form echoing the flag back unticked cannot lock its owner out.
         for field in ("tenant", "role", "is_admin", "hmo", "jurisdiction",
@@ -220,15 +222,21 @@ class LoginSerializer(TokenObtainPairSerializer):
         data = super().validate(attrs)
         # authenticate() searches the whole user table; the token is only valid
         # for the tenant the user actually belongs to.
-        if tenant is not None and self.user.tenant_id not in (tenant.id, None):
+        # A super-admin signs in to any organization.
+        if (tenant is not None and not self.user.is_super_admin
+                and self.user.tenant_id not in (tenant.id, None)):
             raise AuthenticationFailed(self._failed, "no_active_account")
         # A client on a shared host can't know which organization a user belongs
         # to until they sign in, so the token answer names it: the client sends
-        # it straight back as X-Tenant-ID. Empty for super-admins (no tenant).
-        data["tenant"] = self.user.tenant.slug if self.user.tenant_id else ""
+        # it straight back as X-Tenant-ID. A super-admin lands in the
+        # organization whose host they signed in on, else outside every one
+        # (empty) to pick one from the switcher.
+        home = (tenant if self.user.is_super_admin
+                else self.user.tenant if self.user.tenant_id else None)
+        data["tenant"] = home.slug if home else ""
         # The slug is what the header needs; the name is what a person reads,
         # so the client can show the organization without a second call.
-        data["tenant_name"] = self.user.tenant.name if self.user.tenant_id else ""
+        data["tenant_name"] = home.name if home else ""
         data["role"] = self.user.role
         return data
 
@@ -250,6 +258,8 @@ class UserSerializer(serializers.ModelSerializer):
         write_only=True, required=False, validators=[validate_password]
     )
     tenant_name = serializers.CharField(source="tenant.name", read_only=True)
+    # Pharmacy or hospital: the mobile client picks the admin's home screen by it.
+    tenant_kind = serializers.CharField(source="tenant.kind", read_only=True)
     # "Kano (state)" beside the bare pk, so the web detail shows the place.
     jurisdiction_name = serializers.StringRelatedField(source="jurisdiction")
     # The client arms its inactivity timer from this. The user's own tenant
@@ -282,7 +292,7 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = (
-            "id", "username", "phone", "email", "role", "tenant", "tenant_name",
+            "id", "username", "phone", "email", "role", "tenant", "tenant_name", "tenant_kind",
             "is_active", "password", "license_number", "idle_logout_minutes",
             "hmo", "jurisdiction", "jurisdiction_name", "is_admin", "privileges", "is_independent",
             "accept_terms", "terms_accepted_at",

@@ -101,3 +101,23 @@ def test_super_admin_edits_any_seat_by_id_inside_a_tenant(tenants, client):
                         format="json", **hdr)
     assert resp.status_code == 200
     assert client.delete(f"/api/users/{other.id}/", **hdr).status_code == 204
+
+
+def test_super_admin_signs_in_to_any_organization(tenants, client):
+    # A super-admin lands in whichever organization they sign in on, even one
+    # their own row does not name; a staff member of A still cannot sign in on B.
+    a, b = tenants
+    su = _super(None)
+    su.tenant = a
+    su.save()
+    User.objects.create_user(phone="08050000005", password="x", tenant=a)
+    creds = {"password": "x"}
+
+    resp = client.post("/api/auth/token/", {**creds, "phone": su.phone},
+                       HTTP_X_TENANT_ID=b.slug)
+    assert resp.status_code == 200
+    assert (resp.data["tenant"], resp.data["tenant_name"]) == (b.slug, b.name)
+
+    resp = client.post("/api/auth/token/", {**creds, "phone": "08050000005"},
+                       HTTP_X_TENANT_ID=b.slug)
+    assert resp.status_code == 401

@@ -9,7 +9,7 @@ class CustomerAdmin(admin.ModelAdmin):
                     "outstanding_debt", "is_active")
     list_filter = ("tenant", "is_wholesale", "is_active")
     search_fields = ("name", "phone", "email")
-    raw_id_fields = ("patient", "prescriber")
+    raw_id_fields = ("patient",)
     # Balances are the sum of the wallet ledger; typing over one here would
     # leave the two disagreeing with nothing to say which is right.
     readonly_fields = ("wallet_balance", "outstanding_debt")

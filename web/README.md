@@ -76,8 +76,7 @@ CORS_ALLOWED_ORIGINS=https://<your-project>.web.app,https://<your-project>.fireb
 - Pharmacy: counter + dispense (basket sold outright, or sent to a cashier as a
   payment request), stock items/batches/ledger/checks/transfers, suppliers and
   purchase orders, sales, returns, dispensing log, cash drawer, cashiers,
-  expenses, customers and their wallets, prescribers with commissions and
-  consultation payouts, branches, HMOs/members/drug cover, pre-authorisations,
+  expenses, customers and their wallets, branches, HMOs/members/drug cover, pre-authorisations,
   claims
 - Trading reports (`#/trading`, pharmacy staff only): sales, profit, month by
   day, stock valuation, customers and debt, cashier takings, staff performance

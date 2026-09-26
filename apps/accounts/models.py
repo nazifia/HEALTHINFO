@@ -30,6 +30,10 @@ class Role(models.TextChoices):
 # regulator issues and the one they can be verified against.
 LICENSED_ROLES = frozenset({Role.DOCTOR, Role.NURSE, Role.MIDWIFE, Role.CHEW})
 
+# Who writes drug orders and takes patients sent for consultation: the licensed
+# cadres plus the pharmacist, who signs in by phone but prescribes all the same.
+PRESCRIBER_ROLES = LICENSED_ROLES | {Role.PHARMACIST}
+
 
 # Nigerian mobile: local 0XXXXXXXXXX (11 digits) or international +234XXXXXXXXXX,
 # network code starting 7/8/9 (e.g. 08031234567 or +2348031234567).

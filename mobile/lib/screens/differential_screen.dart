@@ -39,9 +39,9 @@ class _DifferentialScreenState extends State<DifferentialScreen>
   Future<void> _loadSymptoms() async {
     try {
       final rows = await api.getAll('/api/symptoms/');
-      setState(() => _symptoms = rows.cast<Map<String, dynamic>>());
+      if (mounted) setState(() => _symptoms = rows.cast<Map<String, dynamic>>());
     } catch (e) {
-      setState(() => _error = e is ApiException ? e.friendly : e.toString());
+      if (mounted) setState(() => _error = e is ApiException ? e.friendly : e.toString());
     } finally {
       if (mounted) setState(() => _loadingList = false);
     }
@@ -58,7 +58,7 @@ class _DifferentialScreenState extends State<DifferentialScreen>
           {'symptom_ids': _selected.toList()});
       setState(() => _result = (r as Map).cast<String, dynamic>());
     } catch (e) {
-      setState(() => _error = e is ApiException ? e.friendly : e.toString());
+      if (mounted) setState(() => _error = e is ApiException ? e.friendly : e.toString());
     } finally {
       if (mounted) setState(() => _busy = false);
     }

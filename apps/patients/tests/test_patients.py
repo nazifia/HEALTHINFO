@@ -252,8 +252,8 @@ def test_receptionist_sends_patient_to_a_prescriber_and_nothing_else(db_clean):
                                     role=Role.DOCTOR, license_number="MD1")
     free = User.objects.create_user(phone="08031000011", password="x", tenant=a,
                                     role=Role.DOCTOR, license_number="MD2")
-    User.objects.create_user(phone="08031000012", password="x", tenant=a,
-                             role=Role.PHARMACIST)  # not a prescriber here
+    pharm = User.objects.create_user(phone="08031000012", password="x",
+                                     tenant=a, role=Role.PHARMACIST)
     c = _client(desk, a)
     ada = c.post("/api/patients/", {"first_name": "Ada", "last_name": "Obi",
                                     "sex": "F", "consent_given": True},
@@ -263,9 +263,11 @@ def test_receptionist_sends_patient_to_a_prescriber_and_nothing_else(db_clean):
                   format="json").json()["id"]
     assert c.post(f"/api/patients/{ada}/send/", {"prescriber": busy.id},
                   format="json").status_code == 201
-    # Least busy first, and only licensed clinicians.
-    listed = c.get("/api/patients/prescribers/").json()
-    assert [(p["id"], p["waiting"]) for p in listed] == [(free.id, 0), (busy.id, 1)]
+    # Least busy first; a pharmacist prescribes too, the desk does not.
+    listed = [(p["id"], p["waiting"]) for p in
+              c.get("/api/patients/prescribers/").json()]
+    assert set(listed) == {(free.id, 0), (pharm.id, 0), (busy.id, 1)}
+    assert listed[-1] == (busy.id, 1)
     # Sent once is sent: a second send while waiting is refused.
     assert c.post(f"/api/patients/{ada}/send/", {"prescriber": free.id},
                   format="json").status_code == 400

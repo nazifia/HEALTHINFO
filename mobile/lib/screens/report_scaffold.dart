@@ -192,7 +192,7 @@ class _ReportListScreenState extends State<ReportListScreen>
       floatingActionButton: !widget.showFab
           ? null
           : FloatingActionButton.extended(
-              heroTag: 'fab_${widget.fabLabel}',
+              heroTag: null, // two registers share "Add snapshot"; no hero, no tag clash
               onPressed: _openForm,
               backgroundColor: EnhancedTheme.primaryTeal,
               icon: const Icon(Icons.add, color: Colors.white),

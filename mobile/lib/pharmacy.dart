@@ -361,33 +361,24 @@ List<String> rxActions(String? status, String? role) {
 }
 
 /// POST body for /api/prescriptions/scripts/.
-///
-/// The consultation fee is not sent: the server snapshots it from the
-/// prescriber's own band, so a client that named a figure could undercharge
-/// for a consultation the doctor prices.
 Map<String, dynamic> prescriptionBody({
   required String customerName,
   required List<RxLineDraft> lines,
   String customerPhone = '',
-  int? prescriberId,
   int? customerId,
   int? patientId,
   String doctorName = '',
   String diagnosis = '',
-  String consultationCategory = '',
 }) {
   return {
     'customer_name': customerName.trim().isEmpty
         ? 'Walk-in'
         : customerName.trim(),
     if (customerPhone.trim().isNotEmpty) 'customer_phone': customerPhone.trim(),
-    'prescriber': ?prescriberId,
     'customer': ?customerId,
     'patient': ?patientId,
     if (doctorName.trim().isNotEmpty) 'doctor_name': doctorName.trim(),
     if (diagnosis.trim().isNotEmpty) 'diagnosis': diagnosis.trim(),
-    if (consultationCategory.trim().isNotEmpty)
-      'consultation_category': consultationCategory.trim().toUpperCase(),
     'medications': [for (final l in lines) l.toJson()],
   };
 }
@@ -420,15 +411,13 @@ class RxLineDraft {
       };
 }
 
-/// The fee a prescriber charges for a consultation band, read off the row the
-/// API sent. Anything outside A–E costs nothing, which is also what the server
-/// does with an unrecognised letter.
-double consultationFee(Map<String, dynamic> prescriber, String? category) {
-  final letter = (category ?? '').trim().toUpperCase();
-  if (!const ['A', 'B', 'C', 'D', 'E'].contains(letter)) return 0;
-  final fees = prescriber['consultation_fees'];
-  final raw = fees is Map ? fees[letter] : prescriber['consult_fee_${letter.toLowerCase()}'];
-  return num.tryParse('$raw')?.toDouble() ?? 0;
+/// Who wrote a counter script: the name off a paper script, else the
+/// pharmacist who wrote it up themselves.
+String scriptWriter(Map<String, dynamic> rx) {
+  final doctor = '${rx['doctor_name'] ?? ''}'.trim();
+  if (doctor.isNotEmpty) return doctor;
+  final by = '${rx['created_by_name'] ?? ''}'.trim();
+  return by.isEmpty ? 'No prescriber' : by;
 }
 
 // ── Customer wallets ─────────────────────────────────────────────────────
@@ -549,7 +538,7 @@ String fillableLabel(Map<String, dynamic> o) {
       for (final l in (o['lines'] ?? []) as List)
         '${(l as Map)['name']} ×${l['quantity']}',
     ].join(', ');
-    final who = '${o['prescriber_name'] ?? o['doctor_name'] ?? ''}';
+    final who = '${o['doctor_name'] ?? ''}';
     return [lines.isEmpty ? 'Rx${o['id']}' : lines, if (who.isNotEmpty) who]
         .join(' — ');
   }

@@ -37,4 +37,9 @@ assert.strictEqual(colLabel(keys, 'full_name'), 'Full Name');
 // Nothing resolves a pk here, so it stays: an id beats no column at all.
 assert.ok(pickColumns([{ id: 3, patient: 41, status: 'open' }]).includes('patient'));
 
+// A click-to-edit column survives the 8-column cut even when it comes last.
+const wide = { id: 1, name: 'x', a: 1, b: 2, c: 3, d: 4, e: 5, f: 6, g: 7, unit_price: '10.00' };
+assert.ok(!pickColumns([wide]).includes('unit_price'));
+assert.ok(pickColumns([wide], ['unit_price']).includes('unit_price'), 'inline column dropped');
+
 console.log('columns.test.js OK');

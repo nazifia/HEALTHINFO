@@ -20,7 +20,6 @@ class CustomerSerializer(serializers.ModelSerializer):
     total_purchases = serializers.DecimalField(max_digits=14, decimal_places=2,
                                                read_only=True)
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
-    prescriber_name = serializers.CharField(source="prescriber.name", read_only=True)
 
     class Meta:
         model = Customer

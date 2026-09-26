@@ -1,21 +1,11 @@
-"""Prescriptions the pharmacy dispenses against, and what they owe the writer.
+"""Prescriptions the pharmacy dispenses against.
 
-This is the counter's prescription: a named prescriber, a list of drugs, and a
+This is the counter's prescription: who it is for, a list of drugs, and a
 line-by-line record of what has actually been handed over. It is not
 ``analytics.Prescription``, which is a de-identified clinical record for
 surveillance — the two answer different questions and neither should be made
 to answer the other's.
-
-Two kinds of money flow back to the prescriber:
-
-* a **commission** — a percentage of what the pharmacy sold on their script;
-* a **consultation payout** — a flat fee they set, charged silently at the
-  till and owed on to them in full.
-
-Both are snapshotted when they are raised, so a later change to a rate or a
-price cannot rewrite what was already earned.
 """
-from decimal import Decimal
 from difflib import SequenceMatcher
 
 from django.db import models, transaction
@@ -23,95 +13,6 @@ from django.utils import timezone
 
 from apps.accounts.models import normalize_phone
 from apps.tenants.models import TenantOwnedModel
-from config.money import money as _money
-
-ZERO = Decimal("0.00")
-
-
-class Hospital(TenantOwnedModel):
-    """A clinic or hospital prescribers write from."""
-
-    name = models.CharField(max_length=200)
-    address = models.TextField(blank=True)
-    phone = models.CharField(max_length=30, blank=True)
-    city = models.CharField(max_length=100, blank=True)
-
-    class Meta:
-        ordering = ("name", "id")
-        unique_together = ("tenant", "name")
-
-    def __str__(self):
-        return self.name
-
-
-class Prescriber(TenantOwnedModel):
-    """A doctor whose scripts this pharmacy fills.
-
-    ``commission_rate`` is what they earn on what their script sells. The
-    consultation bands A–E are fees they set themselves; the pharmacy charges
-    one of them at the till and owes it back untouched.
-    """
-
-    CONSULT_CATEGORIES = ("A", "B", "C", "D", "E")
-
-    hospital = models.ForeignKey(
-        Hospital, null=True, blank=True, on_delete=models.SET_NULL,
-        related_name="prescribers",
-    )
-    name = models.CharField(max_length=200)
-    license_number = models.CharField(max_length=100, blank=True)
-    specialty = models.CharField(max_length=100, blank=True)
-    phone = models.CharField(max_length=30, blank=True)
-    clinic = models.CharField(max_length=200, blank=True)
-    address = models.TextField(blank=True)
-    is_verified = models.BooleanField(default=False)
-    is_active = models.BooleanField(default=True)
-    commission_rate = models.DecimalField(
-        max_digits=5, decimal_places=2, default=0,
-        help_text="Percent (0-100) of dispensed sales earned as commission.",
-    )
-    consult_fee_a = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    consult_fee_b = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    consult_fee_c = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    consult_fee_d = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    consult_fee_e = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-
-    class Meta:
-        ordering = ("name", "id")
-        indexes = [
-            models.Index(fields=["tenant", "name"]),
-            models.Index(fields=["tenant", "license_number"]),
-        ]
-
-    def __str__(self):
-        suffix = f" ({self.license_number})" if self.license_number else ""
-        return f"{self.name}{suffix}"
-
-    @property
-    def consultation_fees(self):
-        return {c: self.fee_for(c) for c in self.CONSULT_CATEGORIES}
-
-    def fee_for(self, category):
-        """The fee for a band letter, or zero for anything unrecognised."""
-        letter = (category or "").strip().upper()
-        if letter not in self.CONSULT_CATEGORIES:
-            return ZERO
-        return _money(getattr(self, f"consult_fee_{letter.lower()}"))
-
-    @property
-    def outstanding(self):
-        """What this prescriber is still owed, split by what it is owed for."""
-        commission = PrescriberCommission.all_objects.filter(
-            prescriber=self, status=PrescriberCommission.Status.PENDING
-        ).aggregate(t=models.Sum("commission_amount"))["t"] or ZERO
-        consultation = ConsultationPayout.all_objects.filter(
-            prescriber=self, status=ConsultationPayout.Status.PENDING
-        ).aggregate(t=models.Sum("consultation_fee"))["t"] or ZERO
-        return {
-            "commission": _money(commission),
-            "consultation": _money(consultation),
-            "total": _money(commission + consultation),
-        }
 
 
 class Prescription(TenantOwnedModel):
@@ -130,7 +31,7 @@ class Prescription(TenantOwnedModel):
 
     class Source(models.TextChoices):
         PHARMACY = "pharmacy"   # written up at the counter from a paper script
-        PORTAL = "portal"       # sent in by the prescriber
+        PORTAL = "portal"       # sent in from outside the counter
 
     branch = models.ForeignKey(
         "branches.Branch", null=True, blank=True, on_delete=models.SET_NULL,
@@ -146,19 +47,10 @@ class Prescription(TenantOwnedModel):
     )
     customer_name = models.CharField(max_length=200, default="Walk-in")
     customer_phone = models.CharField(max_length=20, blank=True)
-    prescriber = models.ForeignKey(
-        Prescriber, null=True, blank=True, on_delete=models.SET_NULL,
-        related_name="prescriptions",
-    )
-    # Kept for the scripts that arrive with a name and nothing else on them.
+    # Whoever signed the paper script, as written on it.
     doctor_name = models.CharField(max_length=200, blank=True)
     diagnosis = models.TextField(blank=True)
     notes = models.TextField(blank=True)
-    consultation_category = models.CharField(max_length=1, blank=True)
-    # Snapshot of the band's fee when the script was written up: the prescriber
-    # may reprice tomorrow, but this is what the patient was charged.
-    consultation_fee = models.DecimalField(max_digits=12, decimal_places=2,
-                                           default=0)
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.PENDING
     )
@@ -194,11 +86,6 @@ class Prescription(TenantOwnedModel):
         # One shape for the number, so a script written up as "+234 803 123
         # 4567" is still found by the "08031234567" on the patient's card.
         self.customer_phone = normalize_phone(self.customer_phone)
-        if (self._state.adding and self.prescriber_id
-                and self.consultation_category and not self.consultation_fee):
-            self.consultation_fee = self.prescriber.fee_for(
-                self.consultation_category
-            )
         super().save(*args, **kwargs)
 
     def _lines(self):
@@ -223,35 +110,6 @@ class Prescription(TenantOwnedModel):
             self.dispensed_at = when
             self.save(update_fields=["status", "dispensed_at", "updated_at"])
         return self
-
-    def prescriber_at(self, tenant_id):
-        """Whoever this pharmacy pays for the script, or None.
-
-        The script's own pharmacy pays the prescriber it wrote up. Another
-        pharmacy filling it pays on its own terms with the writer, matched by
-        licence — the way a clinician's drug order is (prescriber_for_order).
-        """
-        if not self.prescriber_id:
-            return None
-        if tenant_id == self.tenant_id:
-            return self.prescriber
-        return prescriber_by_licence(tenant_id, self.prescriber.license_number)
-
-    def consultation_fee_at(self, tenant_id):
-        """What a sale at this pharmacy charges for the script's band, once.
-
-        The writing pharmacy charges the fee it snapshotted; another pharmacy
-        charges its own fee for the band. A script whose fee has been charged
-        anywhere carries no second one — the patient was consulted once.
-        """
-        if ConsultationPayout.all_objects.filter(prescription=self).exists():
-            return ZERO
-        if tenant_id == self.tenant_id:
-            return _money(self.consultation_fee)
-        prescriber = self.prescriber_at(tenant_id)
-        if prescriber is None:
-            return ZERO
-        return prescriber.fee_for(self.consultation_category)
 
     def fill_from(self, sale):
         """Tick off the lines a sale's items are the drug for.
@@ -281,47 +139,6 @@ class Prescription(TenantOwnedModel):
                    for item_id, med, name in sold):
                 line.mark_dispensed(user=sale.served_by)
         return self
-
-    def raise_prescriber_dues(self, sale):
-        """Book what the prescriber earned on this sale. Idempotent.
-
-        Commission is a share of what was actually sold, so it is raised per
-        sale. The consultation fee is a flat charge for the script, so it is
-        raised once however many times the script is part-filled. Both are
-        owed by the pharmacy that made the sale, which need not be the one
-        that wrote the script up.
-        """
-        prescriber = self.prescriber_at(sale.tenant_id)
-        if prescriber is None:
-            return None, None
-        commission = None
-        rate = Decimal(prescriber.commission_rate)
-        sold = drugs_sold(sale)
-        if rate > 0 and sold > 0:
-            commission, _created = PrescriberCommission.all_objects.get_or_create(
-                prescription=self, sale=sale,
-                defaults={
-                    "tenant_id": sale.tenant_id,
-                    "prescriber": prescriber,
-                    "patient_name": self.customer_name,
-                    "sales_amount": sold,
-                    "commission_rate": rate,
-                    "commission_amount": _money(sold * rate / Decimal("100")),
-                },
-            )
-        payout = None
-        if sale.consultation_fee > 0:
-            payout, _created = ConsultationPayout.all_objects.get_or_create(
-                prescription=self,
-                defaults={
-                    "tenant_id": sale.tenant_id,
-                    "prescriber": prescriber,
-                    "patient_name": self.customer_name,
-                    "consultation_category": self.consultation_category,
-                    "consultation_fee": sale.consultation_fee,
-                },
-            )
-        return commission, payout
 
 
 class PrescriptionItem(TenantOwnedModel):
@@ -367,199 +184,3 @@ class PrescriptionItem(TenantOwnedModel):
                                      "dispensed_by", "updated_at"])
             self.prescription.sync_status()
         return self
-
-
-class _PrescriberDue(TenantOwnedModel):
-    """Shared shape of money owed to a prescriber: pending until it is paid."""
-
-    class Status(models.TextChoices):
-        PENDING = "pending"
-        PAID = "paid"
-
-    status = models.CharField(
-        max_length=20, choices=Status.choices, default=Status.PENDING
-    )
-    paid_at = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        abstract = True
-
-    def mark_paid(self):
-        if self.status == self.Status.PAID:
-            raise ValueError("That has already been paid.")
-        self.status = self.Status.PAID
-        self.paid_at = timezone.now()
-        self.save(update_fields=["status", "paid_at", "updated_at"])
-        return self
-
-
-class PrescriberCommission(_PrescriberDue):
-    """A share of one sale, earned by whoever wrote the script.
-
-    Every figure is a snapshot: repricing the drugs or changing the
-    prescriber's rate tomorrow must not move what was earned today.
-    """
-
-    prescriber = models.ForeignKey(
-        Prescriber, on_delete=models.CASCADE, related_name="commissions"
-    )
-    # One of the two is set: the counter script this pharmacy wrote up, or the
-    # clinician's drug order — possibly another facility's — that a sale here
-    # filled (see raise_order_dues).
-    prescription = models.ForeignKey(
-        Prescription, null=True, blank=True, on_delete=models.CASCADE,
-        related_name="commissions",
-    )
-    order = models.ForeignKey(
-        "analytics.Prescription", null=True, blank=True,
-        on_delete=models.CASCADE, related_name="prescriber_commissions",
-    )
-    sale = models.ForeignKey(
-        "pos.Sale", null=True, blank=True, on_delete=models.SET_NULL,
-        related_name="prescriber_commissions",
-    )
-    patient_name = models.CharField(max_length=200, blank=True)
-    sales_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    commission_rate = models.DecimalField(max_digits=5, decimal_places=2, default=0)
-    commission_amount = models.DecimalField(max_digits=12, decimal_places=2,
-                                            default=0)
-
-    class Meta:
-        ordering = ("-created_at", "-id")
-        # One commission per sale on a script, so re-dispensing cannot pay twice.
-        unique_together = ("prescription", "sale")
-        indexes = [
-            models.Index(fields=["tenant", "prescriber", "status"]),
-            models.Index(fields=["tenant", "prescription"]),
-        ]
-
-    def __str__(self):
-        return (f"Commission {self.pk} — {self.prescriber_id} "
-                f"({self.commission_rate}%)")
-
-
-def drugs_sold(sale):
-    """What a sale sold in drugs: the bill less the consultation fee riding on
-    it. Commission is a share of what left the shelf, never of the fee that is
-    owed on in full."""
-    return _money(Decimal(sale.total) - Decimal(sale.consultation_fee))
-
-
-def prescriber_by_licence(tenant_id, licence):
-    """This pharmacy's terms with the holder of ``licence``, or None.
-
-    A pharmacy names the prescribers it pays by licence; where a prescription
-    from anywhere names its writer by the same licence, this pharmacy owes
-    that doctor what its own row says. A writer this pharmacy has no terms
-    with earns nothing here.
-    """
-    licence = (licence or "").strip()
-    if not licence:
-        return None
-    return Prescriber.all_objects.filter(
-        tenant_id=tenant_id, license_number__iexact=licence, is_active=True,
-    ).first()
-
-
-def prescriber_for_order(tenant_id, order):
-    """This pharmacy's terms with whoever wrote ``order``, matched by licence —
-    whichever facility the order was written at."""
-    return prescriber_by_licence(
-        tenant_id, getattr(order.reporter, "license_number", "")
-    )
-
-
-def order_consultation_fee(tenant_id, order):
-    """The fee this pharmacy charges for the band on a drug order, or zero.
-
-    Once per prescription: a course of three drugs filled over two visits to
-    the counter was one consultation. A band the pharmacy has no terms for
-    costs the patient nothing.
-    """
-    if not order.consultation_category:
-        return ZERO
-    prescriber = prescriber_for_order(tenant_id, order)
-    if prescriber is None:
-        return ZERO
-    if _order_payout(tenant_id, order).exists():
-        return ZERO
-    return prescriber.fee_for(order.consultation_category)
-
-
-def _order_payout(tenant_id, order):
-    """Payouts already raised here for the prescription ``order`` is part of."""
-    qs = ConsultationPayout.all_objects.filter(tenant_id=tenant_id)
-    if order.group:
-        return qs.filter(order__group=order.group)
-    return qs.filter(order=order)
-
-
-def raise_order_dues(sale):
-    """What a clinician's drug order filled by a sale here earns its writer.
-
-    A commission on the drugs sold at this pharmacy's rate for them, and the
-    consultation fee the sale carried (see order_consultation_fee), both
-    idempotent per sale. A pharmacy with no terms with the writer owes nothing.
-    """
-    order = sale.prescription
-    prescriber = prescriber_for_order(sale.tenant_id, order)
-    if prescriber is None:
-        return None, None
-    commission = None
-    rate = Decimal(prescriber.commission_rate)
-    sold = drugs_sold(sale)
-    if rate > 0 and sold > 0:
-        commission, _created = PrescriberCommission.all_objects.get_or_create(
-            tenant_id=sale.tenant_id, order=order, sale=sale,
-            defaults={
-                "prescriber": prescriber,
-                # Who the sale was rung up for, never the writing facility's
-                # record: the pharmacy learned the drug, not the patient.
-                "patient_name": sale.buyer,
-                "sales_amount": sold,
-                "commission_rate": rate,
-                "commission_amount": _money(sold * rate / Decimal("100")),
-            },
-        )
-    payout = None
-    if sale.consultation_fee > 0 and not _order_payout(sale.tenant_id, order).exists():
-        payout = ConsultationPayout.all_objects.create(
-            tenant_id=sale.tenant_id, prescriber=prescriber, order=order,
-            patient_name=sale.buyer,
-            consultation_category=order.consultation_category,
-            consultation_fee=sale.consultation_fee,
-        )
-    return commission, payout
-
-
-class ConsultationPayout(_PrescriberDue):
-    """The flat consultation fee charged at the till and owed to the writer.
-
-    One per script, however many times it is part-filled: the patient was
-    consulted once.
-    """
-
-    prescriber = models.ForeignKey(
-        Prescriber, on_delete=models.CASCADE, related_name="consultation_payouts"
-    )
-    # One of the two is set: the counter script, or the clinician's drug order
-    # — possibly another facility's — whose band a sale here charged.
-    prescription = models.OneToOneField(
-        Prescription, null=True, blank=True, on_delete=models.CASCADE,
-        related_name="consultation_payout",
-    )
-    order = models.ForeignKey(
-        "analytics.Prescription", null=True, blank=True,
-        on_delete=models.CASCADE, related_name="consultation_payouts",
-    )
-    patient_name = models.CharField(max_length=200, blank=True)
-    consultation_category = models.CharField(max_length=1, blank=True)
-    consultation_fee = models.DecimalField(max_digits=12, decimal_places=2,
-                                           default=0)
-
-    class Meta:
-        ordering = ("-created_at", "-id")
-        indexes = [models.Index(fields=["tenant", "prescriber", "status"])]
-
-    def __str__(self):
-        return f"Consultation payout {self.pk} — {self.consultation_fee}"

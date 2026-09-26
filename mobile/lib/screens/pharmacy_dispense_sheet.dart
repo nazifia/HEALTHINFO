@@ -104,9 +104,6 @@ class _DispenseSheetState extends State<DispenseSheet> {
     return null;
   }
 
-  bool get _fillingHasBand =>
-      '${_filling?['consultation_category'] ?? ''}'.isNotEmpty;
-
   Future<void> _loadItems() async {
     var rows = <Map<String, dynamic>>[];
     try {
@@ -345,11 +342,7 @@ class _DispenseSheetState extends State<DispenseSheet> {
                     title: Text(fillableLabel(o),
                         style:
                             TextStyle(color: context.labelColor, fontSize: 14)),
-                    subtitle: Text([
-                      'From ${o['facility'] ?? '—'}',
-                      if ('${o['consultation_category'] ?? ''}'.isNotEmpty)
-                        'consultation band ${o['consultation_category']}',
-                    ].join(' · '),
+                    subtitle: Text('From ${o['facility'] ?? '—'}',
                         style:
                             TextStyle(color: context.hintColor, fontSize: 12)),
                   ),
@@ -358,8 +351,7 @@ class _DispenseSheetState extends State<DispenseSheet> {
           if (_filling != null)
             Text(
                 'This sale fills that prescription — it is marked dispensed '
-                'when the sale completes'
-                "${_fillingHasBand ? ", and the prescriber's band fee is added to the bill" : ''}.",
+                'when the sale completes.',
                 style: TextStyle(color: context.hintColor, fontSize: 12)),
         ],
         const SizedBox(height: 12),
