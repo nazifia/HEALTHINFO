@@ -32,6 +32,9 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen>
   late Future<Map<String, dynamic>> _future;
   DateTimeRange? _range;
 
+  /// "Kano" for a health-authority seat, null for the national platform view.
+  String? _scope;
+
   /// Diagnosis the prescribing panel is drilled into, or null for all of them.
   String? _diagnosis;
 
@@ -39,6 +42,12 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen>
   void initState() {
     super.initState();
     _future = _load();
+  }
+
+  /// "Bola Pharmacy · Kano" — the organization with the state it sits in.
+  String _org(Map<String, dynamic> r) {
+    final state = '${r['state'] ?? ''}';
+    return '${r['tenant__name'] ?? '—'}${state.isEmpty ? '' : ' · $state'}';
   }
 
   String _d(DateTime t) =>
@@ -49,6 +58,10 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen>
         ? ''
         : '?from=${_d(_range!.start)}&to=${_d(_range!.end)}';
     final r = await api.get('/api/analytics/platform/$q');
+    // jurisdiction_name is "Kano (state)"; the tier suffix is dropped for the title.
+    _scope = (await api.me())?['jurisdiction_name']
+        ?.toString()
+        .replaceFirst(RegExp(r' \([^)]*\)$'), '');
     return (r as Map).cast<String, dynamic>();
   }
 
@@ -114,7 +127,9 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen>
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             children: [
               DashTitleBar(
-                title: 'Platform Control',
+                title: _scope == null || _scope!.isEmpty
+                    ? 'Platform Control'
+                    : '$_scope Analytics',
                 accent: EnhancedTheme.accentPurple,
                 subtitle: _range == null
                     ? 'All tenants · all time'
@@ -177,7 +192,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen>
                   rows: [
                     for (final (i, r) in byTenant.take(12).indexed)
                       (
-                        label: '${r['tenant__name'] ?? '—'}',
+                        label: _org(r),
                         value: (r['count'] as num?) ?? 0,
                         color: MiniBarChart
                             .palette[i % MiniBarChart.palette.length],
@@ -196,7 +211,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen>
                             .take(12)
                             .indexed)
                       (
-                        label: '${r['tenant__name'] ?? '—'}',
+                        label: _org(r),
                         value: (r['count'] as num?) ?? 0,
                         color: MiniBarChart
                             .palette[i % MiniBarChart.palette.length],

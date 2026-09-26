@@ -147,3 +147,11 @@ def test_migration_unseats_a_national_seat(country):
     national.refresh_from_db(); state.refresh_from_db()
     assert national.jurisdiction is None
     assert state.jurisdiction == kano
+
+
+def test_an_organization_is_named_with_its_state(country):
+    """A local-tier clinic is shown under the state above it."""
+    from apps.analytics.stats import _with_state
+    rows = _with_state([{"tenant__name": "Ikeja Clinic", "count": 2},
+                        {"tenant__name": "Gone", "count": 1}])
+    assert [r["state"] for r in rows] == ["Lagos", ""]

@@ -549,6 +549,9 @@ const NAV_CLOSED = new Set(JSON.parse(localStorage.getItem('navClosed') || '[]')
    every call) makes them that organization: the cross-tenant views disappear
    until they leave it, and the API refuses them meanwhile. */
 const isPlatformScope = () => ME?.role === 'super_admin' && !Api.tenant;
+// A health-authority seat reads its own patch: "Kano Analytics", not "Platform".
+// jurisdiction_name is "Kano (state)"; the tier suffix is dropped for the title.
+const platformTitle = () => `${ME?.jurisdiction_name?.replace(/ \([^)]*\)$/, '') || 'Platform'} Analytics`;
 
 /* An independent prescriber holds a licence and staffs no facility: the row
    carries a state instead of an organization. Their licence is state-wide but
@@ -744,7 +747,7 @@ function navHtml() {
   if (clinical && !prescriber) html += navGroup('Clinical', clinical);
   let analytics = `<a href="#/analytics" data-route="/analytics">${ico('chart')}Tenant Analytics</a>`;
   if (isPlatformScope()) {
-    analytics += `<a href="#/platform" data-route="/platform">${ico('chart')}Platform Analytics</a>`
+    analytics += `<a href="#/platform" data-route="/platform">${ico('chart')}${esc(platformTitle())}</a>`
       + (groups.Analytics || []).join('');
   }
   html += navGroup('Analytics', analytics);
@@ -3501,7 +3504,7 @@ async function viewAnalytics(registry, prefix, key) {
     let dash = '';
     try { dash = renderData(noSearchTrend(await Api.get(registry[0].path))); }
     catch (e) { dash = `<p class="err">${esc(e.message)}</p>`; }
-    const indexTitle = prefix === '/platform' ? 'Platform Analytics'
+    const indexTitle = prefix === '/platform' ? platformTitle()
       : prefix === '/trading' ? 'Trading Reports' : 'Tenant Analytics';
     return render(statIndex(indexTitle, registry, prefix) +
       `<h3>${esc(registry[0].label)}</h3>` + dash);

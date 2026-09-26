@@ -521,7 +521,7 @@ def platform_stats(start=None, end=None, jurisdiction=None):
         "total_users": _scope(User.objects.all(), jurisdiction).count(),
         "total_searches": events.filter(event_type="search").count(),
         "content_gaps": _content_gaps(events),
-        "searches_by_tenant": list(
+        "searches_by_tenant": _with_state(
             events.filter(event_type="search")
             .values("tenant__name")
             .annotate(count=Count("id"))
@@ -555,10 +555,23 @@ def adr_stats(start=None, end=None, platform=False, jurisdiction=None):
         "trend": _series(reports, days=90),
     }
     if platform:
-        out["by_tenant"] = _grouped(reports, "tenant__name")
+        out["by_tenant"] = _with_state(_grouped(reports, "tenant__name"))
         for tier in _tiers_for(jurisdiction):
             out[f"by_{tier}"] = _rollup_by_tier(reports, tier)
     return out
+
+
+def _with_state(rows):
+    """Stamp each per-tenant row with the state the organization sits in.
+
+    A bare facility name does not say where it is; the state does. Keyed on
+    the name the rows are grouped by. "" when the tenant has no jurisdiction.
+    """
+    states = {}
+    for t in Tenant.objects.select_related("jurisdiction__parent"):
+        anc = t.jurisdiction.ancestor(Jurisdiction.Level.STATE) if t.jurisdiction else None
+        states[t.name] = anc.name if anc else ""
+    return [{**r, "state": states.get(r["tenant__name"], "")} for r in rows]
 
 
 def _scope(qs, jurisdiction, field="tenant__jurisdiction"):
