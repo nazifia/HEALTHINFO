@@ -52,3 +52,16 @@ def test_approved_tenant_allowed(db, client):
     )
     # Not 403 — middleware lets it through (auth/view may still 401/200).
     assert _get(client, "ok").status_code != 403
+
+
+def test_pending_tenant_can_log_out(db, client):
+    Tenant.objects.create(
+        name="Pend", slug="pend",
+        subscription_status=Tenant.SubscriptionStatus.PENDING,
+    )
+    # Logout carries no bearer, so only the allow-list can let it past the gate.
+    resp = client.post(
+        "/api/auth/logout/", {"refresh": "junk"},
+        format="json", HTTP_X_TENANT_ID="pend",
+    )
+    assert resp.status_code == 205

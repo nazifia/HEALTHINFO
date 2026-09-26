@@ -51,6 +51,9 @@ def _resolve_tenant(request):
 # see the status). Prefix match.
 _SUBSCRIPTION_GATE_ALLOW = (
     "/api/auth/token/",
+    # Signing out is sent without a bearer, so the super-admin exemption
+    # never sees who is calling; the refresh token is the only credential.
+    "/api/auth/logout/",
     # The signup picker: it lists the organizations you may join, so a
     # stale slug from the last user must not block reading it.
     "/api/auth/register/organizations/",
