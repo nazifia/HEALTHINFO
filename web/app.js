@@ -1477,7 +1477,8 @@ function pickColumns(rows) {
   const first = keys.filter((k) => ['id', 'reference', 'status', 'name', 'generic_name', 'title', 'phone', 'slug'].includes(k));
   // null is a scalar here, not an object — a column empty on the sampled row
   // still belongs in the table.
-  const rest = keys.filter((k) => !first.includes(k) && !resolved(k) && k !== 'logo'
+  // age_group only repeats `age` as a band — the exact age is the column.
+  const rest = keys.filter((k) => !first.includes(k) && !resolved(k) && k !== 'logo' && k !== 'age_group'
     && (row[k] === null || typeof row[k] !== 'object')
     && !(typeof row[k] === 'string' && row[k].length > 80));
   return [...first, ...rest].slice(0, 8);

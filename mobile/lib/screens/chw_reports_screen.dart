@@ -101,7 +101,7 @@ class _Card extends StatelessWidget {
     final danger = row['danger_signs'] == true;
     final referred = row['referred'] == true;
     final reporter = '${row['reporter_name'] ?? ''}'.trim();
-    final age = '${row['patient_age_group'] ?? ''}'.trim();
+    final age = '${row['patient_age'] ?? row['patient_age_group'] ?? ''}'.trim();
     return GlassCard(
       borderRadius: 16,
       padding: const EdgeInsets.all(14),

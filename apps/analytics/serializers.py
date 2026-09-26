@@ -30,6 +30,7 @@ class CaseReportSerializer(
     RegionValidatedMixin, NamedRelationsMixin, serializers.ModelSerializer
 ):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
+    patient_age = serializers.IntegerField(source="patient.age", read_only=True)
     # reporter + tenant set server-side, never client-supplied. M2M managers are
     # tenant-scoped, so DRF rejects any symptom/medication/disease from another tenant.
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
@@ -48,6 +49,7 @@ class CaseReportSerializer(
 
 class AdverseDrugReactionSerializer(RegionValidatedMixin, serializers.ModelSerializer):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
+    patient_age = serializers.IntegerField(source="patient.age", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
     medication_name = serializers.CharField(
         source="medication.generic_name", read_only=True
@@ -61,6 +63,7 @@ class AdverseDrugReactionSerializer(RegionValidatedMixin, serializers.ModelSeria
 
 class LabResultSerializer(RegionValidatedMixin, serializers.ModelSerializer):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
+    patient_age = serializers.IntegerField(source="patient.age", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
     lab_test_name = serializers.CharField(source="lab_test.name", read_only=True)
     disease_name = serializers.CharField(source="disease.name", read_only=True)
@@ -73,6 +76,7 @@ class LabResultSerializer(RegionValidatedMixin, serializers.ModelSerializer):
 
 class ImmunizationSerializer(RegionValidatedMixin, serializers.ModelSerializer):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
+    patient_age = serializers.IntegerField(source="patient.age", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
 
     class Meta:
@@ -83,6 +87,7 @@ class ImmunizationSerializer(RegionValidatedMixin, serializers.ModelSerializer):
 
 class VitalEventSerializer(RegionValidatedMixin, serializers.ModelSerializer):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
+    patient_age = serializers.IntegerField(source="patient.age", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
     cause_name = serializers.CharField(source="cause.name", read_only=True)
 
@@ -106,6 +111,7 @@ class StockReportSerializer(RegionValidatedMixin, serializers.ModelSerializer):
 
 class CommunityHealthReportSerializer(RegionValidatedMixin, serializers.ModelSerializer):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
+    patient_age = serializers.IntegerField(source="patient.age", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
 
     class Meta:
@@ -126,6 +132,7 @@ class FacilityMetricSerializer(RegionValidatedMixin, serializers.ModelSerializer
 
 class InsuranceClaimSerializer(RegionValidatedMixin, serializers.ModelSerializer):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
+    patient_age = serializers.IntegerField(source="patient.age", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
     diagnosis_name = serializers.CharField(source="diagnosis.name", read_only=True)
 
@@ -137,6 +144,7 @@ class InsuranceClaimSerializer(RegionValidatedMixin, serializers.ModelSerializer
 
 class AppointmentSerializer(RegionValidatedMixin, serializers.ModelSerializer):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
+    patient_age = serializers.IntegerField(source="patient.age", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
 
     class Meta:
@@ -149,6 +157,7 @@ class PrescriptionSerializer(
     RegionValidatedMixin, NamedRelationsMixin, serializers.ModelSerializer
 ):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
+    patient_age = serializers.IntegerField(source="patient.age", read_only=True)
     # The writer is named the way a script names them — with their licence —
     # and the bare user pk behind that is not carried.
     prescriber = serializers.CharField(read_only=True)
@@ -175,6 +184,7 @@ class ConsultationSerializer(
     RegionValidatedMixin, NamedRelationsMixin, serializers.ModelSerializer
 ):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
+    patient_age = serializers.IntegerField(source="patient.age", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
     # The diagnosis this visit reached. It lives on the case report — this is a
     # label so a client can show it without fetching the case per row.

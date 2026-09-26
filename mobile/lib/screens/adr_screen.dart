@@ -159,7 +159,7 @@ class _AdrCard extends StatelessWidget {
     final med = '${row['medication_name'] ?? ''}'.trim();
     final notes = '${row['notes'] ?? ''}'.trim();
     final reporter = '${row['reporter_name'] ?? ''}'.trim();
-    final age = '${row['patient_age_group'] ?? ''}'.trim();
+    final age = '${row['patient_age'] ?? row['patient_age_group'] ?? ''}'.trim();
     return GlassCard(
       borderRadius: 16,
       padding: const EdgeInsets.all(14),

@@ -89,7 +89,7 @@ class _Card extends StatelessWidget {
   Widget build(BuildContext context) {
     final vaccine = '${row['vaccine'] ?? ''}'.trim();
     final dose = row['dose_number'] ?? 1;
-    final age = '${row['patient_age_group'] ?? ''}'.trim();
+    final age = '${row['patient_age'] ?? row['patient_age_group'] ?? ''}'.trim();
     final reporter = '${row['reporter_name'] ?? ''}'.trim();
     return GlassCard(
       borderRadius: 16,
