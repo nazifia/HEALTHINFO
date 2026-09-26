@@ -164,11 +164,13 @@ class _ItemCard extends StatelessWidget {
 
   /// Tap-to-edit one number on the card — PATCH /api/pharmacy/items/{id}/
   /// with just that field. Admin only (the API refuses anyone else).
+  /// [sendAs] writes a read-only figure through the field that sets it.
   Future<void> _editField(
     BuildContext context,
     String field,
     String label, {
     bool integer = false,
+    String? sendAs,
   }) async {
     final controller = TextEditingController(text: '${row[field] ?? ''}');
     final value = await showDialog<String>(
@@ -196,7 +198,7 @@ class _ItemCard extends StatelessWidget {
     controller.dispose();
     if (value == null || value.isEmpty || value == '${row[field]}') return;
     try {
-      await api.patch('/api/pharmacy/items/${row['id']}/', {field: value});
+      await api.patch('/api/pharmacy/items/${row['id']}/', {sendAs ?? field: value});
       reload();
       if (context.mounted) showSuccess(context, '$label saved.');
     } catch (e) {
@@ -255,19 +257,37 @@ class _ItemCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 6),
-          _editable(
-            context,
-            Text(
-              '${units(row['quantity_on_hand'])} ${row['unit']}(s) on hand'
-              ' · reorder at ${units(row['reorder_level'])}',
-              style: TextStyle(color: context.hintColor, fontSize: 13),
-            ),
-            () => _editField(
-              context,
-              'reorder_level',
-              'Reorder level',
-              integer: true,
-            ),
+          Wrap(
+            spacing: 16,
+            children: [
+              _editable(
+                context,
+                Text(
+                  '${units(row['quantity_on_hand'])} ${row['unit']}(s) on hand',
+                  style: TextStyle(color: context.hintColor, fontSize: 13),
+                ),
+                () => _editField(
+                  context,
+                  'quantity_on_hand',
+                  'Counted stock',
+                  integer: true,
+                  sendAs: 'set_stock',
+                ),
+              ),
+              _editable(
+                context,
+                Text(
+                  'reorder at ${units(row['reorder_level'])}',
+                  style: TextStyle(color: context.hintColor, fontSize: 13),
+                ),
+                () => _editField(
+                  context,
+                  'reorder_level',
+                  'Reorder level',
+                  integer: true,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 4),
           Wrap(

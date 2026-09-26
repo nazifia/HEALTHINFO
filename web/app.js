@@ -242,10 +242,10 @@ const RESOURCES = {
   'prescriptions':     { title: 'Drug Orders',        group: 'Clinical', report: true, filters: [SEX_FILTER], ...ORDER_SHEET,
                           actions: [{ name: 'cancel', label: 'Cancel prescription', danger: true,
                                       when: ['prescribed', 'partially_dispensed'] }] },
-  // ``inline``: the admin moves a price or a reorder level on the list itself;
-  // the API refuses anyone else the PATCH.
+  // ``inline``: the admin moves a price, a reorder level or the counted stock
+  // on the list itself; the API refuses anyone else the PATCH.
   'pharmacy-items':         { title: 'Stock Items',     group: 'Pharmacy', path: 'pharmacy/items',           roles: 'admin', search: true,
-                              inline: ['unit_price', 'cost_price', 'reorder_level'],
+                              inline: ['quantity_on_hand', 'unit_price', 'cost_price', 'reorder_level'],
                               // Markup prices a new item once; a counted total corrects an existing one.
                               hideNew: ['set_stock'], hideEdit: ['markup'],
                               actions: [{ name: 'receive', label: 'Receive stock', ask: 'quantity,batch_number' }] },
@@ -4980,6 +4980,8 @@ matchMedia('(max-width: 760px)').addEventListener('change', () => setNav(false))
 $('#sidebar').addEventListener('click', (e) => { if (e.target.closest('a')) setNav(false); });
 // Click-to-edit cells on a list (``inline`` resources): the cell swaps to a
 // number box, Enter/blur PATCHes just that field, Escape puts the old value back.
+// A read-only figure is written through the field that sets it.
+const INLINE_WRITE_AS = { quantity_on_hand: 'set_stock' };
 $('#main').addEventListener('click', (e) => {
   const td = e.target.closest('td.inline-edit');
   if (!td) return;
@@ -4990,7 +4992,7 @@ $('#main').addEventListener('click', (e) => {
   const input = document.createElement('input');
   input.type = 'number'; input.step = '0.01'; input.min = '0';
   if (field === 'coverage_percent') input.max = '100';
-  if (field === 'reorder_level') input.step = '1';
+  if (field === 'reorder_level' || field === 'quantity_on_hand') input.step = '1';
   input.value = old === '—' ? '' : old;
   td.replaceChildren(input);
   input.focus(); input.select();
@@ -5000,7 +5002,7 @@ $('#main').addEventListener('click', (e) => {
     const val = input.value.trim();
     if (!save || val === (old === '—' ? '' : old)) { td.textContent = old; return; }
     try {
-      const r = await Api.patch(rdetail(slug, `${id}/`), { [field]: val === '' ? null : val });
+      const r = await Api.patch(rdetail(slug, `${id}/`), { [INLINE_WRITE_AS[field] || field]: val === '' ? null : val });
       td.textContent = fmtVal(r[field]);
       toast('Saved.');
     } catch (err) { td.textContent = old; toast(err.message, true); }
