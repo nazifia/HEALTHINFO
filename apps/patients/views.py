@@ -6,6 +6,7 @@ from rest_framework.response import Response
 
 from apps.accounts.permissions import (
     IsClinicalStaff,
+    IsPatientRegistrar,
     IsTenantAdmin,
     IsTenantMember,
     sees_whole_tenant,
@@ -76,8 +77,10 @@ def visible_patients(user):
 
 
 class PatientViewSet(viewsets.ModelViewSet):
-    """The patient register. Clinical staff only — this is the one endpoint
-    that returns identifying data, so plain tenant members can't read it.
+    """The patient register. Clinical staff and the front desk only — this is
+    the one endpoint that returns identifying data, so plain tenant members
+    can't read it. Reception registers and finds patients; the clinical
+    timeline (history) stays with clinical staff.
 
     The roster is this facility's; a search or a read by id reaches a patient
     registered at any facility, so one registration serves every one of them.
@@ -85,7 +88,7 @@ class PatientViewSet(viewsets.ModelViewSet):
     """
 
     serializer_class = PatientSerializer
-    permission_classes = [IsTenantMember, IsClinicalStaff]
+    permission_classes = [IsTenantMember, IsPatientRegistrar]
     # An independent prescriber reaches this one: you cannot prescribe to a
     # patient you cannot register or find. visible_patients narrows them to
     # their own caseload (see get_queryset), and every read is still logged.
@@ -245,7 +248,8 @@ class PatientViewSet(viewsets.ModelViewSet):
             )
         return Response(PatientAccessLogSerializer(rows, many=True).data)
 
-    @action(detail=True, methods=["get"])
+    @action(detail=True, methods=["get"],
+            permission_classes=[IsTenantMember, IsClinicalStaff])
     def history(self, request, pk=None):
         """Everything filed against this patient, grouped by record type.
 

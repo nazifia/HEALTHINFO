@@ -40,7 +40,7 @@ class Api {
   static const moduleRoles = {
     'facility': [
       'tenant_admin', 'doctor', 'pharmacist', 'nurse', 'midwife', 'chew',
-      'hmo', 'public',
+      'receptionist', 'hmo', 'public',
     ],
     'scheme': ['hmo'],
     'oversight': ['government'],
@@ -167,6 +167,12 @@ class Api {
   static const reportRoles = {...writeRoles, 'nurse', 'midwife', 'chew'};
 
   bool roleCanReport(String? role) => reportRoles.contains(role);
+
+  // Backend REGISTRAR_ROLES (web/api.js roleCanRegister): the patient register
+  // also opens to the front desk, which files nothing clinical.
+  static const registrarRoles = {...reportRoles, 'receptionist'};
+
+  bool roleCanRegister(String? role) => registrarRoles.contains(role);
 
   Future<void> loadTokens() async {
     final p = await SharedPreferences.getInstance();

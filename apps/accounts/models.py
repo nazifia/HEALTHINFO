@@ -15,6 +15,8 @@ class Role(models.TextChoices):
     NURSE = "nurse"
     MIDWIFE = "midwife"
     CHEW = "chew", "Community Health Extension Worker"
+    # Front desk: registers patients and finds their folder, nothing clinical.
+    RECEPTIONIST = "receptionist", "Receptionist / Records Officer"
     # Seats that read the platform rather than run a facility: an insurer
     # answering for the money on its own scheme's claims, a health authority
     # reading aggregate surveillance. Neither files or dispenses anything.

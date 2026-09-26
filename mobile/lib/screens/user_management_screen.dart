@@ -37,6 +37,7 @@ const _roles = [
   'nurse',
   'midwife',
   'chew',
+  'receptionist',
   'hmo',
   'government',
   'public',

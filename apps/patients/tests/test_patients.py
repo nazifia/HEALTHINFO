@@ -220,6 +220,28 @@ def test_clinical_cadres_register_edit_and_diagnose(db_clean, role):
     assert list(filed.medications.values_list("id", flat=True)) == [drug.id]
 
 
+def test_receptionist_registers_and_finds_but_reads_no_history(db_clean):
+    """The front desk registers the patient and finds the folder again; what
+    is filed in it stays with clinical staff."""
+    a = Tenant.objects.create(name="A", slug="a")
+    desk = User.objects.create_user(phone="08031000009", password="x",
+                                    tenant=a, role=Role.RECEPTIONIST)
+    c = _client(desk, a)
+    created = c.post("/api/patients/", {
+        "first_name": "Ada", "last_name": "Obi", "sex": "F",
+        "consent_given": True,
+    }, format="json")
+    assert created.status_code == 201, created.content
+    pid = created.json()["id"]
+    assert Patient.all_objects.get(pk=pid).registered_by_id == desk.id
+    assert c.patch(f"/api/patients/{pid}/", {"last_name": "Obiora"},
+                   format="json").status_code == 200
+    assert [r["id"] for r in c.get("/api/patients/?search=Obiora").json()["results"]] == [pid]
+    assert c.get(f"/api/patients/{pid}/history/").status_code == 403
+    assert c.post("/api/case-reports/", {"patient": pid},
+                  format="json").status_code == 403
+
+
 def test_duplicate_hospital_number_rejected(db_clean):
     a = Tenant.objects.create(name="A", slug="a")
     Patient.objects.create(tenant=a, first_name="Ada", last_name="A",

@@ -35,6 +35,8 @@ const Api = (() => {
   // Mirrors backend WRITE_ROLES / REPORT_ROLES.
   const WRITE_ROLES = new Set(['super_admin', 'tenant_admin', 'doctor', 'pharmacist']);
   const REPORT_ROLES = new Set([...WRITE_ROLES, 'nurse', 'midwife', 'chew']);
+  // Backend REGISTRAR_ROLES: the patient register also opens to the front desk.
+  const REGISTRAR_ROLES = new Set([...REPORT_ROLES, 'receptionist']);
 
   // Nigerian mobile numbers, or the last-6-digit pharmacy short login;
   // anything else is taken to be a licence number.
@@ -225,5 +227,6 @@ const Api = (() => {
 
     roleCanWrite: (role) => WRITE_ROLES.has(role),
     roleCanReport: (role) => REPORT_ROLES.has(role),
+    roleCanRegister: (role) => REGISTRAR_ROLES.has(role),
   };
 })();

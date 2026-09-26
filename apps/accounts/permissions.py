@@ -11,6 +11,12 @@ WRITE_ROLES = {Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.DOCTOR, Role.PHARMACIST
 # authoring which stays in WRITE_ROLES.
 REPORT_ROLES = WRITE_ROLES | {Role.NURSE, Role.MIDWIFE, Role.CHEW}
 
+# Roles allowed on the patient register: every cadre that files clinical
+# records (a prescriber has to be able to register the patient in front of
+# them), plus the front desk. Reception opens the folder; it does not read
+# what is filed in it — the history action stays with REPORT_ROLES.
+REGISTRAR_ROLES = REPORT_ROLES | {Role.RECEPTIONIST}
+
 # The patient's own seat. They read their record through /api/portal/, which
 # answers for them and nobody else. Everything else inside a tenant is a staff
 # screen: the report registers are other people's records, and the catalog —
@@ -40,7 +46,7 @@ OVERSIGHT_ROLES = {Role.GOVERNMENT}
 MANAGEABLE_ROLES = {
     Role.TENANT_ADMIN: {
         Role.TENANT_ADMIN, Role.DOCTOR, Role.PHARMACIST, Role.NURSE,
-        Role.MIDWIFE, Role.CHEW, Role.HMO, Role.PUBLIC,
+        Role.MIDWIFE, Role.CHEW, Role.RECEPTIONIST, Role.HMO, Role.PUBLIC,
     },
     Role.HMO: {Role.HMO},
     Role.GOVERNMENT: {Role.GOVERNMENT},
@@ -308,6 +314,20 @@ class IsClinicalStaff(BasePermission):
         if not user.is_authenticated:
             return False
         return user.is_super_admin or user.role in REPORT_ROLES
+
+
+class IsPatientRegistrar(IsClinicalStaff):
+    """Clinical staff or the front desk — the patient register only.
+
+    Same shape as IsClinicalStaff (reads are as sensitive as writes), widened
+    to REGISTRAR_ROLES so reception can register and look patients up.
+    """
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user.is_authenticated:
+            return False
+        return user.is_super_admin or user.role in REGISTRAR_ROLES
 
 
 class IsTenantAdmin(BasePermission):

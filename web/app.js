@@ -571,7 +571,7 @@ const MODULE_PRIVILEGES = {
 
 /* Which roles each module's admin may mint (accounts.permissions.MANAGEABLE_ROLES). */
 const MODULE_ROLES = {
-  facility: ['tenant_admin', 'doctor', 'pharmacist', 'nurse', 'midwife', 'chew', 'hmo', 'public'],
+  facility: ['tenant_admin', 'doctor', 'pharmacist', 'nurse', 'midwife', 'chew', 'receptionist', 'hmo', 'public'],
   scheme: ['hmo'],
   oversight: ['government'],
 };
@@ -676,9 +676,10 @@ function navHtml() {
     if (r.adminOnly && !['super_admin', 'tenant_admin'].includes(ME?.role)
         && !(slug === 'users' && hasPriv('manage_users'))) continue;
     if (r.group === 'Pharmacy' && !PHARMACY_STAFF_ROLES.has(ME?.role)) continue;
-    // Patient data is clinical-staff only (apps.accounts.permissions.IsClinicalStaff);
-    // the visits and orders beside it are read by the whole tenant.
-    if (r.roles === 'clinical' && !Api.roleCanReport(ME?.role)) continue;
+    // Patient data is clinical staff and the front desk only
+    // (apps.accounts.permissions.IsPatientRegistrar); the visits and orders
+    // beside it are read by the whole tenant.
+    if (r.roles === 'clinical' && !Api.roleCanRegister(ME?.role)) continue;
     // Insurance work is the pharmacy's, but it is its own desk — schemes,
     // members, prices, authorisations, claims — so it is read out of the
     // Pharmacy group into one of its own. ``group`` stays 'Pharmacy': it is
@@ -1865,7 +1866,7 @@ async function viewHome() {
   ];
   if (ME.role === 'public') tiles.unshift(['#/portal', 'activity', 'My Health',
     'Your record, your medications and where to fill them']);
-  if (Api.roleCanReport(ME.role)) tiles.splice(3, 0, ['#/r/patients', 'users', 'Patients', 'Register and open patient records']);
+  if (Api.roleCanRegister(ME.role)) tiles.splice(3, 0, ['#/r/patients', 'users', 'Patients', 'Register and open patient records']);
   if (isPlatformScope()) tiles.push(['#/platform', 'chart', 'Platform', 'Cross-tenant analytics']);
   // The organization lists stay inside an organization: they are the way out of it.
   if (ME.role === 'super_admin') tiles.push(['#/r/tenants-hospitals', 'shield', 'Hospitals', 'Approve and manage hospitals'], ['#/r/tenants-pharmacies', 'shield', 'Pharmacies', 'Approve and manage pharmacies']);
@@ -2008,8 +2009,8 @@ function canWriteRes(slug, res) {
     || (ME?.role === 'hmo' && !!ME?.hmo && hasPriv('edit_tariff'));
   if (res.roles === 'staff') return isPharmacyStaff();
   if (res.roles === 'tenant_admin') return ['super_admin', 'tenant_admin'].includes(ME.role);
-  // Patients: the same cadres that may read them may register and edit them.
-  if (res.roles === 'clinical') return Api.roleCanReport(ME.role);
+  // Patients: the same seats that may read them may register and edit them.
+  if (res.roles === 'clinical') return Api.roleCanRegister(ME.role);
   // Users: the facility's admin, or a seat flagged as its own portal's admin.
   if (isUserRes(slug)) return ['super_admin', 'tenant_admin'].includes(ME.role)
     || !!ME.is_admin || hasPriv('manage_users');
@@ -2211,7 +2212,7 @@ async function viewDetail(slug, id) {
       <div class="card">${dlHtml(obj)}</div>
       ${slug === 'prescriptions' && obj.group ? `<div class="card"><h3>Prescribed together</h3>
         <div id="rx-group"><p class="loading">Loading…</p></div></div>` : ''}
-      ${res.history ? '<div class="card"><h3>Clinical history</h3><div id="rec-history"><p class="loading">Loading…</p></div></div>' : ''}
+      ${res.history && Api.roleCanReport(ME?.role) ? '<div class="card"><h3>Clinical history</h3><div id="rec-history"><p class="loading">Loading…</p></div></div>' : ''}
       ${res.extra === 'purchase' ? purchaseReceiveHtml(obj) : ''}
       ${res.extra === 'count' ? stockCountHtml(obj) : ''}
       ${res.extra === 'script' ? scriptLinesHtml(obj) : ''}
@@ -2342,7 +2343,7 @@ async function viewDetail(slug, id) {
     }
     // Everything filed against this record, grouped by kind. Empty groups are
     // dropped — ten "No data." headings hide the one group that has rows.
-    if (res.history) {
+    if (res.history && Api.roleCanReport(ME?.role)) {
       try {
         const h = await Api.get(rdetail(slug, `${id}/history/`));
         const kinds = Object.entries(h).filter(([k, v]) => k !== 'counts' && Array.isArray(v) && v.length);

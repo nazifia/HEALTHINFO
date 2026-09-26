@@ -18,7 +18,8 @@ import 'prescriptions_screen.dart';
 
 /// Patient registry — GET/POST /api/patients/.
 /// The only screen that shows identifying data; the backend limits it to
-/// clinical staff, so non-clinical members get a 403 here by design.
+/// clinical staff and the front desk (REGISTRAR_ROLES), so anyone else gets a
+/// 403 here by design.
 /// Tapping a card opens the patient's cross-module history.
 class PatientsScreen extends StatelessWidget {
   const PatientsScreen({super.key});
@@ -30,13 +31,15 @@ class PatientsScreen extends StatelessWidget {
     // they registered or wrote for, so the empty state asks for a search.
     return FutureBuilder<Map<String, dynamic>?>(
       future: api.me(),
-      builder: (context, snap) => _list(context, Api.isIndependent(snap.data)),
+      builder: (context, snap) => _list(context, Api.isIndependent(snap.data),
+          api.roleCanRegister(snap.data?['role']?.toString())),
     );
   }
 
-  Widget _list(BuildContext context, bool independent) {
+  Widget _list(BuildContext context, bool independent, bool canRegister) {
     return ReportListScreen(
       path: '/api/patients/',
+      showFab: canRegister,
       fabLabel: 'Register patient',
       emptyIcon: Icons.people_outline,
       emptyTitle: independent
@@ -831,8 +834,14 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _future = api.get('/api/patients/${widget.patient['id']}/history/');
+    _future = _history();
   }
+
+  /// The clinical timeline is clinical staff's (the endpoint says so); the
+  /// front desk gets the folder's details and an empty timeline, not a 403.
+  Future<dynamic> _history() async => api.roleCanReport(await api.myRole())
+      ? api.get('/api/patients/${widget.patient['id']}/history/')
+      : <String, dynamic>{};
 
   void _say(String message) {
     if (!mounted) return;
@@ -885,7 +894,7 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
       final moved = (result['moved'] as Map).values
           .fold<int>(0, (sum, n) => sum + (n as int));
       _say('Merged $wanted — $moved record(s) moved here');
-      setState(() { _future = api.get('/api/patients/$id/history/'); });
+      setState(() { _future = _history(); });
     } catch (e) {
       _say('$e');
     }
@@ -896,9 +905,7 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
   Future<void> _prescribe() async {
     if (!await prescribeFor(context, widget.patient)) return;
     _say('Order written for ${widget.patient['full_name']}.');
-    setState(() {
-      _future = api.get('/api/patients/${widget.patient['id']}/history/');
-    });
+    setState(() { _future = _history(); });
   }
 
   /// Write a counter script for this patient without hunting them down again
