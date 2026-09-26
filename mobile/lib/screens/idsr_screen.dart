@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../config.dart';
 import '../main.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/export_csv.dart';
@@ -50,15 +51,14 @@ class _IdsrScreenState extends State<IdsrScreen> with LiveRefresh {
 
   Future<List<Map<String, dynamic>>> _load() async {
     final q = {'days': '$_days'};
-    Map data;
-    // Platform view is super-admin only; a 403 scopes down to this tenant.
-    try {
-      data = await api.get('/api/analytics/platform/idsr/', q) as Map;
-      _path = '/api/analytics/platform/idsr/';
-    } catch (_) {
-      data = await api.get('/api/analytics/idsr/', q) as Map;
-      _path = '/api/analytics/idsr/';
-    }
+    // Platform view mirrors IsPlatformReader: a super-admin or government seat
+    // outside any organization. Picked up front, not probed — a probe logs a
+    // 403 in the browser console on every load for everyone else.
+    final role = await api.myRole();
+    final platform = tenantSlug.isEmpty &&
+        (role == 'super_admin' || role == 'government');
+    _path = platform ? '/api/analytics/platform/idsr/' : '/api/analytics/idsr/';
+    final data = await api.get(_path, q) as Map;
     _immediate = ((data['immediate'] as List?) ?? []).cast<Map<String, dynamic>>();
     return ((data['summary'] as List?) ?? []).cast<Map<String, dynamic>>();
   }
