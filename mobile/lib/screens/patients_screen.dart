@@ -908,6 +908,41 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
     setState(() { _future = _history(); });
   }
 
+  /// Book this patient into a prescriber's queue — the front desk's hand-off.
+  /// The list comes least busy first, with how many are already waiting.
+  Future<void> _sendToPrescriber() async {
+    final id = widget.patient['id'];
+    try {
+      final rows = (await api.get('/api/patients/prescribers/') as List)
+          .cast<Map<String, dynamic>>();
+      if (!mounted) return;
+      if (rows.isEmpty) {
+        _say('No prescriber on staff');
+        return;
+      }
+      final picked = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (ctx) => SimpleDialog(
+          title: const Text('Send for consultation'),
+          children: [
+            for (final r in rows)
+              SimpleDialogOption(
+                onPressed: () => Navigator.pop(ctx, r),
+                child: Text('${r['name']} (${r['role']}) · '
+                    '${r['waiting']} waiting'),
+              ),
+          ],
+        ),
+      );
+      if (picked == null) return;
+      final result = await api.post('/api/patients/$id/send/',
+          {'prescriber': picked['id']});
+      _say('${result['message']}');
+    } catch (e) {
+      _say('$e');
+    }
+  }
+
   /// Write a counter script for this patient without hunting them down again
   /// on the pharmacy screen. It reaches their history once the counter
   /// dispenses off it — that is the point the drug actually left the shelf.
@@ -932,6 +967,12 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
               const admins = {'tenant_admin', 'super_admin'};
               final role = snap.data;
               return Row(mainAxisSize: MainAxisSize.min, children: [
+                if (api.roleCanRegister(role))
+                  IconButton(
+                    tooltip: 'Send for consultation',
+                    icon: const Icon(Icons.send_outlined),
+                    onPressed: _sendToPrescriber,
+                  ),
                 if (api.roleCanReport(role))
                   IconButton(
                     tooltip: 'Prescribe medications',

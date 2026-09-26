@@ -242,6 +242,48 @@ def test_receptionist_registers_and_finds_but_reads_no_history(db_clean):
                   format="json").status_code == 403
 
 
+def test_receptionist_sends_patient_to_a_prescriber_and_nothing_else(db_clean):
+    """The desk registers, then sends the patient to a prescriber's queue. The
+    prescriber finds them on their own list; the desk reaches nothing else."""
+    a = Tenant.objects.create(name="A", slug="a")
+    desk = User.objects.create_user(phone="08031000009", password="x",
+                                    tenant=a, role=Role.RECEPTIONIST)
+    busy = User.objects.create_user(phone="08031000010", password="x", tenant=a,
+                                    role=Role.DOCTOR, license_number="MD1")
+    free = User.objects.create_user(phone="08031000011", password="x", tenant=a,
+                                    role=Role.DOCTOR, license_number="MD2")
+    User.objects.create_user(phone="08031000012", password="x", tenant=a,
+                             role=Role.PHARMACIST)  # not a prescriber here
+    c = _client(desk, a)
+    ada = c.post("/api/patients/", {"first_name": "Ada", "last_name": "Obi",
+                                    "sex": "F", "consent_given": True},
+                 format="json").json()["id"]
+    bayo = c.post("/api/patients/", {"first_name": "Bayo", "last_name": "Ade",
+                                     "sex": "M", "consent_given": True},
+                  format="json").json()["id"]
+    assert c.post(f"/api/patients/{ada}/send/", {"prescriber": busy.id},
+                  format="json").status_code == 201
+    # Least busy first, and only licensed clinicians.
+    listed = c.get("/api/patients/prescribers/").json()
+    assert [(p["id"], p["waiting"]) for p in listed] == [(free.id, 0), (busy.id, 1)]
+    # Sent once is sent: a second send while waiting is refused.
+    assert c.post(f"/api/patients/{ada}/send/", {"prescriber": free.id},
+                  format="json").status_code == 400
+    assert c.post(f"/api/patients/{bayo}/send/", {"prescriber": desk.id},
+                  format="json").status_code == 400
+    # The prescriber's queue and caseload both carry the patient.
+    doc = _client(busy, a)
+    queue = doc.get("/api/appointments/?status=scheduled").json()["results"]
+    assert [r["patient"] for r in queue] == [ada]
+    assert [r["id"] for r in doc.get("/api/patients/").json()["results"]] == [ada]
+    # Nothing else in the facility answers the desk.
+    assert c.get("/api/appointments/").status_code == 403
+    assert c.get("/api/case-reports/").status_code == 403
+    assert c.delete(f"/api/patients/{bayo}/").status_code == 403
+    # Their own row, not the staff directory.
+    assert [u["id"] for u in c.get("/api/users/").json()["results"]] == [desk.id]
+
+
 def test_duplicate_hospital_number_rejected(db_clean):
     a = Tenant.objects.create(name="A", slug="a")
     Patient.objects.create(tenant=a, first_name="Ada", last_name="A",

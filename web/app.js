@@ -618,6 +618,9 @@ const navGroup = (name, links) =>
    and the handful of screens that dashboard links to — the rest of the
    registry answers 403 for them, so it stays out of their sidebar. */
 const SEAT_NAV = {
+  // The front desk registers patients and sends them to a prescriber; the API
+  // answers reception nothing else (reception_ok).
+  receptionist: ['#/r/patients', 'Front Desk', [['#/r/patients', 'users', 'Patients']]],
   hmo: ['#/insurer', 'Claims Desk', [
     ['#/r/pharmacy-preauths', 'flag', 'Authorisation Requests'],
     ['#/r/pharmacy-claims', 'file', 'Claims'],
@@ -2197,6 +2200,12 @@ async function viewDetail(slug, id) {
     // params so the new-record form opens with them already filled in. A drug
     // order written off a visit carries that visit's diagnosis, so it is filed
     // against the case rather than floating loose.
+    // Reception's hand-off: book the patient into a prescriber's queue.
+    const sendHtml = slug === 'patients' && Api.roleCanRegister(ME.role)
+      ? `<div class="card"><h3>Send for consultation</h3><div class="actions">
+          <select id="send-to"><option value="">Loading prescribers…</option></select>
+          <input id="send-reason" placeholder="Reason (optional)" maxlength="255">
+          <button id="send-go" class="btn">Send</button></div></div>` : '';
     let fileHtml = '';
     if (res.fileFrom && Api.roleCanReport(ME.role)) {
       const link = new URLSearchParams();
@@ -2210,7 +2219,7 @@ async function viewDetail(slug, id) {
       <div class="actions">${actions}</div>
       ${tenantHtml}${workflowHtml}
       ${actsHtml ? `<div class="card"><h3>Actions</h3><div class="actions">${actsHtml}</div></div>` : ''}
-      ${fileHtml}
+      ${sendHtml}${fileHtml}
       ${withPatient ? '<div class="card"><h3>Patient</h3><div id="rec-patient"><p class="loading">Loading…</p></div></div>' : ''}
       <div class="card">${dlHtml(obj)}</div>
       ${slug === 'prescriptions' && obj.group ? `<div class="card"><h3>Prescribed together</h3>
@@ -2224,6 +2233,22 @@ async function viewDetail(slug, id) {
         + preauthTrailHtml() : ''}
       ${res.extra === 'statement' ? '<div id="statement"><p class="loading">Loading…</p></div>' : ''}`);
     if (res.receipt) $('#receipt').onclick = () => printReceipt(id);
+    if (sendHtml) {
+      Api.get(rdetail(slug, 'prescribers/')).then((rows) => {
+        $('#send-to').innerHTML = rows.length
+          ? rows.map((p) => `<option value="${p.id}">${esc(p.name)} (${esc(label(p.role))}) · ${p.waiting} waiting</option>`).join('')
+          : '<option value="">No prescriber on staff</option>';
+      }, (e) => toast(e.message, true));
+      $('#send-go').onclick = async () => {
+        const prescriber = $('#send-to').value;
+        if (!prescriber) return toast('Pick a prescriber.', true);
+        try {
+          const r = await Api.post(rdetail(slug, `${id}/send/`), { prescriber, reason: $('#send-reason').value.trim() });
+          toast(r.message);
+          viewDetail(slug, id);
+        } catch (e) { toast(e.message, true); }
+      };
+    }
     if (withPatient) {
       Api.get(`/api/patients/${obj.patient}/`).then(
         (p) => { $('#rec-patient').innerHTML = `<a href="#/r/patients/${p.id}">${patientHitHtml(p)}</a>`; },
@@ -3613,10 +3638,20 @@ async function viewClinical() {
       <div id="patient-hit"></div>
       <div id="patient-go" class="actions" hidden></div>
     </div>
+    <div class="card"><h3>Sent to you</h3><div id="ward-queue"><p class="loading">Loading…</p></div></div>
     <h3>Quick actions</h3>
     <div class="tiles">${[['consultations', 'New consultation'], ['prescriptions', 'Medication order'], ['patients', 'Patient register']].map(([slug, title]) =>
       `<a class="tile linktile" href="#/r/${slug}/new"><span class="tile-label">New</span>
         <span class="tile-val">${title}</span></a>`).join('')}</div>`);
+  // Patients the front desk sent here, oldest first: starting the visit off the
+  // booking settles it when the visit closes.
+  Api.list(rpath('appointments'), { status: 'scheduled', ordering: 'created_at', page_size: 50 }).then(({ rows }) => {
+    const mine = rows.filter((r) => r.patient && r.reporter === ME.id);
+    $('#ward-queue').innerHTML = mine.length ? mine.map((r) =>
+      `<div class="actions"><span>${esc(r.patient_name || `#${r.patient}`)}${r.reason ? ` — ${esc(r.reason)}` : ''}</span>
+        <a class="btn" href="#/r/consultations/new?patient=${r.patient}&appointment=${r.id}">Start visit</a></div>`).join('')
+      : '<p class="muted">Nobody waiting.</p>';
+  }, () => { $('#ward-queue').innerHTML = '<p class="muted">Nobody waiting.</p>'; });
   // One patient found: open the record, or go straight to a visit or a
   // prescription with them already filled in.
   const go = $('#patient-go');
@@ -4981,6 +5016,7 @@ const homeHash = (role) => role === 'super_admin' && !Api.tenant ? '#/platform'
   : role === 'public' ? '#/portal'
   : role === 'hmo' ? '#/insurer'
   : role === 'government' ? '#/gov'
+  : role === 'receptionist' ? '#/r/patients'
   : role === 'pharmacist' ? '#/pharmacy'
   : CLINICAL_ROLES.has(role) ? '#/clinical' : '#/';
 

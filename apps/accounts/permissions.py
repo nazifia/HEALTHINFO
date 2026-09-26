@@ -17,6 +17,11 @@ REPORT_ROLES = WRITE_ROLES | {Role.NURSE, Role.MIDWIFE, Role.CHEW}
 # what is filed in it — the history action stays with REPORT_ROLES.
 REGISTRAR_ROLES = REPORT_ROLES | {Role.RECEPTIONIST}
 
+# The front desk registers patients and sends them to a prescriber, and does
+# nothing else in the facility. Default-deny like the patient seat: a view has
+# to say ``reception_ok = True`` before reception reaches it.
+RECEPTION_ROLES = {Role.RECEPTIONIST}
+
 # The patient's own seat. They read their record through /api/portal/, which
 # answers for them and nobody else. Everything else inside a tenant is a staff
 # screen: the report registers are other people's records, and the catalog —
@@ -192,6 +197,8 @@ class IsTenantMember(BasePermission):
         if user.role in INSURER_ROLES and not getattr(view, "insurer_ok", False):
             return False
         if user.role in PATIENT_ROLES and not getattr(view, "patient_ok", False):
+            return False
+        if user.role in RECEPTION_ROLES and not getattr(view, "reception_ok", False):
             return False
         if user.role in OVERSIGHT_ROLES:
             # They belong to no tenant, so the check below could never pass. A

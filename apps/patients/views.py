@@ -1,9 +1,11 @@
-from django.db.models import Q
+from django.db.models import Count, Q
+from django.utils import timezone
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
+from apps.accounts.models import LICENSED_ROLES, Role, User
 from apps.accounts.permissions import (
     IsClinicalStaff,
     IsPatientRegistrar,
@@ -93,6 +95,8 @@ class PatientViewSet(viewsets.ModelViewSet):
     # patient you cannot register or find. visible_patients narrows them to
     # their own caseload (see get_queryset), and every read is still logged.
     independent_ok = True
+    # The front desk's whole job is here: register, find, send to a prescriber.
+    reception_ok = True
     filterset_fields = ("sex", "status", "region", "blood_group", "genotype",
                         "patient_type")
     # next_of_kin_phone is searchable too: a relative's number is often the
@@ -173,6 +177,9 @@ class PatientViewSet(viewsets.ModelViewSet):
         return response
 
     def destroy(self, request, *args, **kwargs):
+        # Reception opens folders; closing one for good is clinical staff's.
+        if request.user.role == Role.RECEPTIONIST:
+            raise PermissionDenied("Reception cannot delete patient records.")
         patient = self.get_object()
         self._must_be_ours(patient)
         # A patient with clinical records can't be deleted: the reports survive
@@ -191,6 +198,64 @@ class PatientViewSet(viewsets.ModelViewSet):
         self._log(PatientAccessLog.Action.DELETE, patient=patient, count=1,
                   query=f"{patient.hospital_number} {patient.full_name}")
         return super().destroy(request, *args, **kwargs)
+
+    def _prescribers(self):
+        """This facility's active licensed clinicians, least busy first.
+
+        ``waiting`` is how many patients are sent to them today and not yet
+        seen (scheduled appointments they hold), so the desk can spread the
+        queue. Today only: a booking nobody closed last week is not a queue.
+        ponytail: "available" is active + queue length; add an on-duty flag
+        when the facility runs shifts that this can't see.
+        """
+        from apps.analytics.models import Appointment
+
+        return (User.objects
+                .filter(tenant=self.request.tenant, is_active=True,
+                        role__in=LICENSED_ROLES)
+                .annotate(waiting=Count(
+                    "appointment",
+                    filter=Q(appointment__status=Appointment.Status.SCHEDULED,
+                             appointment__created_at__date=timezone.localdate())))
+                .order_by("waiting", "username", "id"))
+
+    @action(detail=False)
+    def prescribers(self, request):
+        """Who the desk can send a patient to: ``[{id, name, role, waiting}]``."""
+        return Response([
+            {"id": u.id, "name": str(u), "role": u.role, "waiting": u.waiting}
+            for u in self._prescribers()
+        ])
+
+    @action(detail=True, methods=["post"])
+    def send(self, request, pk=None):
+        """Send this patient for consultation: ``{"prescriber": id, "reason": ""}``.
+
+        Books a scheduled appointment held by the prescriber — it is their
+        queue (their appointments list) and puts the patient on their caseload
+        (visible_patients), and closing the visit settles it. The prescriber
+        is the reporter because the encounter is theirs, not the desk's.
+        """
+        from apps.analytics.models import Appointment
+
+        patient = self.get_object()
+        prescriber = self._prescribers().filter(
+            pk=request.data.get("prescriber") or None).first()
+        if prescriber is None:
+            raise ValidationError(
+                {"prescriber": "Pick an active prescriber at this facility."})
+        if Appointment.objects.filter(
+                patient=patient, status=Appointment.Status.SCHEDULED,
+                created_at__date=timezone.localdate()).exists():
+            raise ValidationError(
+                "This patient is already waiting to be seen.")
+        appt = Appointment.objects.create(
+            patient=patient, reporter=prescriber,
+            reason=str(request.data.get("reason", ""))[:255])
+        return Response({
+            "id": appt.id,
+            "message": f"{patient.full_name} sent to {prescriber}.",
+        }, status=201)
 
     @action(detail=True, methods=["post"],
             permission_classes=[IsTenantMember, IsTenantAdmin])

@@ -14,8 +14,8 @@ from apps.tenants.scope import selected_jurisdiction
 
 from .models import Role, User
 from .permissions import (
-    INSURER_ROLES, OVERSIGHT_ROLES, PATIENT_ROLES, IsSelfOrModuleAdmin,
-    IsTenantMember,
+    INSURER_ROLES, OVERSIGHT_ROLES, PATIENT_ROLES, RECEPTION_ROLES,
+    IsSelfOrModuleAdmin, IsTenantMember, is_module_admin,
 )
 from .serializers import (
     LoginSerializer, OnboardingSerializer, PasswordResetConfirmSerializer,
@@ -115,6 +115,8 @@ class UserViewSet(viewsets.ModelViewSet):
     # The staff list itself is not theirs to read, so get_queryset narrows them
     # to their own row and this stays the only tenant endpoint they open.
     patient_ok = True
+    # The front desk keeps its own profile and password here like anyone else.
+    reception_ok = True
     # Staff link a patient record to its portal account by searching this list,
     # so it answers ?search= on the three things anyone would type. No password
     # or token field is searchable — only what the serializer already returns.
@@ -174,6 +176,10 @@ class UserViewSet(viewsets.ModelViewSet):
         # The patient seat is not staff: their own row and nobody else's, so
         # the list cannot be used to read the facility's staff directory.
         if user.role in PATIENT_ROLES:
+            return User.objects.filter(pk=user.pk)
+        # Same for the front desk: registering patients needs no staff
+        # directory. Unless the admin handed them the user list to run.
+        if user.role in RECEPTION_ROLES and not is_module_admin(user):
             return User.objects.filter(pk=user.pk)
         # Tenant-scoped: only see users of your own tenant.
         return User.objects.filter(tenant=user.tenant)

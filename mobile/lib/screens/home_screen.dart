@@ -520,6 +520,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       _setGroups([_accountGroup], home: _myHealthHome);
       return;
     }
+    // The front desk registers and sends patients on; the API answers
+    // reception nothing else in the facility (reception_ok).
+    if (role == 'receptionist') {
+      const patients =
+          _Section('Patients', Icons.people_outline, PatientsScreen());
+      _setGroups([const _Group('Front desk', [patients]), _accountGroup],
+          home: patients);
+      return;
+    }
     if (role == 'hmo') {
       _setGroups([_withUsers(_insurerGroup, manages), _accountGroup],
           home: _insurerHome);
