@@ -43,6 +43,19 @@ class StockItemSerializer(serializers.ModelSerializer):
         model = StockItem
         exclude = ("tenant",)
         read_only_fields = ("created_at", "updated_at")
+        # A catalog drug names the row itself; the name is typed only for
+        # stock the catalog doesn't carry.
+        extra_kwargs = {"name": {"required": False, "allow_blank": True}}
+
+    def validate(self, attrs):
+        if "name" in attrs or not self.instance:
+            medication = attrs.get("medication") or getattr(self.instance, "medication", None)
+            if not attrs.get("name", "").strip():
+                if not medication:
+                    raise serializers.ValidationError(
+                        {"name": "Pick a medication or type a name."})
+                attrs["name"] = medication.generic_name
+        return attrs
 
     def _book_in(self, item, quantity):
         if quantity:

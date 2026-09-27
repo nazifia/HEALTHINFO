@@ -249,6 +249,16 @@ const RESOURCES = {
   // itself; the API refuses anyone else the PATCH.
   'pharmacy-items':         { title: 'Stock Items',     group: 'Pharmacy', path: 'pharmacy/items',           roles: 'admin', search: true,
                               inline: ['unit_price', 'cost_price', 'reorder_level'],
+                              layout: ['medication', 'name', 'brand', 'form', 'unit', 'store',
+                                'cost_price', 'unit_price', 'markup', 'add_stock'],
+                              hints: { name: 'Only for stock the medication list does not carry' },
+                              // A picked catalog drug names the row; the name box is for the rest.
+                              rules: (f) => {
+                                const picked = !!f.elements.medication?.value;
+                                const box = f.querySelector('[data-field="name"]');
+                                if (box) box.hidden = picked;
+                                if (f.elements.name) f.elements.name.required = !picked;
+                              },
                               actions: [{ name: 'receive', label: 'Receive stock', ask: 'quantity,batch_number' }] },
   // A batch's details (number, expiry, cost, supplier) are edited in place;
   // its quantity is not — stock arrives through the item's receive and

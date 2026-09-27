@@ -1540,6 +1540,19 @@ def test_item_form_books_stock_in(pharmacy):
     assert r.json()["quantity_on_hand"] == 50
 
 
+def test_item_takes_its_name_from_the_picked_medication(pharmacy):
+    from apps.catalog.models import Medication
+    admin = _client(pharmacy["admin"], pharmacy["tenant"])
+    drug = Medication.objects.create(generic_name="Artemether")
+    r = admin.post("/api/pharmacy/items/", {"medication": drug.pk})
+    assert r.status_code == 201, r.json()
+    assert r.json()["name"] == "Artemether"
+    # A typed name wins; with neither, the row is refused.
+    assert admin.post("/api/pharmacy/items/", {"medication": drug.pk, "name": "Coartem"}
+                      ).json()["name"] == "Coartem"
+    assert admin.post("/api/pharmacy/items/", {}).status_code == 400
+
+
 def test_item_edit_reprices_from_a_changed_markup_or_cost(pharmacy):
     """An edit that moves the markup or the cost re-prices from cost; one that
     also sets the sell price keeps that price."""
