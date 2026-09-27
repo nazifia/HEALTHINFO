@@ -78,6 +78,15 @@ def visible_patients(user):
     return Patient.all_objects.filter(scope).distinct()
 
 
+def independent_reach(user):
+    """Every patient an independent prescriber may open or file against: their
+    own caseload, plus patients who signed themselves up and so belong to no
+    one facility."""
+    self_registered = Patient.all_objects.filter(
+        user__isnull=False, registered_by=F("user")).distinct()
+    return visible_patients(user) | self_registered
+
+
 class PatientViewSet(viewsets.ModelViewSet):
     """The patient register. Clinical staff and the front desk only — this is
     the one endpoint that returns identifying data, so plain tenant members
@@ -123,10 +132,7 @@ class PatientViewSet(viewsets.ModelViewSet):
         # account) belongs to no one facility: any prescriber anywhere finds
         # them by search or id, but they sit on nobody's roster.
         if user.is_independent:
-            self_registered = Patient.all_objects.filter(
-                user__isnull=False, registered_by=F("user")).distinct()
-            qs = (Patient.objects.none() if roster
-                  else visible_patients(user) | self_registered)
+            qs = Patient.objects.none() if roster else independent_reach(user)
         else:
             qs = visible_patients(user) if roster else Patient.all_objects.all()
         return qs.prefetch_related("chronic_conditions")

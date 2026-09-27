@@ -168,6 +168,9 @@ class CaseReportViewSet(viewsets.ModelViewSet):
     """
 
     serializer_class = CaseReportSerializer
+    # Opened to independent prescribers: own_reports narrows them to what
+    # they filed, and CaseloadLinksMixin fences what they may link.
+    independent_ok = True
     permission_classes = [IsTenantMember, ReadOnlyOrReportRole]
     filterset_fields = ("severity", "outcome", "disease", "patient_age_group", "region", "patient", "patient_sex")
     ordering_fields = ("created_at", "severity")
@@ -195,6 +198,9 @@ class AdverseDrugReactionViewSet(viewsets.ModelViewSet):
     """Staff file/list adverse drug reactions (pharmacovigilance), tenant-scoped."""
 
     serializer_class = AdverseDrugReactionSerializer
+    # Opened to independent prescribers: own_reports narrows them to what
+    # they filed, and CaseloadLinksMixin fences what they may link.
+    independent_ok = True
     permission_classes = [IsTenantMember, ReadOnlyOrReportRole]
     filterset_fields = ("severity", "outcome", "medication", "region", "patient", "patient_sex")
     ordering_fields = ("created_at", "severity")
@@ -232,6 +238,9 @@ class LabResultViewSet(_ReportViewSet):
 
     model = LabResult
     serializer_class = LabResultSerializer
+    # Opened to independent prescribers: own_reports narrows them to what
+    # they filed, and CaseloadLinksMixin fences what they may link.
+    independent_ok = True
     filterset_fields = ("flag", "lab_test", "disease", "organism", "region", "patient", "patient_sex")
 
 
@@ -240,6 +249,9 @@ class ImmunizationViewSet(_ReportViewSet):
 
     model = Immunization
     serializer_class = ImmunizationSerializer
+    # Opened to independent prescribers: own_reports narrows them to what
+    # they filed, and CaseloadLinksMixin fences what they may link.
+    independent_ok = True
     filterset_fields = ("vaccine", "dose_number", "patient_age_group", "region", "patient", "patient_sex")
 
 
@@ -248,6 +260,9 @@ class VitalEventViewSet(_ReportViewSet):
 
     model = VitalEvent
     serializer_class = VitalEventSerializer
+    # Opened to independent prescribers: own_reports narrows them to what
+    # they filed, and CaseloadLinksMixin fences what they may link.
+    independent_ok = True
     filterset_fields = ("event_type", "maternal_death", "infant_death", "region", "patient", "patient_sex")
 
 
@@ -293,6 +308,9 @@ class ConsultationViewSet(_ReportViewSet):
 
     model = Consultation
     serializer_class = ConsultationSerializer
+    # Opened to independent prescribers: own_reports narrows them to what
+    # they filed, and CaseloadLinksMixin fences what they may link.
+    independent_ok = True
     filterset_fields = ("status", "disposition", "patient", "appointment",
                         "case_report", "region", "follow_up_on", "patient_sex")
     # By patient or complaint, the way a visit is looked up on the ward.
@@ -400,6 +418,9 @@ class AppointmentViewSet(_ReportViewSet):
 
     model = Appointment
     serializer_class = AppointmentSerializer
+    # Opened to independent prescribers: own_reports narrows them to what
+    # they filed, and CaseloadLinksMixin fences what they may link.
+    independent_ok = True
     filterset_fields = ("mode", "status", "region", "patient", "patient_sex")
 
 
@@ -474,20 +495,28 @@ class PrescriptionViewSet(_ReportViewSet):
         group = uuid4()
         for data in rows if isinstance(rows, list) else [rows]:
             if data.get("case_report") is None:
-                data["case_report"] = self._open_case(data.get("patient"))
+                data["case_report"] = self._open_case(
+                    data.get("patient"), self.request.user)
             # One request is one prescription, however many drugs are on it.
             data["group"] = group
         serializer.save(reporter=self.request.user)
 
     @staticmethod
-    def _open_case(patient):
-        """The case report of the patient's open visit, if they are in one."""
+    def _open_case(patient, user):
+        """The case report of the patient's open visit, if they are in one.
+
+        An independent prescriber's order only picks up their own visit: the
+        facility's is not a record they may link (CaseloadLinksMixin).
+        """
         if patient is None:
             return None
-        visit = Consultation.objects.filter(
+        visits = Consultation.objects.filter(
             patient=patient, status=Consultation.Status.OPEN,
             case_report__isnull=False,
-        ).first()
+        )
+        if user.is_independent:
+            visits = visits.filter(reporter=user)
+        visit = visits.first()
         return visit.case_report if visit is not None else None
 
     @action(detail=True, methods=["post"])

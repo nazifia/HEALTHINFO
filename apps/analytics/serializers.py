@@ -26,8 +26,40 @@ class RegionValidatedMixin:
         return validate_region(value)
 
 
+class CaseloadLinksMixin:
+    """An independent prescriber files only against what they may open.
+
+    The FK fields check the tenant alone, so without this a visitor to the
+    facility could file against any patient id there, which then puts that
+    patient on their caseload, or link another clinician's case report or
+    booking and read it back through the row's labels.
+    """
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if user is None or not getattr(user, "is_independent", False):
+            return attrs
+        from apps.patients.views import independent_reach
+
+        patient = attrs.get("patient")
+        if patient is not None and not independent_reach(user).filter(
+                pk=patient.pk).exists():
+            raise serializers.ValidationError(
+                {"patient": "Not a patient on your caseload."})
+        for field in ("case_report", "appointment"):
+            linked = attrs.get(field)
+            # own_reports narrows an independent prescriber to reporter=self.
+            if linked is not None and linked.reporter_id != user.id:
+                raise serializers.ValidationError(
+                    {field: "Not one of your own records."})
+        return attrs
+
+
 class CaseReportSerializer(
-    RegionValidatedMixin, NamedRelationsMixin, serializers.ModelSerializer
+    CaseloadLinksMixin, RegionValidatedMixin, NamedRelationsMixin,
+    serializers.ModelSerializer
 ):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     patient_age = serializers.IntegerField(source="patient.age", read_only=True)
@@ -47,7 +79,9 @@ class CaseReportSerializer(
         )
 
 
-class AdverseDrugReactionSerializer(RegionValidatedMixin, serializers.ModelSerializer):
+class AdverseDrugReactionSerializer(
+    CaseloadLinksMixin, RegionValidatedMixin, serializers.ModelSerializer
+):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     patient_age = serializers.IntegerField(source="patient.age", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
@@ -61,7 +95,9 @@ class AdverseDrugReactionSerializer(RegionValidatedMixin, serializers.ModelSeria
         read_only_fields = ("reporter", "created_at", "updated_at")
 
 
-class LabResultSerializer(RegionValidatedMixin, serializers.ModelSerializer):
+class LabResultSerializer(
+    CaseloadLinksMixin, RegionValidatedMixin, serializers.ModelSerializer
+):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     patient_age = serializers.IntegerField(source="patient.age", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
@@ -74,7 +110,9 @@ class LabResultSerializer(RegionValidatedMixin, serializers.ModelSerializer):
         read_only_fields = ("reporter", "created_at", "updated_at")
 
 
-class ImmunizationSerializer(RegionValidatedMixin, serializers.ModelSerializer):
+class ImmunizationSerializer(
+    CaseloadLinksMixin, RegionValidatedMixin, serializers.ModelSerializer
+):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     patient_age = serializers.IntegerField(source="patient.age", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
@@ -85,7 +123,9 @@ class ImmunizationSerializer(RegionValidatedMixin, serializers.ModelSerializer):
         read_only_fields = ("reporter", "created_at", "updated_at")
 
 
-class VitalEventSerializer(RegionValidatedMixin, serializers.ModelSerializer):
+class VitalEventSerializer(
+    CaseloadLinksMixin, RegionValidatedMixin, serializers.ModelSerializer
+):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     patient_age = serializers.IntegerField(source="patient.age", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
@@ -142,7 +182,9 @@ class InsuranceClaimSerializer(RegionValidatedMixin, serializers.ModelSerializer
         read_only_fields = ("reporter", "created_at", "updated_at")
 
 
-class AppointmentSerializer(RegionValidatedMixin, serializers.ModelSerializer):
+class AppointmentSerializer(
+    CaseloadLinksMixin, RegionValidatedMixin, serializers.ModelSerializer
+):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     patient_age = serializers.IntegerField(source="patient.age", read_only=True)
     reporter_name = serializers.CharField(source="reporter.username", read_only=True)
@@ -154,7 +196,8 @@ class AppointmentSerializer(RegionValidatedMixin, serializers.ModelSerializer):
 
 
 class PrescriptionSerializer(
-    RegionValidatedMixin, NamedRelationsMixin, serializers.ModelSerializer
+    CaseloadLinksMixin, RegionValidatedMixin, NamedRelationsMixin,
+    serializers.ModelSerializer
 ):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     patient_age = serializers.IntegerField(source="patient.age", read_only=True)
@@ -173,7 +216,8 @@ class PrescriptionSerializer(
 
 
 class ConsultationSerializer(
-    RegionValidatedMixin, NamedRelationsMixin, serializers.ModelSerializer
+    CaseloadLinksMixin, RegionValidatedMixin, NamedRelationsMixin,
+    serializers.ModelSerializer
 ):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     patient_age = serializers.IntegerField(source="patient.age", read_only=True)

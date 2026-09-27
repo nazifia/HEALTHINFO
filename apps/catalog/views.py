@@ -66,6 +66,8 @@ class DiseaseViewSet(
     analytics_object_type = "disease"
     queryset = Disease.objects.all()
     serializer_class = DiseaseSerializer
+    # Independent prescribers pick from it on their forms, read only.
+    independent_read_ok = True
     permission_classes = [IsTenantMember, ReadOnlyOrWriteRole]
     filterset_fields = ("status", "icd10_code", "notifiable")
     search_fields = ("name", "description")
@@ -79,6 +81,8 @@ class MedicationViewSet(
     analytics_object_type = "medication"
     queryset = Medication.objects.all()
     serializer_class = MedicationSerializer
+    # Independent prescribers pick from it on their forms, read only.
+    independent_read_ok = True
     permission_classes = [IsTenantMember, ReadOnlyOrWriteRole]
     filterset_fields = ("status", "drug_class")
     search_fields = ("generic_name", "brand_name", "description")
@@ -89,6 +93,8 @@ class MedicationViewSet(
 class SymptomViewSet(TenantQuerysetMixin, viewsets.ModelViewSet):
     queryset = Symptom.objects.all()
     serializer_class = SymptomSerializer
+    # Independent prescribers pick from it on their forms, read only.
+    independent_read_ok = True
     permission_classes = [IsTenantMember, ReadOnlyOrWriteRole]
     search_fields = ("name", "description")
     ordering_fields = ("name", "severity_level")
@@ -131,6 +137,8 @@ class LabTestViewSet(
     analytics_object_type = "lab_test"
     queryset = LabTest.objects.all()
     serializer_class = LabTestSerializer
+    # Independent prescribers pick from it on their forms, read only.
+    independent_read_ok = True
     permission_classes = [IsTenantMember, ReadOnlyOrWriteRole]
     filterset_fields = ("status",)
     search_fields = ("name", "description")

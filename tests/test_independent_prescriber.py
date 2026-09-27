@@ -106,12 +106,69 @@ def test_sees_only_the_patients_they_registered_or_wrote_for(world):
     assert ids == [theirs.pk]
     assert c.get(f"/api/patients/{other.pk}/").status_code == 404
     assert c.get("/api/prescriptions/").json()["count"] == 0
-    # Writing for a patient is what brings them into view.
+    # A patient they cannot open is not one they can write for either: the
+    # write would otherwise put them on the caseload by a guessed id.
+    refused = c.post("/api/prescriptions/", {"medication": drug.id, "dose": "80 mg",
+                                             "patient": other.pk}, format="json")
+    assert refused.status_code == 400
+    assert c.get(f"/api/patients/{other.pk}/").status_code == 404
     c.post("/api/prescriptions/", {"medication": drug.id, "dose": "80 mg",
-                                   "patient": other.pk}, format="json")
-    assert c.get(f"/api/patients/{other.pk}/").status_code == 200
-    # Same for their orders: nothing unsearched, their own by patient.
+                                   "patient": theirs.pk}, format="json")
+    # Their orders: nothing unsearched, their own by patient.
     assert c.get("/api/prescriptions/").json()["count"] == 0
-    assert c.get("/api/prescriptions/?search=Ada").json()["count"] == 1
-    assert c.get(f"/api/prescriptions/?patient={other.pk}").json()["count"] == 1
-    assert c.get(f"/api/prescriptions/?patient={theirs.pk}").json()["count"] == 0
+    assert c.get("/api/prescriptions/?search=Bola").json()["count"] == 1
+    assert c.get(f"/api/prescriptions/?patient={theirs.pk}").json()["count"] == 1
+    assert c.get(f"/api/prescriptions/?patient={other.pk}").json()["count"] == 0
+
+
+def test_clinical_registers_open_to_their_own_work(world):
+    """Consultations, case reports, labs and the rest open to them, narrowed
+    to what they filed, and the catalog reads but does not write."""
+    from apps.analytics.models import CaseReport, Consultation
+    from apps.catalog.models import Disease
+    from apps.patients.models import Patient
+    doctor, here, _away, _drug = world
+    theirs = Patient.objects.create(tenant=here, first_name="Bola",
+                                    last_name="Obi", registered_by=doctor)
+    CaseReport.objects.create(tenant=here, patient=theirs)  # a staff doctor's
+    c = _client(doctor, here)
+    for path in ("consultations", "case-reports", "adverse-reactions",
+                 "lab-results", "immunizations", "vital-events", "appointments"):
+        response = c.get(f"/api/{path}/")
+        assert response.status_code == 200, path
+        assert response.json()["count"] == 0, path
+    made = c.post("/api/consultations/", {"patient": theirs.pk,
+                                          "chief_complaint": "fever"}, format="json")
+    assert made.status_code == 201, made.content
+    assert Consultation.all_objects.get(pk=made.json()["id"]).reporter_id == doctor.id
+    assert c.get("/api/diseases/").status_code == 200
+    assert c.post("/api/diseases/", {"name": "X"}, format="json").status_code == 403
+    assert not Disease.all_objects.filter(name="X").exists()
+
+
+def test_cannot_link_another_clinicians_records(world):
+    from apps.analytics.models import CaseReport
+    from apps.patients.models import Patient
+    doctor, here, _away, drug = world
+    other = Patient.objects.create(tenant=here, first_name="Ada", last_name="Obi")
+    theirs = Patient.objects.create(tenant=here, first_name="Bola",
+                                    last_name="Obi", registered_by=doctor)
+    staff_case = CaseReport.objects.create(tenant=here, patient=theirs)
+    c = _client(doctor, here)
+    unreachable = c.post("/api/consultations/", {"patient": other.pk,
+                                                 "chief_complaint": "fever"},
+                         format="json")
+    assert unreachable.status_code == 400
+    assert "caseload" in str(unreachable.content)
+    linked = c.post("/api/consultations/", {"patient": theirs.pk,
+                                            "chief_complaint": "fever",
+                                            "case_report": staff_case.pk},
+                    format="json")
+    assert linked.status_code == 400
+    assert "case_report" in str(linked.content)
+    order = c.post("/api/prescriptions/", {"medication": drug.id, "dose": "1",
+                                           "patient": theirs.pk,
+                                           "case_report": staff_case.pk},
+                   format="json")
+    assert order.status_code == 400
+    assert "case_report" in str(order.content)

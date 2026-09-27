@@ -213,8 +213,12 @@ class IsTenantMember(BasePermission):
             # says ``independent_ok = True`` the way it does for the other
             # seats that sit outside a facility's staff — and only inside a
             # facility in their own state.
-            return (getattr(view, "independent_ok", False)
-                    and may_prescribe_under(user, request.tenant))
+            # ``independent_read_ok`` opens a view for reading only: the
+            # catalog a form picks from, which they must not edit.
+            opened = getattr(view, "independent_ok", False) or (
+                request.method in SAFE_METHODS
+                and getattr(view, "independent_read_ok", False))
+            return opened and may_prescribe_under(user, request.tenant)
         return request.tenant is not None and user.tenant_id == request.tenant.id
 
 

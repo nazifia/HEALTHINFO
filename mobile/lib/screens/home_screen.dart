@@ -539,10 +539,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         _setGroups([_accountGroup], home: _facilityHome);
         return;
       }
-      // Picked one: the clinical menu, read as that facility. They are a
-      // licensed cadre, so the API narrows every register to their own
-      // caseload exactly as it does the facility's own doctors.
-      _setGroups([..._professionGroups(role!).where((g) => g != _accountGroup),
+      // Picked one: their own desk and the clinical records, read as that
+      // facility. The API opens those registers to them (independent_ok)
+      // narrowed to what they filed; the reports, tools and catalog screens
+      // stay shut, so those groups are left out.
+      final records = _professionGroups(role!).where((g) =>
+          g.label == _professionLabel[role] || g.label == _recordsGroup.label);
+      _setGroups([
+        for (final g in records)
+          role == 'pharmacist'
+              ? _Group(g.label, [
+                  for (final s in g.sections)
+                    if (!_pharmacistHidden.contains(s.label)) s,
+                ])
+              : g,
         _facilityAccountGroup,
       ], home: _Section('Ward', Icons.local_hospital_outlined,
           WardScreen(onOpen: _openSection)));

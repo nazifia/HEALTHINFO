@@ -548,6 +548,11 @@ const platformTitle = () => `${ME?.jurisdiction_name?.replace(/ \([^)]*\)$/, '')
    under it — the pick is the X-Tenant-ID header, and the server re-checks the
    state on every write (accounts.permissions.may_prescribe_under). */
 const isIndependent = () => !!ME?.is_independent;
+// The registers the API opens to an independent prescriber (independent_ok),
+// narrowed server-side to what they filed. Everything else answers them 403.
+const INDEPENDENT_OPEN = new Set(['patients', 'prescriptions', 'consultations',
+  'case-reports', 'adverse-reactions', 'lab-results', 'immunizations',
+  'vital-events', 'appointments']);
 /* Until they have picked one, every tenant-scoped call answers 403 — so the
    picker is the only screen there is. */
 const needsFacility = () => isIndependent() && !Api.tenant;
@@ -679,6 +684,7 @@ function navHtml() {
   const prescriber = isClinicalStaff() || isIndependent();
   for (const [slug, r] of Object.entries(RESOURCES)) {
     if (r.superOnly && ME?.role !== 'super_admin') continue;
+    if (isIndependent() && !INDEPENDENT_OPEN.has(slug)) continue;
     if (slug === 'shifts' && prescriber) continue;
     if (r.adminOnly && !['super_admin', 'tenant_admin'].includes(ME?.role)
         && !(slug === 'users' && hasPriv('manage_users'))) continue;
@@ -708,7 +714,10 @@ function navHtml() {
   const deskUsers = usersLink && groups.Pharmacy?.length
     && !['super_admin', 'tenant_admin'].includes(ME?.role);
   if (deskUsers) groups.Admin = groups.Admin.filter((a) => a !== usersLink);
-  let html = `<a href="#/" data-route="/" class="nav-home">${ico('home')}Home</a>`;
+  // The tenant dashboard refuses an independent prescriber; their Ward
+  // (in the profession group below) is their home.
+  let html = isIndependent() ? ''
+    : `<a href="#/" data-route="/" class="nav-home">${ico('home')}Home</a>`;
   // A patient reads their own record and nothing else in here. The catalog and
   // the lookup tools built on it are the clinicians' reference, and the API
   // refuses a patient every one of them (IsTenantMember, default-deny for the
@@ -736,6 +745,14 @@ function navHtml() {
   const clinical = (groups.Clinical || []).join('');
   // A prescriber's own desk sits first; everyone else finds it after the references.
   if (clinical && prescriber) html += navGroup('Clinical', clinical);
+  // Tools, catalog, analytics and the pharmacy all answer an independent
+  // prescriber 403, so their menu stops at the registers opened to them.
+  if (isIndependent()) {
+    if (groups.Reports?.length) html += navGroup('Reports', groups.Reports.join(''));
+    return html + navGroup('Account',
+      `<a href="#/profile" data-route="/profile">${ico('users')}Profile</a>`
+      + `<a href="#/facility" data-route="/facility">${ico('shield')}Change Facility</a>`);
+  }
   html += navGroup('Tools', tools.join(''));
   html += navGroup('Catalog', groups.Catalog.join(''));
   // The pharmacy's reports are its own Trading Reports under Finance.
@@ -767,9 +784,7 @@ function navHtml() {
   // The only route the sidebar did not reach: the topbar badge opens it, which
   // is not obvious on a phone where the badge is a username and nothing else.
   html += navGroup('Account', `<a href="#/profile" data-route="/profile">${ico('users')}Profile</a>`
-    + (isIndependent()
-      ? `<a href="#/facility" data-route="/facility">${ico('shield')}Change Facility</a>` : '')
-    + (PHARMACY_STAFF_ROLES.has(ME?.role) && !isIndependent()
+    + (PHARMACY_STAFF_ROLES.has(ME?.role)
       ? `<a href="#/notifications" data-route="/notifications">${ico('flag')}Notifications</a>` : ''));
   return html;
 }
