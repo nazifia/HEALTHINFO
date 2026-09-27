@@ -70,7 +70,7 @@ assert.strictEqual(h.toggle.focused, 0);
 const hmoLines = src.split(String.fromCharCode(10)).filter((l) => l.includes('hmo: true'));
 assert.ok(hmoLines.length >= 6, 'no hmo-flagged resources found');
 for (const line of hmoLines) assert.ok(line.includes("group: 'Pharmacy'"), line.trim());
-assert.ok(src.includes("groups[r.hmo ? 'HMO' : r.group]"), 'HMO links not split out');
+assert.ok(src.includes("groups[r.hmo ? 'HMO' : PHARMACY_NAV[slug] || r.group]"), 'HMO links not split out');
 assert.ok(src.includes("navGroup('HMO'"), 'HMO nav group not rendered');
 // The HMO group's own dashboard: the sidebar link and the route must agree,
 // or the section's front door lands on "Page not found".

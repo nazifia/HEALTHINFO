@@ -23,7 +23,6 @@ import 'stock_reports_screen.dart';
 import 'pharmacy_counter_screen.dart';
 import 'pharmacy_stock_screen.dart';
 import 'pharmacy_sales_screen.dart';
-import 'pharmacy_till_screen.dart';
 import 'pharmacy_claims_screen.dart';
 import 'pharmacy_preauth_screen.dart';
 import 'pharmacy_schemes_screen.dart';
@@ -164,6 +163,25 @@ List<_Group> get _prescriberGroups => [
             : g,
     ];
 
+/// A pharmacist's menu matches the web sidebar: the pharmacy's trading reports
+/// replace the Reports group, so of the report screens only the roster,
+/// notifiable cases and analytics stay (web/app.js navHtml).
+const _pharmacistHidden = {
+  'Case reports', 'Adverse reactions', 'Lab results', 'Immunizations',
+  'Vital events', 'Appointments', 'Pharmacy stock', 'CHW reports',
+  'Facility KPIs', 'Insurance claims', 'IDSR report',
+};
+
+List<_Group> get _pharmacistGroups => [
+      for (final g in _baseGroups)
+        g.sections.any((s) => _pharmacistHidden.contains(s.label))
+            ? _Group(g.label, [
+                for (final s in g.sections)
+                  if (!_pharmacistHidden.contains(s.label)) s,
+              ])
+            : g,
+    ];
+
 /// The drawer group each cadre's work sits under. Same keys as web/app.js
 /// PROFESSION_NAV.
 const _professionLabel = {
@@ -254,36 +272,47 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   // same way, so hiding the sections is convenience, not the control.
   // "Stock items" is this pharmacy's own shelf; "Pharmacy stock" in Reports
   // is the de-identified snapshot central surveillance reads.
-  static const _pharmacyGroup = _Group('Pharmacy', [
-    _Section('Pharmacy counter', Icons.local_pharmacy_outlined,
-        PharmacyCounterScreen()),
-    _Section('Prescriptions', Icons.description_outlined,
-        PrescriptionsScreen()),
-    _Section('Payment requests', Icons.pending_actions_outlined,
-        PaymentRequestsScreen()),
-    _Section('Stock items', Icons.inventory_outlined, PharmacyStockScreen()),
-    _Section('Stock checks', Icons.fact_check_outlined, StockChecksScreen()),
-    _Section('Stock ledger', Icons.receipt_long_outlined, StockLedgerScreen()),
-    _Section('Transfers', Icons.swap_horiz_outlined, TransfersScreen()),
-    _Section('Sales', Icons.point_of_sale_outlined, PharmacySalesScreen()),
-    _Section('Returns', Icons.undo_outlined, ReturnsScreen()),
-    _Section('Dispensing log', Icons.medication_outlined,
-        DispensingLogScreen()),
-    _Section('Cash drawer', Icons.point_of_sale_outlined, PharmacyTillScreen()),
-    _Section('Expenses', Icons.receipt_outlined, ExpensesScreen()),
-    _Section('Customers', Icons.people_alt_outlined, CustomersScreen()),
-    _Section('Suppliers', Icons.local_shipping_outlined,
-        PharmacySuppliersScreen()),
-    _Section('Purchase orders', Icons.receipt_long_outlined,
-        PharmacyOrdersScreen()),
-    _Section('Pharmacy reports', Icons.assessment_outlined,
-        PharmacyReportsScreen()),
-    _Section('Alerts', Icons.notifications_none_outlined,
-        NotificationsScreen()),
-    _Section('Branches', Icons.storefront_outlined, BranchesScreen()),
-    _Section('Cashiers', Icons.badge_outlined, CashiersScreen()),
-    _Section('Staff commissions', Icons.percent_outlined, CommissionsScreen()),
-  ]);
+  static const _pharmacyGroups = [
+    _Group('Pharmacy', [
+      _Section('Pharmacy counter', Icons.local_pharmacy_outlined,
+          PharmacyCounterScreen()),
+      _Section('Prescriptions', Icons.description_outlined,
+          PrescriptionsScreen()),
+      _Section('Payment requests', Icons.pending_actions_outlined,
+          PaymentRequestsScreen()),
+      _Section('Sales', Icons.point_of_sale_outlined, PharmacySalesScreen()),
+      _Section('Returns', Icons.undo_outlined, ReturnsScreen()),
+      _Section('Dispensing log', Icons.medication_outlined,
+          DispensingLogScreen()),
+      _Section('Alerts', Icons.notifications_none_outlined,
+          NotificationsScreen()),
+    ]),
+    _Group('Stock', [
+      _Section('Stock items', Icons.inventory_outlined, PharmacyStockScreen()),
+      _Section('Stock checks', Icons.fact_check_outlined, StockChecksScreen()),
+      _Section('Stock ledger', Icons.receipt_long_outlined,
+          StockLedgerScreen()),
+      _Section('Transfers', Icons.swap_horiz_outlined, TransfersScreen()),
+      _Section('Suppliers', Icons.local_shipping_outlined,
+          PharmacySuppliersScreen()),
+      _Section('Purchase orders', Icons.receipt_long_outlined,
+          PharmacyOrdersScreen()),
+    ]),
+    _Group('Customers', [
+      _Section('Customers', Icons.people_alt_outlined, CustomersScreen()),
+    ]),
+    _Group('Finance', [
+      _Section('Pharmacy reports', Icons.assessment_outlined,
+          PharmacyReportsScreen()),
+      _Section('Expenses', Icons.receipt_outlined, ExpensesScreen()),
+      _Section('Staff commissions', Icons.percent_outlined,
+          CommissionsScreen()),
+    ]),
+    _Group('Pharmacy setup', [
+      _Section('Branches', Icons.storefront_outlined, BranchesScreen()),
+      _Section('Cashiers', Icons.badge_outlined, CashiersScreen()),
+    ]),
+  ];
 
   // A pharmacy opens on its counter and shelf, not the tenant health analytics.
   _Section get _pharmacyHome => _Section('Dashboard', Icons.insights_outlined,
@@ -470,7 +499,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _menuSlug = tenantSlug;
     if (leftTenant) _index = 0;
     final pharmacy =
-        isPharmacyStaff(role) ? [_pharmacyGroup, ..._hmoGroups] : <_Group>[];
+        isPharmacyStaff(role) ? [..._pharmacyGroups, ..._hmoGroups] : <_Group>[];
     if (role == 'super_admin') {
       // Inside a clinic or a pharmacy a super-admin works as that
       // organization: the cross-tenant block goes away and every screen left
@@ -544,7 +573,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       _setGroups([
         _withUsers(pharmacy.first, manages),
         ...pharmacy.skip(1),
-        ..._baseGroups,
+        ...(role == 'pharmacist' ? _pharmacistGroups : _baseGroups),
       ], home: _pharmacyHome);
       return;
     }

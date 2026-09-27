@@ -977,14 +977,22 @@ class _FormState extends State<_Form> {
         ),
         // Not every prescription needs a visit on the books first: a repeat
         // script, or a walk-in the prescriber will not be examining.
+        // Doctors, nurses, midwives and CHEWs prescribe from the visit
+        // itself, so the shortcut is only for everyone else.
         if (!_isEdit)
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              icon: const Icon(Icons.medication_outlined, size: 18),
-              label: const Text('Prescribe only — no visit'),
-              onPressed: _saving ? null : _prescribeOnly,
-            ),
+          FutureBuilder<String?>(
+            future: api.myRole(),
+            builder: (context, snap) =>
+                const {'doctor', 'nurse', 'midwife', 'chew'}.contains(snap.data)
+                    ? const SizedBox.shrink()
+                    : Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          icon: const Icon(Icons.medication_outlined, size: 18),
+                          label: const Text('Prescribe only — no visit'),
+                          onPressed: _saving ? null : _prescribeOnly,
+                        ),
+                      ),
           ),
       ],
     );

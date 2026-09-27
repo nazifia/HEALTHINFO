@@ -21,7 +21,10 @@ function fmtVal(v) {
   if (v === null || v === undefined || v === '') return '—';
   if (typeof v === 'boolean') return v ? 'Yes' : 'No';
   if (Array.isArray(v)) return v.map(fmtVal).join(', ');
-  if (typeof v === 'object') return JSON.stringify(v);
+  // A summary object (a check's totals) reads as labelled figures, not JSON;
+  // a ``*_value`` figure is money (discrepancy_value, cost_value).
+  if (typeof v === 'object') return Object.entries(v).map(([k, x]) =>
+    `${label(k)}: ${/_value$/.test(k) && x != null ? money(x) : fmtVal(x)}`).join(' · ');
   if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(v)) return v.replace('T', ' ').slice(0, 16);
   return String(v);
 }
@@ -303,14 +306,7 @@ const RESOURCES = {
                               actions: [{ name: 'cancel', label: 'Withdraw request', ask: 'reason', danger: true, when: ['requested', 'approved'] }] },
   'pharmacy-sales':         { title: 'Sales',           group: 'Pharmacy', path: 'pharmacy/sales',           roles: 'staff', search: true, readOnly: true, receipt: true,
                               actions: [{ name: 'pay', label: 'Take payment', ask: 'amount', choose: 'method:cash,card,transfer', when: ['pending'] },
-                                        { name: 'keep-receipt', label: 'Keep receipt for later' },
                                         { name: 'cancel', label: 'Cancel sale', danger: true, when: ['pending', 'paid'] }] },
-  // Receipts set aside from a phone or a counter with no printer. Printing
-  // one takes it off the list; the sale itself stays under Sales.
-  'pharmacy-receipts':      { title: 'Receipts to print', group: 'Pharmacy', path: 'pharmacy/sales', query: { kept: '1' }, roles: 'staff', search: true, readOnly: true, receipt: true,
-                              actions: [{ name: 'pay', label: 'Take payment', ask: 'amount', choose: 'method:cash,card,transfer', when: ['pending'] }] },
-  'pharmacy-till':          { title: 'Cash Drawer',    group: 'Pharmacy', path: 'pharmacy/till-sessions',   roles: 'staff', createOnly: true,
-                              actions: [{ name: 'close', label: 'Close drawer', ask: 'amount,notes', when: ['open'] }] },
   'pharmacy-claims':        { title: 'Claims',          group: 'Pharmacy', hmo: true, path: 'pharmacy/claims',          roles: 'staff', search: true, readOnly: true,
                               actions: [{ name: 'submit', label: 'Submit', when: ['draft', 'rejected'] },
                                         { name: 'approve', label: 'Approve', ask: 'amount', insurer: true, when: ['submitted'] },
@@ -328,10 +324,10 @@ const RESOURCES = {
   // Who owes the counter money, biggest first. The wallet is settled from the
   // customer's own row, so this list is the reading, not another place to act.
   'pharmacy-debtors':       { title: 'Debtors',         group: 'Pharmacy', path: 'customers/debtors',        roles: 'staff', readOnly: true, noLink: true },
-  // Raise a stocktake over a set of items, count them, then apply the gaps.
+  // Raise a stocktake for a store, count every item in it inline, then apply the gaps.
   // ``extra: 'count'`` is the counting sheet; ``complete`` writes the
   // corrections to stock, which is why it sits with the admin.
-  'pharmacy-stock-checks':  { title: 'Stock Checks',    group: 'Pharmacy', path: 'pharmacy/stock-checks',    roles: 'staff', extra: 'count',
+  'pharmacy-stock-checks':  { title: 'Stock Checks',    group: 'Pharmacy', path: 'pharmacy/stock-checks',    roles: 'staff', extra: 'count', quickCreate: true,
                               actions: [{ name: 'complete', label: 'Apply and close', adminOnly: true, when: ['pending', 'in_progress'] },
                                         { name: 'cancel', label: 'Abandon count', danger: true, when: ['pending', 'in_progress'] }] },
   // Stock asked for from the other store. Approving moves it in the same
@@ -600,6 +596,18 @@ function myManageableRoles() {
   return ME?.role === 'tenant_admin' ? roles : roles.filter((r) => r !== 'tenant_admin');
 }
 
+/* The pharmacy's registers split by job in the sidebar. Anything not listed
+   stays in the Pharmacy group itself, with the counter: the day's selling. */
+const PHARMACY_NAV = {
+  'pharmacy-items': 'Stock', 'pharmacy-batches': 'Stock', 'pharmacy-movements': 'Stock',
+  'pharmacy-stock-checks': 'Stock', 'pharmacy-transfers': 'Stock',
+  'pharmacy-suppliers': 'Stock', 'pharmacy-orders': 'Stock',
+  'pharmacy-customers': 'Customers', 'pharmacy-wallet': 'Customers', 'pharmacy-debtors': 'Customers',
+  'pharmacy-expenses': 'Finance', 'pharmacy-expense-cats': 'Finance',
+  'pharmacy-commission-configs': 'Finance',
+  'pharmacy-cashiers': 'Pharmacy Setup', 'branches': 'Pharmacy Setup',
+};
+
 const navGroup = (name, links) =>
   `<details class="nav-group"${NAV_CLOSED.has(name) ? '' : ' open'} data-group="${name}">` +
   `<summary>${esc(name)}</summary>${links}</details>`;
@@ -680,7 +688,7 @@ function navHtml() {
     // members, prices, authorisations, claims — so it is read out of the
     // Pharmacy group into one of its own. ``group`` stays 'Pharmacy': it is
     // what the staff gate above and canWriteRes go by.
-    (groups[r.hmo ? 'HMO' : r.group] ||= []).push(`<a href="#/r/${slug}" data-route="/r/${slug}">${ico(iconFor(slug, r))}${esc(r.title)}</a>`);
+    (groups[r.hmo ? 'HMO' : PHARMACY_NAV[slug] || r.group] ||= []).push(`<a href="#/r/${slug}" data-route="/r/${slug}">${ico(iconFor(slug, r))}${esc(r.title)}</a>`);
   }
   const tools = [
     `<a href="#/search" data-route="/search">${ico('search')}Search</a>`,
@@ -725,13 +733,19 @@ function navHtml() {
   if (clinical && prescriber) html += navGroup('Clinical', clinical);
   html += navGroup('Tools', tools.join(''));
   html += navGroup('Catalog', groups.Catalog.join(''));
-  if (groups.Reports?.length) html += navGroup('Reports', groups.Reports.join(''));
+  // The pharmacy's reports are its own Trading Reports under Finance.
+  if (groups.Reports?.length && ME?.role !== 'pharmacist') html += navGroup('Reports', groups.Reports.join(''));
   if (groups.Pharmacy?.length) {
     html += navGroup('Pharmacy',
       `<a href="#/pharmacy" data-route="/pharmacy">${ico('pill')}Counter</a>` +
       `<a href="#/pharmacy/sell" data-route="/pharmacy/sell">${ico('pill')}Dispense</a>` +
-      `<a href="#/trading" data-route="/trading">${ico('chart')}Trading Reports</a>` +
-      groups.Pharmacy.join('') + (deskUsers ? usersLink : ''));
+      groups.Pharmacy.join(''));
+    if (groups.Stock?.length) html += navGroup('Stock', groups.Stock.join(''));
+    if (groups.Customers?.length) html += navGroup('Customers', groups.Customers.join(''));
+    html += navGroup('Finance',
+      `<a href="#/trading" data-route="/trading">${ico('chart')}Trading Reports</a>` + (groups.Finance || []).join(''));
+    const setup = (groups['Pharmacy Setup'] || []).join('') + (deskUsers ? usersLink : '');
+    if (setup) html += navGroup('Pharmacy Setup', setup);
   }
   if (groups.HMO?.length) {
     html += navGroup('HMO',
@@ -1990,11 +2004,9 @@ const visibleActions = (res, obj) => (res.actions || []).filter((a) =>
   && (!a.when || a.when.includes(obj.status))
   && (!a.hideWhen || !obj[a.hideWhen]));
 
-// ``createOnly`` resources (the cash drawer) are made and then only acted on:
-// the list still offers "+ New", the detail page offers no edit or delete.
-// ``editOnly`` is the other way round: edit, but no "+ New" and no delete.
+// ``editOnly``: edit, but no "+ New" and no delete.
 function canWriteRes(slug, res) {
-  if (res.readOnly || res.createOnly) return false;
+  if (res.readOnly) return false;
   if (res.roles === 'admin') return isPharmacyAdmin();
   // A scheme's price list is written by that scheme, or by the pharmacy admin
   // for a scheme with no seat of its own. Mirrors IsSchemePriceListEditor.
@@ -2046,7 +2058,7 @@ async function viewList(slug) {
     const pages = count != null ? Math.max(1, Math.ceil(count / 25)) : 1;
     render(`
       <div class="page-head"><h2>${esc(res.title)}</h2>
-        ${(canWrite || res.createOnly) && !res.editOnly && !slug.startsWith('tenants') ? `<a class="btn" href="#/r/${slug}/new${res.query ? '?' + new URLSearchParams(res.query) : ''}">+ New</a>` : ''}
+        ${canWrite && !res.editOnly && !slug.startsWith('tenants') ? `<a class="btn" href="#/r/${slug}/new${res.query ? '?' + new URLSearchParams(res.query) : ''}">+ New</a>` : ''}
         ${res.signUp && ME?.role === 'super_admin' ? '<a class="btn" href="#/scheme-register">+ Register scheme</a>' : ''}
       </div>
       ${slug === 'patients' && isIndependent()
@@ -2113,13 +2125,11 @@ async function viewList(slug) {
         } catch (err) { toast(err.message, true); }
       };
     }
-    // Printing from the row: the receipt page marks itself printed, so the
-    // queue redraws without it once the markup has been handed over.
+    // Printing from the row.
     for (const b of document.querySelectorAll('[data-print]')) {
       b.onclick = async (e) => {
         e.stopPropagation();
         await printReceipt(b.dataset.print);
-        if (res.query?.kept) viewList(slug);
       };
     }
     $('#prev').onclick = () => { st.page--; viewList(slug); };
@@ -2242,7 +2252,7 @@ async function viewDetail(slug, id) {
         () => { $('#rec-patient').innerHTML = `<p class="muted">${esc(obj.patient_name || `#${obj.patient}`)}</p>`; });
     }
     if (res.extra === 'purchase') wirePurchaseReceive(id, () => viewDetail(slug, id));
-    if (res.extra === 'count') wireStockCount(id, () => viewDetail(slug, id));
+    if (res.extra === 'count') wireStockCount(obj);
     if (res.extra === 'script') wireScriptDispense(id, () => viewDetail(slug, id));
     if (res.extra === 'close') wireCloseVisit(id, () => viewDetail(slug, id));
     if (res.extra === 'preauth') {
@@ -2385,6 +2395,26 @@ async function viewForm(slug, id, query) {
   if (!res) return errorBox(new Error('Unknown resource: ' + slug));
   if (!await ensureChrome()) return;
   spinner();
+  // Nothing to fill in before counting: raise the check and open its sheet.
+  if (!id && res.quickCreate) {
+    const body = { ...res.defaults, ...Object.fromEntries(new URLSearchParams(query || '')) };
+    // The one choice to make first: which store is being counted.
+    if (!body.store) {
+      render(`<div class="page-head"><h2>New ${esc(res.title.replace(/s$/, '').toLowerCase())}</h2></div>
+        <p>Which store are you counting?</p>
+        <div class="toolbar">
+          <a class="btn" href="#/r/${slug}/new?store=retail">Retail</a>
+          <a class="btn" href="#/r/${slug}/new?store=wholesale">Wholesale</a>
+          <a class="btn ghost" href="#/r/${slug}">Cancel</a>
+        </div>`);
+      return;
+    }
+    try {
+      const saved = await Api.post(rpath(slug), body);
+      location.replace(`#/r/${slug}/${saved.id}`);
+    } catch (err) { errorBox(err); }
+    return;
+  }
   try {
     const metaPath = id ? rdetail(slug, `${id}/`) : rpath(slug);
     const prefill = Object.fromEntries(new URLSearchParams(query || ''));
@@ -2459,7 +2489,7 @@ async function viewForm(slug, id, query) {
       </div>` : ''}
       <div class="actions">
         <button type="submit" form="f" class="btn">${id ? 'Save' : sheet ? esc(sheet.submit) : 'Create'}</button>
-        ${withDx ? `<a class="btn ghost" href="#/r/prescriptions/new?${new URLSearchParams(
+        ${withDx && !PRESCRIBERS.includes(ME?.role) ? `<a class="btn ghost" href="#/r/prescriptions/new?${new URLSearchParams(
           Object.fromEntries(['patient', 'case_report'].filter((k) => prefill[k]).map((k) => [k, prefill[k]])))}">Prescribe only — no visit</a>` : ''}
         ${prefill.back ? `<a class="btn ghost" href="${esc(prefill.back)}">Skip — nothing to prescribe</a>`
           : `<a class="btn ghost" href="#/r/${slug}${id ? '/' + id : ''}">Cancel</a>`}
@@ -4136,7 +4166,6 @@ async function viewSell() {
         <label>Scheme membership<select name="enrollment">${schemeOptions()}</select></label>
         <label>Authorisation (only for a covered sale above the insurer's threshold)
           <select name="authorization">${authOptions()}</select></label>
-        <label><input type="checkbox" name="keep_receipt"> Keep the receipt to print later (no printer here)</label>
         <div class="actions">
           <button type="button" class="btn ghost" id="ask-auth">Ask the insurer</button>
           <button type="button" class="btn ghost" id="to-cashier">Send to a cashier</button>
@@ -4281,15 +4310,12 @@ async function viewSell() {
       if (fd.get('authorization')) body.authorization = Number(fd.get('authorization'));
       // The receipt prints as the sale lands: the window is claimed now,
       // while this is still the cashier's click, and filled once the sale has
-      // a number. Closed again if the sale is refused. Or, with no printer at
-      // this screen, the receipt is kept for whichever screen has one.
-      const keep = fd.get('keep_receipt');
-      const w = keep ? null : receiptWindow();
+      // a number. Closed again if the sale is refused.
+      const w = receiptWindow();
       try {
         const sale = await Api.post('/api/pharmacy/sales/', body);
         toast(`Sale ${sale.reference} — patient pays ${money(sale.patient_payable)}.`);
-        if (keep) await Api.post(`/api/pharmacy/sales/${sale.id}/keep-receipt/`, {});
-        else printReceipt(sale.id, w);
+        printReceipt(sale.id, w);
         location.hash = `#/r/pharmacy-sales/${sale.id}`;
       } catch (err) { w?.close(); toast(err.message, true); }
     };
@@ -4552,50 +4578,60 @@ function wireScriptDispense(rxId, reload) {
   };
 }
 
-/* The counting sheet. Expected is what the shelf said when the line was
-   raised — the server snapshots it, so a sale mid-count doesn't move the
-   target — and the counter fills in what was actually there.
-
-   ponytail: counts the lines the check was raised over. Finding an item the
-   sheet doesn't list means raising it on the check first; add an item picker
-   here if that turns out to be the common case rather than the exception. */
+/* The counting sheet: every active item in the check's store, one row each.
+   Expected is the server's snapshot for a line already raised (a sale
+   mid-count doesn't move the target); for the rest it is the shelf figure
+   now, and the server snapshots it the moment a count lands. A count box
+   saves on its own when it changes - a blank box is "not counted", never 0. */
 function stockCountHtml(check) {
-  const lines = check.lines || [];
-  if (!lines.length || ['completed', 'cancelled'].includes(check.status)) return '';
+  if (['completed', 'cancelled'].includes(check.status)) return '';
   return `<div class="card"><h3>Count</h3>
-    <form id="count" class="form-card">
-      <div class="table-wrap"><table><thead><tr>
-        <th>Item</th><th>Expected</th><th>Counted</th><th>Note</th></tr></thead>
-        <tbody>${lines.map((l) => `<tr>
-          <td>${esc(l.item_name || `#${l.item}`)}</td>
-          <td>${l.expected_quantity ?? '—'}</td>
-          <td><input type="number" min="0" data-item="${l.item}"
-                     value="${l.actual_quantity ?? ''}" style="width:6rem"></td>
-          <td><input data-note="${l.item}" value="${esc(l.notes || '')}"></td>
-        </tr>`).join('')}</tbody></table></div>
-      <div class="actions"><button class="btn">Save count</button></div>
-    </form></div>`;
+    <input id="count-filter" type="search" placeholder="Filter items…" style="margin-bottom:.5rem">
+    <div class="table-wrap"><table><thead><tr>
+      <th>Item</th><th>Expected</th><th>Counted</th><th>Gap</th><th>Note</th></tr></thead>
+      <tbody id="count-rows"><tr><td colspan="5" class="loading">Loading items…</td></tr></tbody></table></div></div>`;
 }
 
-function wireStockCount(checkId, reload) {
-  const form = $('#count');
-  if (!form) return;
-  form.onsubmit = async (e) => {
-    e.preventDefault();
-    // Only the lines someone actually put a number against: a blank box is
-    // "not counted yet", not a count of zero.
-    const rows = [...form.querySelectorAll('[data-item]')]
-      .filter((i) => i.value !== '')
-      .map((i) => ({
-        item: Number(i.dataset.item),
-        quantity: Number(i.value),
-        notes: form.querySelector(`[data-note="${i.dataset.item}"]`).value,
-      }));
-    if (!rows.length) return toast('Nothing counted yet.', true);
+// One row per item: raised lines keep their snapshot, the rest show the shelf.
+const countGap = (l) => (l?.actual_quantity == null ? '' : l.discrepancy);
+function countRowsHtml(check, items) {
+  const lines = new Map((check.lines || []).map((l) => [l.item, l]));
+  const rows = items.filter((i) => lines.has(i.id) || !check.store || i.store === check.store);
+  return rows.map((i) => {
+    const l = lines.get(i.id);
+    return `<tr data-name="${esc(i.name.toLowerCase())}">
+      <td>${esc(i.name)}</td>
+      <td class="${l ? '' : 'muted'}">${l ? l.expected_quantity : i.quantity_on_hand ?? 0}</td>
+      <td><input type="number" min="0" step="1" data-item="${i.id}" value="${l?.actual_quantity ?? ''}" style="width:6rem"></td>
+      <td data-gap="${i.id}">${countGap(l)}</td>
+      <td><input data-note="${i.id}" value="${esc(l?.notes || '')}"></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="5" class="muted">No items in this store.</td></tr>';
+}
+
+async function wireStockCount(check) {
+  const body = $('#count-rows');
+  if (!body) return;
+  let items;
+  // Fresh shelf figures: the session cache is a catalogue, not a stock level.
+  try { itemCache = null; items = await allItems(); } catch (e) { body.innerHTML = `<tr><td colspan="5">${esc(e.message)}</td></tr>`; return; }
+  body.innerHTML = countRowsHtml(check, items);
+  $('#count-filter').oninput = (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    for (const tr of body.rows) tr.hidden = !!q && !tr.dataset.name?.includes(q);
+  };
+  body.onchange = async (e) => {
+    const id = e.target.dataset.item || e.target.dataset.note;
+    const box = body.querySelector(`[data-item="${id}"]`);
+    if (!id || box.value === '') return;
     try {
-      const r = await Api.post(`/api/pharmacy/stock-checks/${checkId}/count/`, rows);
-      toast(r?.message || 'Counted.');
-      reload();
+      const r = await Api.post(`/api/pharmacy/stock-checks/${check.id}/count/`, [{
+        item: Number(id), quantity: Number(box.value),
+        notes: body.querySelector(`[data-note="${id}"]`).value,
+      }]);
+      const l = (r.lines || []).find((x) => x.item === Number(id));
+      if (l) body.querySelector(`[data-gap="${id}"]`).textContent = countGap(l);
+      toast('Counted.');
     } catch (err) { toast(err.message, true); }
   };
 }
