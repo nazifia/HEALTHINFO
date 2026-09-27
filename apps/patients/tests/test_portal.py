@@ -5,9 +5,9 @@ import pytest
 from rest_framework.test import APIClient
 
 from apps.accounts.models import Role, User
-from apps.analytics.models import Prescription
+from apps.analytics.models import CaseReport, Prescription
 from apps.branches.models import Branch
-from apps.catalog.models import Medication
+from apps.catalog.models import Disease, Medication
 from apps.patients.models import Patient, PatientAccessLog
 from apps.patients.portal import haversine_km
 from apps.tenants.current import clear_current_tenant
@@ -57,7 +57,7 @@ def test_account_with_no_patient_record_is_refused(db_clean):
     stranger = User.objects.create_user("08039999999", "pw", tenant=tenant,
                                         role=Role.PUBLIC)
 
-    for path in ("me", "medications", "pending"):
+    for path in ("me", "medications"):
         assert _portal(stranger).get(f"/api/portal/{path}/").status_code == 403
 
 
@@ -108,34 +108,49 @@ def test_a_pending_script_cannot_be_asked_for(linked):
     assert r.data == []
 
 
-def test_pending_lists_what_the_counter_still_owes(linked):
-    """Written and not filled, plus the rest of a partly filled one."""
-    tenant, user, patient = linked
-    waiting = Medication.objects.create(tenant=tenant, generic_name="Ibuprofen")
-    part = Medication.objects.create(tenant=tenant, generic_name="Metformin")
-    done = Medication.objects.create(tenant=tenant, generic_name="Amoxicillin")
-    other = Patient.objects.create(tenant=tenant, first_name="Bola",
-                                   last_name="Eze")
-    for med, st in ((waiting, Prescription.Status.PRESCRIBED),
-                    (part, Prescription.Status.PARTIAL),
-                    (done, Prescription.Status.DISPENSED),
-                    (waiting, Prescription.Status.CANCELLED)):
-        Prescription.objects.create(tenant=tenant, patient=patient,
-                                    medication=med, status=st)
-    Prescription.objects.create(tenant=tenant, patient=other, medication=waiting,
-                                status=Prescription.Status.PRESCRIBED)
-
-    r = _portal(user).get("/api/portal/pending/")
-
-    assert r.status_code == 200
-    assert sorted(row["medication_name"] for row in r.data) == [
-        "Ibuprofen", "Metformin",
-    ]
+def test_there_is_no_pending_list(linked):
+    """Undispensed orders are not served to the patient by any route."""
+    _, user, _ = linked
+    assert _portal(user).get("/api/portal/pending/").status_code == 404
 
 
 def test_the_clinical_timeline_is_not_served_to_patients(linked):
     _tenant, user, _patient = linked
     assert _portal(user).get("/api/portal/history/").status_code == 404
+
+
+def test_patient_can_edit_address_and_next_of_kin_only(linked):
+    _tenant, user, patient = linked
+    c = _portal(user)
+
+    r = c.patch("/api/portal/me/", {"address": "4 Marina Rd",
+                                    "next_of_kin_name": "Chidi Obi"},
+                format="json")
+    assert r.status_code == 200, r.data
+    patient.refresh_from_db()
+    assert patient.address == "4 Marina Rd"
+    assert patient.next_of_kin_name == "Chidi Obi"
+
+    r = c.patch("/api/portal/me/", {"first_name": "Eve"}, format="json")
+    assert r.status_code == 400
+    patient.refresh_from_db()
+    assert patient.first_name == "Ada"
+
+
+def test_diagnoses_list_only_this_patients_cases(linked):
+    tenant, user, patient = linked
+    other = Patient.objects.create(tenant=tenant, first_name="Bola", last_name="Eze")
+    malaria = Disease.objects.create(tenant=tenant, name="Malaria")
+    CaseReport.objects.create(tenant=tenant, patient=patient, disease=malaria,
+                              notes="clinician only")
+    CaseReport.objects.create(tenant=tenant, patient=other, disease=malaria)
+
+    r = _portal(user).get("/api/portal/diagnoses/")
+
+    assert r.status_code == 200
+    assert [d["disease_name"] for d in r.data] == ["Malaria"]
+    assert r.data[0]["facility"] == "Clinic"
+    assert "notes" not in r.data[0]
 
 
 def test_pharmacies_are_ordered_by_distance(linked):

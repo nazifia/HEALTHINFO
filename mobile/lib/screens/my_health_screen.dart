@@ -107,7 +107,6 @@ class _MyHealthScreenState extends State<MyHealthScreen>
   Future<List<dynamic>> _load() => Future.wait([
         api.portalMe(),
         api.portalMedications(),
-        api.portalPending(),
         api.portalEnrollments().catchError((_) => <dynamic>[]),
         api.portalDependents().catchError((_) => <dynamic>[]),
       ]);
@@ -172,22 +171,13 @@ class _MyHealthScreenState extends State<MyHealthScreen>
             }
             final me = (snap.data![0] as Map).cast<String, dynamic>();
             final meds = (snap.data![1] as List).cast<Map<String, dynamic>>();
-            final pending = (snap.data![2] as List).cast<Map<String, dynamic>>();
-            final cards = (snap.data![3] as List).cast<Map<String, dynamic>>();
-            final deps = (snap.data![4] as List).cast<Map<String, dynamic>>();
+            final cards = (snap.data![2] as List).cast<Map<String, dynamic>>();
+            final deps = (snap.data![3] as List).cast<Map<String, dynamic>>();
             return ListView(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
               children: [
-                _HeroCard(me: me, meds: meds, pending: pending,
+                _HeroCard(me: me, meds: meds, cards: cards,
                     onOpenProfile: widget.onOpenProfile),
-                const SizedBox(height: 12),
-                _MedicationsCard(
-                  title: 'Waiting to be collected',
-                  empty: 'Nothing is waiting for you at the pharmacy.',
-                  icon: Icons.hourglass_top_outlined,
-                  meds: pending,
-                  onFind: (medication) => _findPharmacies(medication: medication),
-                ),
                 const SizedBox(height: 12),
                 _MedicationsCard(
                   meds: meds,
@@ -215,12 +205,12 @@ class _MyHealthScreenState extends State<MyHealthScreen>
 class _HeroCard extends StatelessWidget {
   final Map<String, dynamic> me;
   final List<Map<String, dynamic>> meds;
-  final List<Map<String, dynamic>> pending;
+  final List<Map<String, dynamic>> cards;
   final VoidCallback? onOpenProfile;
   const _HeroCard(
       {required this.me,
       required this.meds,
-      required this.pending,
+      required this.cards,
       this.onOpenProfile});
 
   @override
@@ -245,12 +235,11 @@ class _HeroCard extends StatelessWidget {
         MapEntry('Genotype', me['genotype']),
         MapEntry('Scheme', me['patient_type_display']),
         MapEntry('NHIS number', me['nhis_number']),
+        // Beside the NHIS number: the scheme(s) that number is billed through.
+        MapEntry('HMO', cards.map((c) => c['hmo_name']).join(', ')),
         MapEntry('Medications collected', meds.length),
-        MapEntry('Awaiting collection', pending.length),
         MapEntry('Allergies', me['allergies']),
       ],
-      // Flashes red while something waits, so the patient sees it at once.
-      alerts: {if (pending.isNotEmpty) 'Awaiting collection'},
       action: onOpenProfile == null
           ? null
           : OutlinedButton.icon(
@@ -309,19 +298,12 @@ class PatientDetailsCard extends StatelessWidget {
   }
 }
 
-/// One card for both lists: what the pharmacy has handed over and what it
-/// still owes. The API sorts a row into one or the other, so [empty] says
-/// what an empty card means here — nothing collected, or nothing waiting.
+/// What the pharmacy has handed over. The API serves dispensed drugs only,
+/// so an empty card means nothing collected yet.
 class _MedicationsCard extends StatelessWidget {
-  final String title;
-  final String empty;
-  final IconData icon;
   final List<Map<String, dynamic>> meds;
   final ValueChanged<Object?> onFind;
   const _MedicationsCard({
-    this.title = 'My medications',
-    this.empty = 'You have not collected any medication yet.',
-    this.icon = Icons.medication_outlined,
     required this.meds,
     required this.onFind,
   });
@@ -333,15 +315,16 @@ class _MedicationsCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: Theme.of(context).textTheme.titleMedium),
+          Text('My medications', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 4),
           if (meds.isEmpty)
-            Text(empty, style: const TextStyle(color: Colors.grey))
+            const Text('You have not collected any medication yet.',
+                style: TextStyle(color: Colors.grey))
           else
             for (final m in meds)
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: Icon(icon, color: EnhancedTheme.primaryTeal),
+                leading: const Icon(Icons.medication_outlined, color: EnhancedTheme.primaryTeal),
                 title: Text(_text(m['medication_name'])),
                 subtitle: Text([
                   _text(m['dose']),

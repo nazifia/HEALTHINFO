@@ -3,12 +3,13 @@
 Every staff endpoint answers "which of my patients"; this one answers "my
 record". The difference is where the patient id comes from: here it is never
 sent by the caller, only read off the signed-in account (``Patient.user``), so
-a portal account can only ever reach the one record it is linked to. Nothing
-here writes, and it is deliberately narrow: a patient reads their own details,
-the drugs the pharmacy actually handed over, the ones still waiting to be
-collected, and where to go and get more.
+a portal account can only ever reach the one record it is linked to. It is
+deliberately narrow: a patient reads their own details, the diagnoses made for
+them, the drugs the pharmacy actually handed over, and where to go and get
+more. The only personal fields they can change are how to reach them — address
+and next of kin.
 
-The clinical timeline — diagnoses, labs, claims, consultation notes — is the
+The rest of the clinical timeline — labs, claims, consultation notes — is the
 facility's working record and is not served here. A patient asks the facility
 that wrote it for it.
 
@@ -123,12 +124,48 @@ class PatientPortalViewSet(viewsets.ViewSet):
         )
 
     # --- personal reads ----------------------------------------------------
-    @action(detail=False, methods=["get"])
+    # What a patient may correct about themselves: where they live and who to
+    # call. Name, sex, date of birth and the clinical fields are the facility's
+    # to change, against the evidence in front of it.
+    SELF_EDITABLE = ("address", "next_of_kin_name", "next_of_kin_phone",
+                     "next_of_kin_relationship")
+
+    @action(detail=False, methods=["get", "patch"])
     def me(self, request):
-        """The patient's own details."""
+        """The patient's own details; PATCH changes the SELF_EDITABLE ones."""
         patient = self._record()
+        if request.method == "PATCH":
+            refused = set(request.data) - set(self.SELF_EDITABLE)
+            if refused:
+                raise ValidationError({f: "Ask the facility to change this."
+                                       for f in sorted(refused)})
+            ser = PatientSerializer(patient, data=request.data, partial=True)
+            ser.is_valid(raise_exception=True)
+            ser.save()
+            return Response(ser.data)
         self._log(patient, PatientAccessLog.Action.RETRIEVE, 1)
         return Response(PatientSerializer(patient).data)
+
+    @action(detail=False, methods=["get"])
+    def diagnoses(self, request):
+        """What this patient was diagnosed with, where and when, newest first.
+
+        The diagnosis only — disease, severity, outcome, facility — not the
+        case's notes, which are the clinician's working record.
+        """
+        from apps.analytics.models import CaseReport
+
+        patient = self._record()
+        rows = CaseReport.all_objects.filter(
+            patient=patient, disease__isnull=False
+        ).select_related("disease", "tenant")
+        data = [{
+            "id": c.id, "date": c.created_at.date(),
+            "disease_name": c.disease.name, "severity": c.severity,
+            "outcome": c.outcome, "facility": c.tenant.name if c.tenant_id else "",
+        } for c in rows]
+        self._log(patient, PatientAccessLog.Action.HISTORY, len(data))
+        return Response(data)
 
     @action(detail=False, methods=["get"])
     def medications(self, request):
@@ -143,35 +180,17 @@ class PatientPortalViewSet(viewsets.ViewSet):
         One list whichever route the drug came down: an order a clinician wrote
         and a line off a counter script both land in ``analytics.Prescription``
         (see apps.analytics.capture), so reading that is reading both. The
-        caller chooses no status: what is still to be collected is ``pending``.
+        caller chooses no status, and nothing undispensed is served anywhere
+        on the portal: an unfilled order stays with the facility.
         """
-        from apps.analytics.models import Prescription
-
-        return self._scripts(
-            (Prescription.Status.DISPENSED, Prescription.Status.PARTIAL))
-
-    @action(detail=False, methods=["get"])
-    def pending(self, request):
-        """The drugs written for this patient that the pharmacy still owes.
-
-        An order not yet filled, and the rest of a partly filled one: what the
-        patient can take to a counter and collect. A cancelled order is not
-        owed, and a fully dispensed one is under ``medications``. The order can
-        still change at the counter, so the row is a reminder, not a fact
-        about the patient's treatment.
-        """
-        from apps.analytics.models import Prescription
-
-        return self._scripts(
-            (Prescription.Status.PRESCRIBED, Prescription.Status.PARTIAL))
-
-    def _scripts(self, statuses):
         from apps.analytics.models import Prescription
         from apps.analytics.serializers import PrescriptionSerializer
 
         patient = self._record()
         rows = Prescription.all_objects.filter(
-            patient=patient, status__in=statuses
+            patient=patient,
+            status__in=(Prescription.Status.DISPENSED,
+                        Prescription.Status.PARTIAL),
         ).select_related("medication")
         data = PrescriptionSerializer(rows, many=True).data
         self._log(patient, PatientAccessLog.Action.HISTORY, len(data))

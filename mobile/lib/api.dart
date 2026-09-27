@@ -505,22 +505,27 @@ class Api {
   // A patient reading their own record: their details, the drugs they have
   // collected, and where to get more. No patient id is ever sent — the API
   // reads it off the signed-in account (apps.patients.portal) — so these
-  // calls cannot reach anybody else's record. The clinical timeline is not
-  // served to patients at all, so there is no call for it here.
+  // calls cannot reach anybody else's record. Of the clinical timeline only
+  // the diagnoses are served; the rest has no call here.
 
   /// GET /api/portal/me/ — the signed-in patient's details.
   Future<Map<String, dynamic>> portalMe() async =>
       (await get('/api/portal/me/') as Map).cast<String, dynamic>();
+
+  /// PATCH /api/portal/me/ — the patient correcting how to reach them. Only
+  /// address and the next_of_kin_* fields are accepted; anything else is 400.
+  Future<Map<String, dynamic>> portalUpdateMe(Map<String, dynamic> body) async =>
+      (await patch('/api/portal/me/', body) as Map).cast<String, dynamic>();
+
+  /// GET /api/portal/diagnoses/ — disease, severity, outcome, facility and
+  /// date of each diagnosis, newest first. No clinician notes.
+  Future<List<dynamic>> portalDiagnoses() => getList('/api/portal/diagnoses/');
 
   /// GET /api/portal/medications/ — the drugs the pharmacy has actually
   /// handed over, newest first. Orders not yet dispensed are not served: the
   /// API decides that, so there is no status to pass.
   Future<List<dynamic>> portalMedications() =>
       getList('/api/portal/medications/');
-
-  /// GET /api/portal/pending/ — the drugs written for the patient that the
-  /// pharmacy still owes: not yet filled, or the rest of a partly filled one.
-  Future<List<dynamic>> portalPending() => getList('/api/portal/pending/');
 
   /// GET /api/portal/pharmacies/ — where a script can be filled, nearest
   /// first when the device shares a position. [medication] is a catalog

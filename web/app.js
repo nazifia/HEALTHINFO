@@ -1819,12 +1819,22 @@ async function viewProfile() {
     // A patient's profile is their own record first; the account row below
     // it is the login they got it through.
     const patient = me.role === 'public' ? await Api.get('/api/portal/me/').catch(() => null) : null;
+    const dx = patient ? await Api.get('/api/portal/diagnoses/').catch(() => []) : [];
     // The tenant's admin sets the idle timeout for everyone in it; a
     // super-admin sets it for whichever organization they have open.
     const canSetIdle = ['tenant_admin', 'super_admin'].includes(me.role) && Api.tenant;
     const org = canSetIdle ? await Api.get('/api/tenants/settings/').catch(() => ({})) : {};
     render(`<h2>Profile</h2>
-      ${patient ? `<div class="card"><h3>My details</h3>${dlHtml(portalDetails(patient))}</div>` : ''}
+      ${patient ? `<div class="card"><h3>My details</h3>${dlHtml(portalDetails(patient))}</div>
+      <div class="card"><h3>Contact and next of kin</h3>
+        <form id="kin-form">${PORTAL_EDITABLE.map((k) => `<label>${esc(colLabel([], k))}
+          ${k === 'address' ? `<textarea name="${k}" rows="2">${esc(patient[k] || '')}</textarea>`
+            : `<input name="${k}" ${k.endsWith('phone') ? 'type="tel"' : ''} value="${esc(patient[k] || '')}">`}</label>`).join('')}
+          <button type="submit">Save</button>
+        </form></div>
+      <div class="card"><h3>Diagnosis history</h3>${dx.length
+        ? tableHtml(dx.map(({ id, ...r }) => r))
+        : '<p class="muted">No diagnosis on record.</p>'}</div>` : ''}
       <div class="card">${patient ? '<h3>Account</h3>' : ''}${dlHtml(me)}</div>
       ${canSetIdle ? `<div class="card"><h3>Auto sign-out</h3>
         <form id="idle-form">
@@ -1837,6 +1847,14 @@ async function viewProfile() {
       <div class="actions">
         <button id="logout" class="danger">Sign out</button>
       </div>`);
+    if (patient) $('#kin-form').onsubmit = async (e) => {
+      e.preventDefault();
+      try {
+        await Api.patch('/api/portal/me/', Object.fromEntries(new FormData(e.target)));
+        toast('Details saved.');
+        viewProfile();
+      } catch (err) { toast(err.message, true); }
+    };
     if (canSetIdle) {
       wireLogoCard('/api/tenants/settings/');
     }
@@ -4642,9 +4660,9 @@ async function wireStockCount(check) {
    has actually handed over, the ones still waiting at the counter, and where
    to go and get more.
 
-   Deliberately narrow. The clinical timeline — visits, findings, test results
-   — is the facility's working record and the portal API does not serve it, so
-   there is nothing here to render it with.
+   Deliberately narrow. Diagnoses are shown (on Profile); the rest of the
+   clinical timeline — visits, findings, test results — is the facility's
+   working record and the portal API does not serve it.
 
    No patient id is ever sent — the API reads it off the signed-in account
    (apps.patients.portal) — so this client cannot ask for anyone else's
@@ -4726,6 +4744,10 @@ async function loadPharmacies(medication) {
   }
 }
 
+// What a patient may change about themselves (see portal.SELF_EDITABLE).
+const PORTAL_EDITABLE = ['address', 'next_of_kin_name', 'next_of_kin_phone',
+  'next_of_kin_relationship'];
+
 // The patient's details as a card, in the order they read them. Shown on
 // the Profile page; the welcome page shows a summary.
 const portalDetails = (me) => Object.fromEntries(
@@ -4757,7 +4779,7 @@ function heroHtml(name, sub, stats, link) {
 
 // The patient's banner: the handful of facts a nurse asks for first. The
 // full record lives under Profile.
-function portalHeroHtml(me, meds, pending) {
+function portalHeroHtml(me, meds, cards) {
   const name = me.full_name || ME.username || 'there';
   const who = [me.sex === 'M' ? 'Male' : me.sex === 'F' ? 'Female' : me.sex,
     me.age != null ? `${me.age} yrs` : '',
@@ -4767,9 +4789,9 @@ function portalHeroHtml(me, meds, pending) {
     ['Genotype', me.genotype],
     ['Scheme', me.patient_type_display],
     ['NHIS number', me.nhis_number],
+    // Beside the NHIS number: the scheme(s) that number is billed through.
+    ['HMO', cards.map((c) => c.hmo_name).join(', ')],
     ['Medications collected', meds.length],
-    // Red and blinking while something waits, so the patient sees it at once.
-    ['Awaiting collection', pending.length, pending.length ? 'alert' : ''],
     ['Allergies', me.allergies],
   ], '<a href="#/profile" class="btn hero-link">View full profile</a>');
 }
@@ -4813,20 +4835,17 @@ function dependentsHtml(cards, rows) {
 async function viewPortal() {
   if (!await ensureChrome()) return;
   spinner();
-  let me, meds, pending, cards, deps;
+  let me, meds, cards, deps;
   try {
-    [me, meds, pending, cards, deps] = await Promise.all([
+    [me, meds, cards, deps] = await Promise.all([
       Api.get('/api/portal/me/'),
       Api.get('/api/portal/medications/'),
-      Api.get('/api/portal/pending/'),
       Api.get('/api/portal/enrollments/').catch(() => []),
       Api.get('/api/portal/dependents/').catch(() => []),
     ]);
   } catch (e) { return errorBox(e); }
 
-  render(`${portalHeroHtml(me, meds, pending)}
-    <div class="card"><h3>Waiting to be collected</h3>
-      ${portalMedsHtml(pending, 'Nothing is waiting for you at the pharmacy.')}</div>
+  render(`${portalHeroHtml(me, meds, cards)}
     <div class="card"><h3>My medications</h3>${portalMedsHtml(meds)}</div>
     <div class="card"><h3>My dependents</h3>${dependentsHtml(cards, deps)}</div>
     <div class="card"><h3>Where to get them</h3>

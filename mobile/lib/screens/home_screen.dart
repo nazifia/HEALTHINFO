@@ -245,6 +245,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   // the tenant they signed into.
   String? _role;
 
+  // False until the first /me answers. The stack builds every page it holds,
+  // so showing the default staff menu before the role is known fires each
+  // staff screen's first read — a patient seat got a burst of 403s from it.
+  bool _roleKnown = false;
+
   // True when the seat signed in holds a licence and staffs no facility. Their
   // app-bar chip is the way to write under a different one.
   bool _independent = false;
@@ -493,6 +498,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (!mounted) return;
     setState(() {
       _role = role;
+      _roleKnown = true;
       _independent = Api.isIndependent(me);
     });
     final leftTenant = _menuSlug.isNotEmpty && tenantSlug.isEmpty;
@@ -856,6 +862,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   // ── kept below build() to stay near the appBar that uses it ──
   // Width-capped page area so lists/forms don't stretch across a wide monitor.
   Widget _content() {
+    if (!_roleKnown) return const Center(child: CircularProgressIndicator());
     final body = IndexedStack(
       // Every page in the stack holds rows read in one scope. Leaving an
       // organization for the platform view (or opening another one) must throw

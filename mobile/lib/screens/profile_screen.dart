@@ -52,6 +52,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final u = (r as Map).cast<String, dynamic>();
     if (u['role'] == 'public') {
       u['_patient'] = await api.portalMe().catchError((_) => <String, dynamic>{});
+      if ((u['_patient'] as Map).isNotEmpty) {
+        u['_diagnoses'] = await api.portalDiagnoses().catchError((_) => <dynamic>[]);
+      }
     }
     return u;
   }
@@ -104,6 +107,63 @@ class _ProfileScreenState extends State<ProfileScreen> {
       });
       if (!mounted) return;
       showSuccess(context, 'Profile updated');
+      setState(() { _future = _load(); });
+    } on ApiException catch (e) {
+      if (mounted) showError(context, e.friendly);
+    }
+  }
+
+  /// The patient's own address and next of kin — the only record fields the
+  /// portal lets them change (see apps.patients.portal.SELF_EDITABLE).
+  Future<void> _editContact(Map<String, dynamic> p) async {
+    const fields = {
+      'address': 'Address',
+      'next_of_kin_name': 'Next of kin',
+      'next_of_kin_phone': 'Next of kin phone',
+      'next_of_kin_relationship': 'Relationship',
+    };
+    final ctl = {
+      for (final k in fields.keys)
+        k: TextEditingController(text: p[k]?.toString() ?? ''),
+    };
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Contact and next of kin'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final e in fields.entries) ...[
+                TextField(
+                  controller: ctl[e.key],
+                  maxLines: e.key == 'address' ? 2 : 1,
+                  keyboardType: e.key.endsWith('phone')
+                      ? TextInputType.phone
+                      : TextInputType.text,
+                  decoration: InputDecoration(labelText: e.value),
+                ),
+                const SizedBox(height: 12),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Save')),
+        ],
+      ),
+    );
+    if (saved != true || !mounted) return;
+    try {
+      await api.portalUpdateMe(
+          {for (final k in fields.keys) k: ctl[k]!.text.trim()});
+      if (!mounted) return;
+      showSuccess(context, 'Details saved');
       setState(() { _future = _load(); });
     } on ApiException catch (e) {
       if (mounted) showError(context, e.friendly);
@@ -297,6 +357,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 20),
             if (u['_patient'] is Map && (u['_patient'] as Map).isNotEmpty) ...[
               PatientDetailsCard(me: (u['_patient'] as Map).cast<String, dynamic>()),
+              const SizedBox(height: 8),
+              GlassCard(
+                padding: const EdgeInsets.all(8),
+                child: ListTile(
+                  leading: const Icon(Icons.contact_phone_outlined,
+                      color: EnhancedTheme.primaryTeal),
+                  title: const Text('Edit address and next of kin'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _editContact(
+                      (u['_patient'] as Map).cast<String, dynamic>()),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text('Diagnosis history',
+                  style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              DiagnosisHistoryCard(rows: (u['_diagnoses'] as List?) ?? const []),
               const SizedBox(height: 16),
               Text('Account',
                   style: Theme.of(context).textTheme.titleMedium),
@@ -381,6 +458,37 @@ class _Row extends StatelessWidget {
               color: context.labelColor,
               fontSize: 15,
               fontWeight: FontWeight.w600)),
+    );
+  }
+}
+
+/// The patient's diagnoses, newest first: one line per case, with where and
+/// when it was made and how it ended.
+class DiagnosisHistoryCard extends StatelessWidget {
+  const DiagnosisHistoryCard({super.key, required this.rows});
+
+  final List<dynamic> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassCard(
+      padding: const EdgeInsets.all(8),
+      child: rows.isEmpty
+          ? const ListTile(title: Text('No diagnosis on record.'))
+          : Column(children: [
+              for (final r in rows.cast<Map>())
+                ListTile(
+                  leading: const Icon(Icons.medical_information_outlined,
+                      color: EnhancedTheme.primaryTeal),
+                  title: Text(_str(r['disease_name']) ?? '—'),
+                  subtitle: Text([
+                    _str(r['date']),
+                    _str(r['facility']),
+                    _str(r['severity']),
+                    _str(r['outcome']),
+                  ].whereType<String>().join(' · ')),
+                ),
+            ]),
     );
   }
 }
