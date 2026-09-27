@@ -84,3 +84,86 @@ def test_independent_pharmacist_picks_a_facility_and_prescribes(lagos):
                format="json")
     assert r.status_code == 201, r.content
     assert c.get("/api/patients/").status_code == 200
+
+
+# ----- staff asking to join an existing organization --------------------------
+
+@pytest.fixture
+def clinic(db):
+    from apps.tenants.models import Tenant
+    yield Tenant.objects.create(name="Clinic", slug="clinic")
+    clear_current_tenant()
+
+
+def _join(tenant, **extra):
+    body = {"phone": "08030000019", "password": "s3curepass99",
+            "join_as_staff": True, **extra}
+    c = APIClient()
+    c.credentials(HTTP_X_TENANT_ID=tenant.slug)
+    return c.post("/api/auth/register/", body, format="json")
+
+
+def test_staff_joins_organization_inactive(clinic):
+    r = _join(clinic, role="nurse", license_number="N-55", accept_terms=True)
+    assert r.status_code == 201, r.content
+    user = User.objects.get(phone="08030000019")
+    assert (user.role, user.tenant_id, user.is_active) == ("nurse", clinic.id, False)
+    assert user.terms_accepted_at is not None
+    # No patient record for a staff seat.
+    from apps.patients.models import Patient
+    assert not Patient.all_objects.filter(user=user).exists()
+    # Cannot sign in until the admin approves.
+    login = APIClient()
+    login.credentials(HTTP_X_TENANT_ID=clinic.slug)
+    assert login.post("/api/auth/token/", {"license_number": "N-55",
+                      "password": "s3curepass99"}, format="json").status_code == 401
+
+
+def test_licensed_staff_need_licence_and_terms(clinic):
+    r = _join(clinic, role="chew")
+    assert r.status_code == 400
+    assert {"license_number", "accept_terms"} <= set(r.json()["errors"])
+
+
+def test_receptionist_joins_without_licence(clinic):
+    assert _join(clinic, role="receptionist").status_code == 201
+
+
+def test_staff_cannot_self_assign_admin(clinic):
+    r = _join(clinic, role="tenant_admin")
+    assert r.status_code == 400 and "role" in r.json()["errors"]
+    assert not User.objects.filter(role=Role.TENANT_ADMIN).exists()
+
+
+def test_staff_needs_an_organization(db):
+    r = _signup(role="doctor", join_as_staff=True, license_number="D1",
+                accept_terms=True)
+    assert r.status_code == 400 and "tenant" in r.json()["errors"]
+
+
+def test_admin_is_mailed_and_sees_request_then_staff_signs_in(clinic, mailoutbox, django_capture_on_commit_callbacks):
+    admin = User.objects.create_user(phone="08030000020", password="x", tenant=clinic,
+                                     role=Role.TENANT_ADMIN, email="boss@clinic.ng")
+    with django_capture_on_commit_callbacks(execute=True):
+        assert _join(clinic, role="receptionist", username="ada").status_code == 201
+    assert mailoutbox and mailoutbox[0].to == ["boss@clinic.ng"]
+    assert "ada" in mailoutbox[0].body
+
+    c = APIClient()
+    c.force_authenticate(user=admin)
+    c.credentials(HTTP_X_TENANT_ID=clinic.slug)
+    pending = {"is_active": "false", "last_login__isnull": "true"}
+    rows = c.get("/api/users/", pending).json()
+    rows = rows.get("results", rows) if isinstance(rows, dict) else rows
+    assert [u["phone"] for u in rows] == ["08030000019"]
+    assert c.patch(f"/api/users/{rows[0]['id']}/", {"is_active": True},
+                   format="json").status_code == 200
+
+    # Sign-in carries no organization; the token answer names it.
+    r = APIClient().post("/api/auth/token/", {"phone": "08030000019",
+                         "password": "s3curepass99"}, format="json")
+    assert r.status_code == 200, r.content
+    assert r.json()["tenant"] == "clinic"
+    rows = c.get("/api/users/", pending).json()
+    rows = rows.get("results", rows) if isinstance(rows, dict) else rows
+    assert rows == []

@@ -57,6 +57,10 @@ class RegisterViewSet(viewsets.ViewSet):
         s = RegisterSerializer(data=request.data, context={"request": request})
         s.is_valid(raise_exception=True)
         user = s.save()
+        if not user.is_active:
+            return success("Request sent. You can sign in once the "
+                           "organization's admin approves your account.",
+                           s.data, status=201)
         if user.license_number:
             return success("Account created. Sign in with your license "
                            "number.", s.data, status=201)
@@ -128,7 +132,11 @@ class UserViewSet(viewsets.ModelViewSet):
     # people — a facility, a scheme, a health authority's patch — for the admin
     # whose list is that wide. Each one only ever narrows what get_queryset
     # already allowed, so a scoped seat gains nothing by passing them.
-    filterset_fields = ("role", "is_active", "tenant", "hmo")
+    # last_login__isnull with is_active=false: staff who asked to join from
+    # the signup screen and are waiting on the admin, not seats closed later.
+    filterset_fields = {"role": ["exact"], "is_active": ["exact"],
+                        "tenant": ["exact"], "hmo": ["exact"],
+                        "last_login": ["isnull"]}
     # Paging an unordered list is what drops or repeats rows between pages,
     # so the newest seat first, with the id to break a tie on the same moment.
     ordering = ("-date_joined", "-id")

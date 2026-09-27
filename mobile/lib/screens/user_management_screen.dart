@@ -71,10 +71,55 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     });
   }
 
-  Future<List<dynamic>> _fetch() => api.getList('/api/users/',
-      widget.role == null ? null : {'role': widget.role!});
+  // Staff who asked to join from the signup screen: inactive and never signed
+  // in, so a seat an admin closed later is not counted. Approving one is
+  // ticking it active on the form.
+  static const _pendingQuery = {'is_active': 'false', 'last_login__isnull': 'true'};
+  bool _pendingOnly = false;
+  int _waiting = 0;
+
+  Future<List<dynamic>> _fetch() {
+    if (widget.role == null) {
+      api.getList('/api/users/', _pendingQuery).then((rows) {
+        if (mounted) setState(() => _waiting = rows.length);
+      }, onError: (_) {});
+    }
+    return api.getList('/api/users/', {
+      if (widget.role != null) 'role': widget.role!,
+      if (_pendingOnly) ..._pendingQuery,
+    });
+  }
 
   void _reload() => setState(() { _future = _fetch(); });
+
+  Widget _requestsBanner() => GlassCard(
+        margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: [
+            const Icon(Icons.how_to_reg_outlined,
+                color: EnhancedTheme.accentPurple),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                _pendingOnly
+                    ? 'Staff requests: tap one, tick Active to approve'
+                    : '$_waiting staff request${_waiting == 1 ? '' : 's'} '
+                        'waiting for approval',
+                style: TextStyle(
+                    color: context.labelColor, fontWeight: FontWeight.w600),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                _pendingOnly = !_pendingOnly;
+                _reload();
+              },
+              child: Text(_pendingOnly ? 'Show all' : 'Review'),
+            ),
+          ],
+        ),
+      );
 
   /// Only the platform admin picks the organization. Every other admin
   /// writes into their own module, which the API pins from them
@@ -113,7 +158,12 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
         icon: const Icon(Icons.person_add_alt),
         label: const Text('New user'),
       ),
-      body: _list(),
+      body: Column(
+        children: [
+          if (_waiting > 0 || _pendingOnly) _requestsBanner(),
+          Expanded(child: _list()),
+        ],
+      ),
     );
   }
 

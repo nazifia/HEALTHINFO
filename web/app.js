@@ -378,6 +378,10 @@ const RESOURCES = {
                                       choose: 'severity:mild,moderate,severe,critical', when: ['open'] }] },
   'users':             { title: 'Users',              group: 'Admin', adminOnly: true, search: true,
                           filters: ORG_FILTERS },
+  // Staff who asked to join from the signup screen: inactive and never signed
+  // in. Open one and tick it active to let them in.
+  'staff-requests':    { title: 'Staff Requests',     group: 'Admin', path: 'users', adminOnly: true,
+                          editOnly: true, query: { is_active: false, last_login__isnull: true } },
   // The same list, narrowed to one kind of seat and sitting in that kind's own
   // section: an insurer's people with the insurance screens, a health
   // authority's with the rollups they read. ``query`` is what narrows it, and
@@ -1563,10 +1567,15 @@ function viewLogin() {
   };
 }
 
-/* Self-signup answers two kinds of people. A patient joins one organization.
+/* Self-signup answers three kinds of people. A patient joins one organization.
    A doctor, nurse, midwife or pharmacist in private practice joins no
-   organization: their seat carries the state on their licence. */
+   organization: their seat carries the state on their licence. Staff ask to
+   join an existing organization; their seat waits for its admin to approve. */
 const SELF_REGISTER_PRESCRIBERS = { doctor: 'Doctor', nurse: 'Nurse', midwife: 'Midwife', pharmacist: 'Pharmacist' };
+const SELF_REGISTER_STAFF = { doctor: 'Doctor', nurse: 'Nurse', midwife: 'Midwife', chew: 'CHEW',
+  pharmacist: 'Pharmacist', receptionist: 'Receptionist / Records Officer' };
+// Staff who sign in with a licence, so the form asks for it and the terms.
+const LICENSED_STAFF = ['doctor', 'nurse', 'midwife', 'chew'];
 
 async function viewRegister() {
   authChrome();
@@ -1582,20 +1591,31 @@ async function viewRegister() {
     ? `<label>Organization<select name="tenant" required>${orgs.map((o) =>
         `<option value="${esc(o.slug)}"${o.slug === Api.tenant ? ' selected' : ''}>${esc(o.name)} (${esc(o.kind)})</option>`).join('')}</select></label>`
     : `<label>Organization (tenant slug)<input name="tenant" value="${esc(Api.tenant)}" required></label>`;
-  render(authShell('Create account', 'Join as a patient or as an independent prescriber', `
+  // Role values: "public", "<role>" for independent, "staff:<role>" for staff.
+  render(authShell('Create account', 'Join as a patient, an independent prescriber, or staff of an organization', `
     <form id="f">
       <label>I am registering as<select name="role">
         <option value="public">Patient</option>
+        <optgroup label="Independent prescriber">
         ${Object.entries(SELF_REGISTER_PRESCRIBERS).map(([v, l]) =>
           `<option value="${v}">${l} (independent prescriber)</option>`).join('')}
+        </optgroup>
+        <optgroup label="Staff of an existing organization">
+        ${Object.entries(SELF_REGISTER_STAFF).map(([v, l]) =>
+          `<option value="staff:${v}">${esc(l)} (organization staff)</option>`).join('')}
+        </optgroup>
       </select></label>
-      <fieldset data-for="patient" class="bare">${orgField}</fieldset>
-      <fieldset data-for="prescriber" class="bare" hidden disabled>
+      <fieldset data-for="org" class="bare">${orgField}</fieldset>
+      <fieldset data-for="licence" class="bare" hidden disabled>
         <label>License number<input name="license_number" required></label>
+      </fieldset>
+      <fieldset data-for="state" class="bare" hidden disabled>
         <label>State of licensure<select name="jurisdiction" required>
           <option value=""></option>
           ${states.map((j) => `<option value="${j.id}">${esc(j.name)}</option>`).join('')}
         </select></label>
+      </fieldset>
+      <fieldset data-for="licence" class="bare" hidden disabled>
         ${terms ? `<details class="card">
           <summary><strong>${esc(terms.title)}</strong> <span class="muted">(v${esc(terms.version)})</span></summary>
           <ol>${terms.clauses.map((c) => `<li>${esc(c)}</li>`).join('')}</ol>
@@ -1603,6 +1623,7 @@ async function viewRegister() {
         <label><input type="checkbox" name="accept_terms" required> I have read and agree to the Healthcare Terms and Conditions</label>
         <small class="muted">You sign in with your license number.</small>
       </fieldset>
+      <p data-for="staff" class="muted" hidden>Your organization's admin approves the account before you can sign in.</p>
       <label>Display name (optional)<input name="username"></label>
       <label>Phone<input name="phone" placeholder="08031234567" required></label>
       <label>Email<input name="email" type="email" required></label>
@@ -1614,11 +1635,18 @@ async function viewRegister() {
   // A disabled fieldset drops its inputs from both validation and FormData,
   // so only the half that applies is checked and sent.
   f.elements.role.onchange = () => {
-    const prescriber = f.elements.role.value in SELF_REGISTER_PRESCRIBERS;
-    for (const fs of f.querySelectorAll('fieldset[data-for]')) {
-      const on = (fs.dataset.for === 'prescriber') === prescriber;
-      fs.hidden = !on;
-      fs.disabled = !on;
+    const v = f.elements.role.value;
+    const staff = v.startsWith('staff:');
+    const independent = v in SELF_REGISTER_PRESCRIBERS;
+    const on = {
+      org: !independent,
+      licence: independent || (staff && LICENSED_STAFF.includes(v.slice(6))),
+      state: independent,
+      staff,
+    };
+    for (const el of f.querySelectorAll('[data-for]')) {
+      el.hidden = !on[el.dataset.for];
+      el.disabled = !on[el.dataset.for];
     }
   };
   f.onsubmit = async (e) => {
@@ -1628,7 +1656,17 @@ async function viewRegister() {
     if (fd.get('username')) body.username = fd.get('username');
     try {
       let r;
-      if (fd.get('role') in SELF_REGISTER_PRESCRIBERS) {
+      const role = fd.get('role');
+      if (role.startsWith('staff:')) {
+        // Staff: the organization picked, sent inactive for its admin.
+        Object.assign(body, { role: role.slice(6), join_as_staff: true });
+        if (fd.get('license_number')) {
+          Object.assign(body, { license_number: fd.get('license_number'), accept_terms: true });
+        }
+        Api.tenant = fd.get('tenant');
+        Api.tenantName = orgs.find((o) => o.slug === Api.tenant)?.name || '';
+        r = await Api.post('/api/auth/register/', body);
+      } else if (role in SELF_REGISTER_PRESCRIBERS) {
         // Independent: no organization, so no tenant header either.
         Object.assign(body, {
           role: fd.get('role'), license_number: fd.get('license_number'),
@@ -1987,7 +2025,13 @@ async function viewHome() {
       panel('Most Viewed Medications', dash.popular_medications);
     if (panels) dashHtml += `<div class="grid-2">${panels}</div>`;
   }
+  // Staff waiting on this admin to let them in (see viewRegister).
+  const waiting = ME.role === 'tenant_admin'
+    ? (await Api.list('/api/users/', { is_active: false, last_login__isnull: true, page_size: 1 })
+      .catch(() => null))?.count : 0;
   render(`<h2>Welcome${ME.username ? ', ' + esc(ME.username) : ''}</h2>
+    ${waiting ? `<p class="card"><strong>${waiting} staff request${waiting === 1 ? '' : 's'}</strong>
+      waiting for approval. <a href="#/r/staff-requests">Review</a></p>` : ''}
     ${dashHtml}
     <h3>Quick Actions</h3>
     <div class="tiles home-tiles">${tiles.map(([href, icon, t, d]) =>

@@ -281,25 +281,30 @@ class Api {
   ///
   /// With a [role] (doctor, nurse, midwife, pharmacist) it opens an
   /// independent prescriber's seat: no organization, so no tenant header.
+  /// With [joinAsStaff] the [role] instead asks to join the bound tenant's
+  /// staff; the seat opens inactive until that organization's admin approves.
   Future<String> register(String phone, String email, String password,
       {String username = '',
       String? role,
       String? licenseNumber,
-      int? jurisdiction}) async {
+      int? jurisdiction,
+      bool joinAsStaff = false}) async {
     final r = await http.post(
       _uri('/api/auth/register/'),
-      headers: _headers(auth: false, json: true, tenant: role == null),
+      headers: _headers(
+          auth: false, json: true, tenant: role == null || joinAsStaff),
       body: jsonEncode({
         if (username.isNotEmpty) 'username': username,
         'phone': phone,
         'email': email,
         'password': password,
-        if (role != null) ...{
-          'role': role,
+        'role': ?role,
+        if (joinAsStaff) 'join_as_staff': true,
+        if (licenseNumber != null && licenseNumber.isNotEmpty) ...{
           'license_number': licenseNumber,
-          'jurisdiction': jurisdiction,
           'accept_terms': true,
         },
+        'jurisdiction': ?jurisdiction,
       }),
     );
     if (r.statusCode != 201) {

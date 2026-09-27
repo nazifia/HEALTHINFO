@@ -43,7 +43,25 @@ class _LoginScreenState extends State<LoginScreen> {
     'midwife': 'Midwife',
     'pharmacist': 'Pharmacist',
   };
+  // Staff asking to join an existing organization: their seat opens inactive
+  // until its admin approves. Mirrors SELF_REGISTER_STAFF on the API; the
+  // dropdown value is 'staff:<role>' so it can't collide with the above.
+  static const _staffRoles = {
+    'doctor': 'Doctor',
+    'nurse': 'Nurse',
+    'midwife': 'Midwife',
+    'chew': 'CHEW',
+    'pharmacist': 'Pharmacist',
+    'receptionist': 'Receptionist / Records Officer',
+  };
+  // Staff who sign in with a licence, so the form asks for it and the terms.
+  static const _licensedStaff = {'doctor', 'nurse', 'midwife', 'chew'};
   String? _role;
+  bool get _isStaff => _role?.startsWith('staff:') ?? false;
+  String? get _staffRole => _isStaff ? _role!.substring(6) : null;
+  bool get _independent => _role != null && !_isStaff;
+  bool get _needsLicence =>
+      _independent || _licensedStaff.contains(_staffRole);
   final _license = TextEditingController();
   List<Map<String, dynamic>> _states = [];
   int? _stateId;
@@ -120,6 +138,34 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
     });
     try {
+      if (_registerMode && _isStaff) {
+        final missing = _orgSlug == null
+            ? 'Choose the organization you are joining.'
+            : _needsLicence && _license.text.trim().isEmpty
+                ? 'Enter your license number.'
+                : _needsLicence && !_agreed
+                    ? 'Agree to the Healthcare Terms and Conditions.'
+                    : null;
+        if (missing != null) {
+          setState(() => _error = missing);
+          showError(context, missing);
+          return;
+        }
+        await setTenant(_orgSlug!,
+            name: '${_orgs.firstWhere((o) => o['slug'] == _orgSlug,
+                orElse: () => const {})['name'] ?? ''}');
+        final msg = await api.register(
+            _phone.text.trim(), _email.text.trim(), _pass.text,
+            username: _username.text.trim(),
+            role: _staffRole,
+            licenseNumber: _needsLicence ? _license.text.trim() : null,
+            joinAsStaff: true);
+        // Inactive until the admin approves: nothing to sign in to yet.
+        if (!mounted) return;
+        showSuccess(context, msg);
+        setState(() => _registerMode = false);
+        return;
+      }
       if (_registerMode && _role != null) {
         final missing = _license.text.trim().isEmpty
             ? 'Enter your license number.'
@@ -303,16 +349,27 @@ class _LoginScreenState extends State<LoginScreen> {
                                             '${e.value} (independent prescriber)',
                                             overflow: TextOverflow.ellipsis),
                                       ),
+                                    for (final e in _staffRoles.entries)
+                                      DropdownMenuItem(
+                                        value: 'staff:${e.key}',
+                                        child: Text(
+                                            '${e.value} (organization staff)',
+                                            overflow: TextOverflow.ellipsis),
+                                      ),
                                   ],
                                   onChanged: _busy
                                       ? null
                                       : (v) {
                                           setState(() => _role = v);
                                           if (v != null) _loadPrescriberLists();
+                                          if (v == null ||
+                                              v.startsWith('staff:')) {
+                                            _loadOrgs();
+                                          }
                                         },
                                 ),
                               ],
-                              if (_registerMode && _role != null) ...[
+                              if (_registerMode && _needsLicence) ...[
                                 const SizedBox(height: 12),
                                 TextField(
                                   controller: _license,
@@ -322,6 +379,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                   autocorrect: false,
                                 ),
+                              ],
+                              if (_registerMode && _independent) ...[
                                 const SizedBox(height: 12),
                                 DropdownButtonFormField<int>(
                                   initialValue: _stateId,
@@ -341,6 +400,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                       ? null
                                       : (v) => setState(() => _stateId = v),
                                 ),
+                              ],
+                              if (_registerMode && _needsLicence) ...[
                                 CheckboxListTile(
                                   value: _agreed,
                                   contentPadding: EdgeInsets.zero,
@@ -370,7 +431,18 @@ class _LoginScreenState extends State<LoginScreen> {
                                       fontSize: 12),
                                 ),
                               ],
-                              if (_registerMode && _role == null) ...[
+                              if (_registerMode && _isStaff)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: Text(
+                                    "Your organization's admin approves the "
+                                    'account before you can sign in.',
+                                    style: TextStyle(
+                                        color: context.subLabelColor,
+                                        fontSize: 12),
+                                  ),
+                                ),
+                              if (_registerMode && !_independent) ...[
                                 const SizedBox(height: 12),
                                 DropdownButtonFormField<String>(
                                   initialValue: _orgSlug,

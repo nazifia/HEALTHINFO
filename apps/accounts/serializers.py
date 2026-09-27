@@ -467,9 +467,22 @@ class UserSerializer(serializers.ModelSerializer):
         return user
 
 
+# Who may ask to join an organization's staff from the public signup screen:
+# the facility seats a tenant admin mints, minus the admin itself and the
+# insurer, whose seat needs a scheme picked by someone inside.
+SELF_REGISTER_STAFF = frozenset({
+    Role.DOCTOR, Role.PHARMACIST, Role.NURSE, Role.MIDWIFE, Role.CHEW,
+    Role.RECEPTIONIST,
+})
+
+
 class RegisterSerializer(serializers.ModelSerializer):
-    """Self-serve signup: a patient into one organization, or an independent
-    prescriber (doctor, nurse, midwife, pharmacist) into their state.
+    """Self-serve signup: a patient into one organization, an independent
+    prescriber (doctor, nurse, midwife, pharmacist) into their state, or a
+    staff member asking to join an existing organization.
+
+    A staff seat opens inactive: anyone can post to this endpoint, so it signs
+    in only once the organization's admin ticks it active from Users.
 
     The prescriber seat opens active on the licence number as typed.
     ponytail: no licence verification; a platform admin deactivates a bad
@@ -495,22 +508,32 @@ class RegisterSerializer(serializers.ModelSerializer):
     accept_terms = serializers.BooleanField(
         write_only=True, required=False, default=False,
     )
+    # Joining an organization's staff rather than practising independently:
+    # the same doctor/nurse role is either, so the role alone can't say.
+    join_as_staff = serializers.BooleanField(
+        write_only=True, required=False, default=False,
+    )
 
     class Meta:
         model = User
         fields = ("id", "username", "first_name", "last_name", "phone",
                   "email", "password", "role", "license_number", "jurisdiction",
-                  "accept_terms", "is_active")
+                  "accept_terms", "join_as_staff", "is_active")
         read_only_fields = ("is_active",)
 
     def validate_username(self, value):
         return value.strip() or None
 
     def validate_role(self, value):
-        return value if value in SELF_REGISTER_PRESCRIBERS else Role.PUBLIC
+        return (value if value in SELF_REGISTER_PRESCRIBERS | SELF_REGISTER_STAFF
+                else Role.PUBLIC)
 
     def validate(self, attrs):
         attrs["role"] = attrs.get("role") or Role.PUBLIC
+        if attrs.pop("join_as_staff", False):
+            return self._validate_staff(attrs)
+        if attrs["role"] in SELF_REGISTER_STAFF - SELF_REGISTER_PRESCRIBERS:
+            attrs["role"] = Role.PUBLIC   # a CHEW or front desk is never independent
         if attrs["role"] in SELF_REGISTER_PRESCRIBERS:
             return self._validate_prescriber(attrs)
         # A patient carries none of a prescriber's fields.
@@ -523,6 +546,32 @@ class RegisterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"tenant": "Choose the organization you are joining."}
             )
+        return attrs
+
+    def _validate_staff(self, attrs):
+        tenant = getattr(self.context["request"], "tenant", None)
+        if tenant is None:
+            raise serializers.ValidationError(
+                {"tenant": "Choose the organization you are joining."})
+        if attrs["role"] not in SELF_REGISTER_STAFF:
+            raise serializers.ValidationError(
+                {"role": "Choose the post you hold at the organization."})
+        attrs.pop("jurisdiction", None)
+        # Held to the same rules as a seat the admin makes: a licence and the
+        # terms for the licensed cadres, a free sign-in code for pharmacy staff.
+        seat = {"role": attrs["role"], "tenant": tenant, "hmo": None,
+                "jurisdiction": None, "phone": attrs.get("phone"),
+                "license_number": attrs.get("license_number"),
+                "terms_accepted_at": None}
+        checker = UserSerializer()
+        errors = {}
+        for check in UserSerializer._ROLE_CHECKS.get(attrs["role"], ()):
+            errors.update(check(checker, seat, attrs))
+        if errors:
+            raise serializers.ValidationError(errors)
+        if attrs.pop("accept_terms", False):
+            attrs["terms_accepted_at"] = timezone.now()
+        attrs["is_active"] = False
         return attrs
 
     def _validate_prescriber(self, attrs):
@@ -547,6 +596,14 @@ class RegisterSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         from apps.patients.models import Patient  # patients imports accounts
 
+        tenant = getattr(self.context["request"], "tenant", None)
+        if validated_data.get("is_active") is False:
+            # Staff (see _validate_staff): bound to the request tenant,
+            # inactive until the organization's admin approves.
+            user = User.objects.create_user(tenant=tenant, **validated_data)
+            transaction.on_commit(lambda: send_staff_request_email(user))
+            return user
+
         if validated_data["role"] in SELF_REGISTER_PRESCRIBERS:
             # Independent: no tenant, whatever host they signed up on.
             return User.objects.create_user(
@@ -555,7 +612,6 @@ class RegisterSerializer(serializers.ModelSerializer):
             )
 
         # A patient is bound to the request tenant.
-        tenant = self.context["request"].tenant
         user = User.objects.create_user(tenant=tenant, **validated_data)
         # The account is its own patient record, active from the start and
         # self-registered (registered_by == user): PatientViewSet lets every
@@ -688,6 +744,26 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
         user.set_password(self.validated_data["password"])
         user.save(update_fields=["password"])
         return user
+
+
+def send_staff_request_email(user):
+    """Tell the organization's admins a staff seat is waiting on them.
+    Best-effort like the reset mail; the Staff Requests list is the record."""
+    to = list(User.objects.filter(
+        tenant_id=user.tenant_id, role=Role.TENANT_ADMIN, is_active=True,
+    ).exclude(email="").values_list("email", flat=True))
+    if not to:
+        return
+    who = user.username or user.phone
+    send_mail(
+        "New staff request",
+        f"{who} ({user.get_role_display()}, {user.phone}) asked to join "
+        f"{user.tenant.name}.\n\nApprove or ignore it from Staff Requests:\n"
+        f"{settings.FRONTEND_URL}/#/r/staff-requests",
+        None,  # DEFAULT_FROM_EMAIL
+        to,
+        fail_silently=True,
+    )
 
 
 def send_reset_email(user):
