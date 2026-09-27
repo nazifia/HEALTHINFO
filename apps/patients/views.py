@@ -1,4 +1,4 @@
-from django.db.models import Count, Q
+from django.db.models import Count, F, Q
 from django.utils import timezone
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -119,8 +119,14 @@ class PatientViewSet(viewsets.ModelViewSet):
         # a hospital is found at the pharmacy down the road by the same search.
         # An independent prescriber is a visitor, not staff: they stay inside
         # their own caseload whatever they type, and get no roster at all.
+        # A patient who signed themselves up (registered_by is their own
+        # account) belongs to no one facility: any prescriber anywhere finds
+        # them by search or id, but they sit on nobody's roster.
         if user.is_independent:
-            qs = Patient.objects.none() if roster else visible_patients(user)
+            self_registered = Patient.all_objects.filter(
+                user__isnull=False, registered_by=F("user")).distinct()
+            qs = (Patient.objects.none() if roster
+                  else visible_patients(user) | self_registered)
         else:
             qs = visible_patients(user) if roster else Patient.all_objects.all()
         return qs.prefetch_related("chronic_conditions")

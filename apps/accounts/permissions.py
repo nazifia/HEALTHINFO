@@ -196,8 +196,10 @@ class IsTenantMember(BasePermission):
             return True
         if user.role in INSURER_ROLES and not getattr(view, "insurer_ok", False):
             return False
-        if user.role in PATIENT_ROLES and not getattr(view, "patient_ok", False):
-            return False
+        if user.role in PATIENT_ROLES:
+            # A patient is not any facility's member, and is seen at all of
+            # them: the view's say-so is the whole check, from any tenant.
+            return getattr(view, "patient_ok", False)
         if user.role in RECEPTION_ROLES and not getattr(view, "reception_ok", False):
             return False
         if user.role in OVERSIGHT_ROLES:

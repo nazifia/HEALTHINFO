@@ -173,7 +173,9 @@ class LoginSerializer(TokenObtainPairSerializer):
         # Sign-in resolves only users of the tenant being signed in to, so one
         # organization's credentials never mint a token on another's host.
         tenant = getattr(self.context.get("request"), "tenant", None)
-        users = visible_users(tenant)
+        # Patient accounts are the exception: a patient is seen at any
+        # facility, so they sign in on any facility's host.
+        users = visible_users(tenant) | User.objects.filter(role=Role.PUBLIC)
 
         if license_number:
             user = users.filter(license_number=license_number).first()
@@ -222,8 +224,9 @@ class LoginSerializer(TokenObtainPairSerializer):
         data = super().validate(attrs)
         # authenticate() searches the whole user table; the token is only valid
         # for the tenant the user actually belongs to.
-        # A super-admin signs in to any organization.
+        # A super-admin signs in to any organization, and so does a patient.
         if (tenant is not None and not self.user.is_super_admin
+                and self.user.role != Role.PUBLIC
                 and self.user.tenant_id not in (tenant.id, None)):
             raise AuthenticationFailed(self._failed, "no_active_account")
         # A client on a shared host can't know which organization a user belongs
@@ -463,7 +466,8 @@ class RegisterSerializer(serializers.ModelSerializer):
         model = User
         # role is NOT registrable: a public endpoint that let the caller pick
         # their own role is privilege escalation to super_admin. Forced below.
-        fields = ("id", "username", "phone", "email", "password")
+        fields = ("id", "username", "first_name", "last_name", "phone",
+                  "email", "password")
 
     def validate_username(self, value):
         return value.strip() or None
@@ -478,12 +482,24 @@ class RegisterSerializer(serializers.ModelSerializer):
             )
         return attrs
 
+    @transaction.atomic
     def create(self, validated_data):
         # Bound to the request tenant; role is always public.
-        return User.objects.create_user(
-            tenant=self.context["request"].tenant, role=Role.PUBLIC,
-            **validated_data,
+        from apps.patients.models import Patient  # patients imports accounts
+
+        tenant = self.context["request"].tenant
+        user = User.objects.create_user(
+            tenant=tenant, role=Role.PUBLIC, **validated_data,
         )
+        # The account is its own patient record, active from the start and
+        # self-registered (registered_by == user): PatientViewSet lets every
+        # prescriber at every facility find such rows, not just this one.
+        Patient.all_objects.create(
+            tenant=tenant, user=user, registered_by=user, phone=user.phone,
+            first_name=user.first_name or user.username or user.phone,
+            last_name=user.last_name, status=Patient.Status.ACTIVE,
+        )
+        return user
 
 
 class OnboardingSerializer(serializers.Serializer):

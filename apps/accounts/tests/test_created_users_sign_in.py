@@ -83,6 +83,57 @@ def test_registered_patient_signs_in(db, tenant):
     assert login({"phone": "0803 123 4572", "password": PW}, tenant.slug).status_code == 200
 
 
+def test_self_registered_patient_is_active_and_reachable_everywhere(db, tenant):
+    from apps.patients.models import Patient
+
+    other = Tenant.objects.create(
+        name="O", slug="o", subscription_status=Tenant.SubscriptionStatus.APPROVED
+    )
+    r = APIClient().post("/api/auth/register/", {
+        "phone": "08031234576", "password": PW, "first_name": "Ada",
+    }, format="json", HTTP_X_TENANT_ID=tenant.slug)
+    assert r.status_code == 201, r.content
+    patient = Patient.all_objects.get(user__phone="08031234576")
+    assert patient.status == Patient.Status.ACTIVE
+    # Signs in on a facility they did not sign up at.
+    assert login({"phone": "08031234576", "password": PW}, other.slug).status_code == 200
+    # Found by a prescriber at that other facility, staff or independent,
+    # but on no one's roster.
+    state = Jurisdiction.objects.create(name="S", level="state")
+    other.jurisdiction = state
+    other.save()
+    staff = User.objects.create_user(
+        phone="08030000002", role=Role.DOCTOR, tenant=other, password="x")
+    visitor = User.objects.create_user(
+        phone="08030000003", role=Role.DOCTOR, password="x",
+        license_number="MDCN9", jurisdiction=state)
+    for prescriber in (staff, visitor):
+        c = APIClient()
+        c.force_authenticate(prescriber)
+        hdr = {"HTTP_X_TENANT_ID": other.slug}
+        found = c.get("/api/patients/?search=08031234576", **hdr).json()["results"]
+        assert [p["id"] for p in found] == [patient.id], prescriber
+        roster = c.get("/api/patients/", **hdr).json()["results"]
+        assert patient.id not in [p["id"] for p in roster]
+
+
+def test_backfill_gives_old_signups_a_record_and_skips_linked_ones(db, tenant):
+    from importlib import import_module
+
+    from django.apps import apps
+
+    from apps.patients.models import Patient
+
+    backfill = import_module(
+        "apps.patients.migrations.0010_backfill_self_registered").backfill
+    old = User.objects.create_user(phone="08031234577", tenant=tenant, password="x")
+    linked = User.objects.create_user(phone="08031234578", tenant=tenant, password="x")
+    Patient.all_objects.create(tenant=tenant, first_name="L", user=linked)
+    backfill(apps, None)
+    assert Patient.all_objects.get(user=old).registered_by == old
+    assert Patient.all_objects.filter(user=linked).count() == 1
+
+
 def test_onboarded_admin_signs_in(db):
     r = APIClient().post("/api/auth/onboarding/", {
         "org_name": "New Org", "org_slug": "new-org",

@@ -110,7 +110,8 @@ def test_super_admin_signs_in_to_any_organization(tenants, client):
     su = _super(None)
     su.tenant = a
     su.save()
-    User.objects.create_user(phone="08050000005", password="x", tenant=a)
+    User.objects.create_user(phone="08050000005", password="x", tenant=a,
+                             role=Role.TENANT_ADMIN)
     creds = {"password": "x"}
 
     resp = client.post("/api/auth/token/", {**creds, "phone": su.phone},
