@@ -98,7 +98,7 @@ void main() {
     // The screens that browse a resource page themselves; pulling every row
     // into them would be the slow path, not the safe one.
     expect(src('lib/screens/user_management_screen.dart'),
-        contains("api.getList('/api/users/')"));
+        contains("api.getList('/api/users/'"));
     expect(src('lib/screens/pharmacy_kit.dart'),
         contains('api.getList(widget.path, widget.query)'));
   });

@@ -160,6 +160,7 @@ class _Card extends StatelessWidget {
     final disposition = '${row['disposition'] ?? ''}';
     final complaint = '${row['chief_complaint'] ?? ''}'.trim();
     final patient = '${row['patient_name'] ?? ''}'.trim();
+    final age = '${row['patient_age'] ?? ''}'.trim();
     final bp = '${row['blood_pressure'] ?? ''}'.trim();
     // The diagnosis lives on the linked case report. The API sends the catalog
     // name where the text matched one, and the written text either way — a
@@ -214,7 +215,7 @@ class _Card extends StatelessWidget {
           ]),
           if (patient.isNotEmpty) ...[
             const SizedBox(height: 4),
-            Text(patient,
+            Text(age.isEmpty ? patient : '$patient · Age $age',
                 style: TextStyle(color: context.hintColor, fontSize: 12)),
           ],
           if (diagnosis.isNotEmpty) ...[

@@ -189,6 +189,7 @@ const _professionLabel = {
   'nurse': 'Nursing',
   'midwife': 'Midwifery',
   'chew': 'Community Health',
+  'pharmacist': 'Pharmacist',
 };
 
 /// A cadre's own registers (ward_screen.dart _work) pulled out of whichever
@@ -305,6 +306,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     ]),
     _Group('Customers', [
       _Section('Customers', Icons.people_alt_outlined, CustomersScreen()),
+      _Section('Wallet ledger', Icons.account_balance_wallet_outlined,
+          WalletLedgerScreen()),
+      _Section('Debtors', Icons.money_off_outlined, DebtorsScreen()),
     ]),
     _Group('Finance', [
       _Section('Pharmacy reports', Icons.assessment_outlined,
@@ -327,12 +331,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   // pharmacy one: schemes, what they authorise, and what they owe are one job,
   // and the desk on top of it is where that job is read. Pharmacy staff only,
   // same gate as the pharmacy block — the API scopes every call to the tenant.
-  List<_Group> get _hmoGroups => [
+  // The insurers' own staff accounts are the platform admin's to see.
+  List<_Group> _hmoGroups(bool platform) => [
         _Group('HMO', [
           _Section('HMO desk', Icons.health_and_safety_outlined,
               HmoDashboardScreen(onOpen: _openSection)),
           _Section('Schemes', Icons.health_and_safety_outlined,
               const PharmacySchemesScreen()),
+          if (platform)
+            const _Section('Scheme users', Icons.manage_accounts_outlined,
+                UserManagementScreen(role: 'hmo')),
           _Section('HMO claims', Icons.request_quote_outlined,
               const PharmacyClaimsScreen()),
           _Section('Authorisations', Icons.verified_user_outlined,
@@ -505,7 +513,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _menuSlug = tenantSlug;
     if (leftTenant) _index = 0;
     final pharmacy =
-        isPharmacyStaff(role) ? [..._pharmacyGroups, ..._hmoGroups] : <_Group>[];
+        isPharmacyStaff(role) ? [..._pharmacyGroups, ..._hmoGroups(role == 'super_admin')] : <_Group>[];
     if (role == 'super_admin') {
       // Inside a clinic or a pharmacy a super-admin works as that
       // organization: the cross-tenant block goes away and every screen left

@@ -34,6 +34,12 @@ LICENSED_ROLES = frozenset({Role.DOCTOR, Role.NURSE, Role.MIDWIFE, Role.CHEW})
 # cadres plus the pharmacist, who signs in by phone but prescribes all the same.
 PRESCRIBER_ROLES = LICENSED_ROLES | {Role.PHARMACIST}
 
+# Who may open their own seat as an independent prescriber from the public
+# signup screen. CHEWs are left out: they work under a facility's supervision.
+SELF_REGISTER_PRESCRIBERS = frozenset(
+    {Role.DOCTOR, Role.NURSE, Role.MIDWIFE, Role.PHARMACIST}
+)
+
 
 # Nigerian mobile: local 0XXXXXXXXXX (11 digits) or international +234XXXXXXXXXX,
 # network code starting 7/8/9 (e.g. 08031234567 or +2348031234567).
@@ -207,6 +213,9 @@ class User(AbstractUser):
         carries a state (``jurisdiction``) instead of a tenant and they write
         under a facility they pick inside it. Derived rather than flagged —
         "licensed, and no employer" is exactly what independent means, and a
-        second field would only be a way for the two to disagree.
+        second field would only be a way for the two to disagree. A pharmacist
+        in private practice counts too: they prescribe like the licensed
+        cadres, and sign in with their licence since they have no pharmacy
+        whose short phone codes would be theirs.
         """
-        return self.tenant_id is None and self.role in LICENSED_ROLES
+        return self.tenant_id is None and self.role in PRESCRIBER_ROLES

@@ -277,22 +277,36 @@ class Api {
     return (jsonDecode(r.body) as List).cast<Map<String, dynamic>>();
   }
 
-  /// POST /api/auth/register/
-  Future<void> register(String phone, String email, String password,
-      {String username = ''}) async {
+  /// POST /api/auth/register/ — returns the server's message.
+  ///
+  /// With a [role] (doctor, nurse, midwife, pharmacist) it opens an
+  /// independent prescriber's seat: no organization, so no tenant header.
+  Future<String> register(String phone, String email, String password,
+      {String username = '',
+      String? role,
+      String? licenseNumber,
+      int? jurisdiction}) async {
     final r = await http.post(
       _uri('/api/auth/register/'),
-      headers: _headers(auth: false, json: true),
+      headers: _headers(auth: false, json: true, tenant: role == null),
       body: jsonEncode({
         if (username.isNotEmpty) 'username': username,
         'phone': phone,
         'email': email,
         'password': password,
+        if (role != null) ...{
+          'role': role,
+          'license_number': licenseNumber,
+          'jurisdiction': jurisdiction,
+          'accept_terms': true,
+        },
       }),
     );
     if (r.statusCode != 201) {
       throw ApiException('Register failed (${r.statusCode})', r.body);
     }
+    return ((jsonDecode(r.body) as Map)['message'] as String?) ??
+        'Account created.';
   }
 
   /// POST /api/auth/password-reset/ — mail a link for a forgotten password.

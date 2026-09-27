@@ -18,7 +18,7 @@ from apps.tenants.current import get_current_tenant
 from apps.tenants.models import Jurisdiction, Tenant
 
 from .models import (
-    LICENSED_ROLES, Role, User, normalize_license, normalize_phone,
+    LICENSED_ROLES, SELF_REGISTER_PRESCRIBERS, Role, User, normalize_license, normalize_phone,
     phone_validator,
 )
 from .permissions import (
@@ -189,9 +189,12 @@ class LoginSerializer(TokenObtainPairSerializer):
             # suffix is not unique by construction, so an ambiguous one is
             # refused rather than guessed; an admin renumbers one of the pair.
             # ponytail: suffix scan; index phone_suffix if pharmacist rows grow.
-            matches = list(
-                users.filter(role=Role.PHARMACIST, phone__endswith=phone)[:2]
-            )
+            # An independent pharmacist has no pharmacy to share a suffix
+            # with and signs in by licence, so tenant-less rows are left out:
+            # otherwise one of them would collide with every pharmacy's staff.
+            matches = list(users.filter(
+                role=Role.PHARMACIST, tenant__isnull=False, phone__endswith=phone,
+            )[:2])
             if len(matches) != 1:
                 raise AuthenticationFailed(self._failed, "no_active_account")
             attrs[self.username_field] = matches[0].phone
@@ -427,11 +430,19 @@ class UserSerializer(serializers.ModelSerializer):
                              f"{suffix}. Their sign-in codes would collide."}
         return {}
 
+    def _check_pharmacist(self, seat, attrs):
+        # Staff of a pharmacy sign in by phone suffix; one in private practice
+        # has no pharmacy, so they are held to the licensed cadres' rules.
+        if seat["tenant"] is not None:
+            return self._check_pharmacist_suffix(seat, attrs)
+        return {**self._check_licence(seat, attrs),
+                **self._check_independent(seat, attrs)}
+
     _ROLE_CHECKS = dict.fromkeys(LICENSED_ROLES, (_check_licence, _check_independent))
     _ROLE_CHECKS.update({
         Role.GOVERNMENT: (_check_authority,),
         Role.HMO: (_check_insurer,),
-        Role.PHARMACIST: (_check_pharmacist_suffix,),
+        Role.PHARMACIST: (_check_pharmacist,),
     })
 
     # ----- persistence ------------------------------------------------------
@@ -457,22 +468,54 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class RegisterSerializer(serializers.ModelSerializer):
-    """Self-serve patient signup into one organization."""
+    """Self-serve signup: a patient into one organization, or an independent
+    prescriber (doctor, nurse, midwife, pharmacist) into their state.
+
+    The prescriber seat opens active on the licence number as typed.
+    ponytail: no licence verification; a platform admin deactivates a bad
+    seat from Users. Open it with is_active=False here if checks move upfront.
+    """
 
     phone = phone_field()
     password = serializers.CharField(write_only=True, validators=[validate_password])
+    # Anything but the self-registrable prescriber roles falls back to public:
+    # a public endpoint that let the caller pick any role is privilege
+    # escalation to super_admin.
+    role = serializers.CharField(required=False, allow_blank=True)
+    license_number = FoldedField(
+        normalize_license, required=False, allow_blank=True, allow_null=True,
+        validators=[UniqueValidator(
+            User.objects.all(),
+            message="Another user already holds this license number.",
+        )],
+    )
+    jurisdiction = serializers.PrimaryKeyRelatedField(
+        queryset=Jurisdiction.objects.all(), required=False, allow_null=True,
+    )
+    accept_terms = serializers.BooleanField(
+        write_only=True, required=False, default=False,
+    )
 
     class Meta:
         model = User
-        # role is NOT registrable: a public endpoint that let the caller pick
-        # their own role is privilege escalation to super_admin. Forced below.
         fields = ("id", "username", "first_name", "last_name", "phone",
-                  "email", "password")
+                  "email", "password", "role", "license_number", "jurisdiction",
+                  "accept_terms", "is_active")
+        read_only_fields = ("is_active",)
 
     def validate_username(self, value):
         return value.strip() or None
 
+    def validate_role(self, value):
+        return value if value in SELF_REGISTER_PRESCRIBERS else Role.PUBLIC
+
     def validate(self, attrs):
+        attrs["role"] = attrs.get("role") or Role.PUBLIC
+        if attrs["role"] in SELF_REGISTER_PRESCRIBERS:
+            return self._validate_prescriber(attrs)
+        # A patient carries none of a prescriber's fields.
+        for name in ("license_number", "jurisdiction", "accept_terms"):
+            attrs.pop(name, None)
         # A user with no tenant belongs to no organization: they'd fail every
         # tenant-scoped permission and still be visible from every tenant.
         # The client picks one from /api/auth/register/organizations/.
@@ -482,15 +525,38 @@ class RegisterSerializer(serializers.ModelSerializer):
             )
         return attrs
 
+    def _validate_prescriber(self, attrs):
+        # The same rules an admin-made independent seat is held to.
+        errors = {}
+        if not attrs.get("license_number"):
+            errors["license_number"] = "Enter your practising license number."
+        state = attrs.get("jurisdiction")
+        if not state:
+            errors["jurisdiction"] = "Choose the state your license is registered in."
+        elif state.level != Jurisdiction.Level.STATE:
+            errors["jurisdiction"] = ("Choose a state: a licence is registered "
+                                      "state-wide, not per local government.")
+        if not attrs.pop("accept_terms", False):
+            errors["accept_terms"] = ("You must agree to the Healthcare Terms "
+                                      "and Conditions to register as a prescriber.")
+        if errors:
+            raise serializers.ValidationError(errors)
+        return attrs
+
     @transaction.atomic
     def create(self, validated_data):
-        # Bound to the request tenant; role is always public.
         from apps.patients.models import Patient  # patients imports accounts
 
+        if validated_data["role"] in SELF_REGISTER_PRESCRIBERS:
+            # Independent: no tenant, whatever host they signed up on.
+            return User.objects.create_user(
+                tenant=None, terms_accepted_at=timezone.now(),
+                **validated_data,
+            )
+
+        # A patient is bound to the request tenant.
         tenant = self.context["request"].tenant
-        user = User.objects.create_user(
-            tenant=tenant, role=Role.PUBLIC, **validated_data,
-        )
+        user = User.objects.create_user(tenant=tenant, **validated_data)
         # The account is its own patient record, active from the start and
         # self-registered (registered_by == user): PatientViewSet lets every
         # prescriber at every facility find such rows, not just this one.

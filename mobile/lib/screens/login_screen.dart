@@ -34,6 +34,64 @@ class _LoginScreenState extends State<LoginScreen> {
   List<Map<String, dynamic>> _orgs = [];
   String? _orgSlug;
 
+  // Signup only: null registers a patient. A prescriber role opens an
+  // independent seat instead: licence, the state it is registered in, and the
+  // terms, and no organization. Mirrors SELF_REGISTER_PRESCRIBERS on the API.
+  static const _prescribers = {
+    'doctor': 'Doctor',
+    'nurse': 'Nurse',
+    'midwife': 'Midwife',
+    'pharmacist': 'Pharmacist',
+  };
+  String? _role;
+  final _license = TextEditingController();
+  List<Map<String, dynamic>> _states = [];
+  int? _stateId;
+  Map<String, dynamic>? _terms;
+  bool _agreed = false;
+
+  Future<void> _loadPrescriberLists() async {
+    if (_states.isEmpty) {
+      try {
+        final rows = await api.jurisdictions();
+        if (mounted) {
+          setState(() =>
+              _states = rows.where((j) => j['level'] == 'state').toList());
+        }
+      } catch (_) {/* the API refuses a seat with no state, loudly */}
+    }
+    if (_terms == null) {
+      try {
+        final t = await api.get('/api/auth/register/terms/');
+        if (mounted) setState(() => _terms = (t as Map).cast<String, dynamic>());
+      } catch (_) {/* the checkbox still stands; the API checks it */}
+    }
+  }
+
+  void _showTerms() => showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('${_terms?['title'] ?? 'Terms'}'),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final c in (_terms?['clauses'] as List? ?? const []))
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text('• $c'),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close')),
+          ],
+        ),
+      );
+
   Future<void> _loadOrgs() async {
     if (_orgs.isNotEmpty) return;
     try {
@@ -52,6 +110,7 @@ class _LoginScreenState extends State<LoginScreen> {
     _pass.dispose();
     _email.dispose();
     _username.dispose();
+    _license.dispose();
     super.dispose();
   }
 
@@ -61,7 +120,28 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
     });
     try {
-      if (_registerMode) {
+      if (_registerMode && _role != null) {
+        final missing = _license.text.trim().isEmpty
+            ? 'Enter your license number.'
+            : _stateId == null
+                ? 'Choose the state your license is registered in.'
+                : !_agreed
+                    ? 'Agree to the Healthcare Terms and Conditions.'
+                    : null;
+        if (missing != null) {
+          setState(() => _error = missing);
+          showError(context, missing);
+          return;
+        }
+        await api.register(
+            _phone.text.trim(), _email.text.trim(), _pass.text,
+            username: _username.text.trim(),
+            role: _role,
+            licenseNumber: _license.text.trim(),
+            jurisdiction: _stateId);
+        // A licensed seat signs in with the licence, never the phone.
+        await api.login(_license.text.trim(), _pass.text);
+      } else if (_registerMode) {
         if (_orgSlug == null) {
           setState(() => _error = 'Choose the organization you are joining.');
           showError(context, _error!);
@@ -74,7 +154,9 @@ class _LoginScreenState extends State<LoginScreen> {
         await api.register(_phone.text.trim(), _email.text.trim(), _pass.text,
             username: _username.text.trim());
       }
-      await api.login(_phone.text.trim(), _pass.text);
+      if (!(_registerMode && _role != null)) {
+        await api.login(_phone.text.trim(), _pass.text);
+      }
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const HomeScreen()),
@@ -178,11 +260,11 @@ class _LoginScreenState extends State<LoginScreen> {
                                       },
                               ),
                               const SizedBox(height: 20),
-                              // Registration always creates a public account,
-                              // so it stays phone-only. Signing in also accepts
-                              // a licence number (doctors, nurses, midwives,
-                              // CHEWs) or, for pharmacy staff, the last 6
-                              // digits of their phone.
+                              // Registration keys the account on a phone, a
+                              // prescriber's too. Signing in also accepts a
+                              // licence number (doctors, nurses, midwives,
+                              // CHEWs, independent pharmacists) or, for
+                              // pharmacy staff, the last 6 digits of their phone.
                               TextField(
                                 controller: _phone,
                                 decoration: InputDecoration(
@@ -203,6 +285,92 @@ class _LoginScreenState extends State<LoginScreen> {
                                 autocorrect: false,
                               ),
                               if (_registerMode) ...[
+                                const SizedBox(height: 12),
+                                DropdownButtonFormField<String?>(
+                                  initialValue: _role,
+                                  isExpanded: true,
+                                  decoration: const InputDecoration(
+                                    labelText: 'I am registering as',
+                                    prefixIcon: Icon(Icons.badge_outlined),
+                                  ),
+                                  items: [
+                                    const DropdownMenuItem(
+                                        value: null, child: Text('Patient')),
+                                    for (final e in _prescribers.entries)
+                                      DropdownMenuItem(
+                                        value: e.key,
+                                        child: Text(
+                                            '${e.value} (independent prescriber)',
+                                            overflow: TextOverflow.ellipsis),
+                                      ),
+                                  ],
+                                  onChanged: _busy
+                                      ? null
+                                      : (v) {
+                                          setState(() => _role = v);
+                                          if (v != null) _loadPrescriberLists();
+                                        },
+                                ),
+                              ],
+                              if (_registerMode && _role != null) ...[
+                                const SizedBox(height: 12),
+                                TextField(
+                                  controller: _license,
+                                  decoration: const InputDecoration(
+                                    labelText: 'License number',
+                                    prefixIcon: Icon(Icons.verified_outlined),
+                                  ),
+                                  autocorrect: false,
+                                ),
+                                const SizedBox(height: 12),
+                                DropdownButtonFormField<int>(
+                                  initialValue: _stateId,
+                                  isExpanded: true,
+                                  decoration: const InputDecoration(
+                                    labelText: 'State of licensure',
+                                    prefixIcon: Icon(Icons.map_outlined),
+                                  ),
+                                  items: [
+                                    for (final j in _states)
+                                      DropdownMenuItem(
+                                        value: j['id'] as int,
+                                        child: Text('${j['name']}'),
+                                      ),
+                                  ],
+                                  onChanged: _busy
+                                      ? null
+                                      : (v) => setState(() => _stateId = v),
+                                ),
+                                CheckboxListTile(
+                                  value: _agreed,
+                                  contentPadding: EdgeInsets.zero,
+                                  controlAffinity:
+                                      ListTileControlAffinity.leading,
+                                  title: const Text(
+                                      'I agree to the Healthcare Terms and Conditions'),
+                                  subtitle: _terms == null
+                                      ? null
+                                      : GestureDetector(
+                                          onTap: _showTerms,
+                                          child: Text('Read the terms',
+                                              style: TextStyle(
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .primary)),
+                                        ),
+                                  onChanged: _busy
+                                      ? null
+                                      : (v) =>
+                                          setState(() => _agreed = v ?? false),
+                                ),
+                                Text(
+                                  'You sign in with your license number.',
+                                  style: TextStyle(
+                                      color: context.subLabelColor,
+                                      fontSize: 12),
+                                ),
+                              ],
+                              if (_registerMode && _role == null) ...[
                                 const SizedBox(height: 12),
                                 DropdownButtonFormField<String>(
                                   initialValue: _orgSlug,
@@ -225,6 +393,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                       ? null
                                       : (v) => setState(() => _orgSlug = v),
                                 ),
+                              ],
+                              if (_registerMode) ...[
                                 const SizedBox(height: 12),
                                 TextField(
                                   controller: _username,

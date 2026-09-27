@@ -273,7 +273,10 @@ const RESOURCES = {
   // (extra: 'script') and the status follows them; the action here is the
   // "all of it" shortcut, which is what an empty body means to the API.
   'pharmacy-scripts':       { title: 'Prescriptions',   group: 'Pharmacy', path: 'prescriptions/scripts',    roles: 'staff', search: true, extra: 'script',
-                              hide: ['medications'], filters: [SCRIPT_STATUS_FILTER, SCRIPT_SOURCE_FILTER],
+                              // The counter needs who and by whom; the rest folds away under "More".
+                              hide: ['medications', 'source'], filters: [SCRIPT_STATUS_FILTER, SCRIPT_SOURCE_FILTER],
+                              layout: [['customer_name', 'customer_phone'], 'doctor_name'],
+                              more: ['diagnosis', 'notes', 'customer', 'branch'],
                               labels: { customer_name: 'Patient name', customer_phone: 'Patient phone', doctor_name: 'Written by' },
                               hints: { customer_phone: 'Any pharmacy finds and fills the script by this number' },
                               actions: [{ name: 'dispense', label: 'Dispense everything still open', when: ['pending', 'partial'] },
@@ -679,7 +682,9 @@ function navHtml() {
     if (slug === 'shifts' && prescriber) continue;
     if (r.adminOnly && !['super_admin', 'tenant_admin'].includes(ME?.role)
         && !(slug === 'users' && hasPriv('manage_users'))) continue;
-    if (r.group === 'Pharmacy' && !PHARMACY_STAFF_ROLES.has(ME?.role)) continue;
+    // An independent pharmacist is a visitor: the facility's counter and
+    // stock are its staff's, and the API refuses them (no independent_ok).
+    if (r.group === 'Pharmacy' && (!PHARMACY_STAFF_ROLES.has(ME?.role) || isIndependent())) continue;
     // Patient data is clinical staff and the front desk only
     // (apps.accounts.permissions.IsPatientRegistrar); the visits and orders
     // beside it are read by the whole tenant.
@@ -715,7 +720,7 @@ function navHtml() {
   // A cadre's own registers (CLINICAL_WORK) come out of whichever group the
   // registry filed them under and into one named for their profession, with
   // the ward in front. The rest of the menu is unchanged behind it.
-  const work = CLINICAL_WORK[ME?.role];
+  const work = workFor(ME?.role);
   if (work) {
     const mine = [];
     for (const slug of work) {
@@ -725,7 +730,7 @@ function navHtml() {
         if (hit) { mine.push(hit); groups[g] = groups[g].filter((a) => a !== hit); }
       }
     }
-    html += navGroup(PROFESSION_NAV[ME.role],
+    html += navGroup(PROFESSION_NAV[ME.role] || 'Pharmacist',
       `<a href="#/clinical" data-route="/clinical">${ico('activity')}Ward</a>` + mine.join(''));
   }
   const clinical = (groups.Clinical || []).join('');
@@ -764,7 +769,7 @@ function navHtml() {
   html += navGroup('Account', `<a href="#/profile" data-route="/profile">${ico('users')}Profile</a>`
     + (isIndependent()
       ? `<a href="#/facility" data-route="/facility">${ico('shield')}Change Facility</a>` : '')
-    + (PHARMACY_STAFF_ROLES.has(ME?.role)
+    + (PHARMACY_STAFF_ROLES.has(ME?.role) && !isIndependent()
       ? `<a href="#/notifications" data-route="/notifications">${ico('flag')}Notifications</a>` : ''));
   return html;
 }
@@ -1515,7 +1520,7 @@ function viewLogin() {
     <form id="f">
       <label>Phone or license number
         <input name="identifier" placeholder="08031234567" required>
-        <small class="muted">Doctors, nurses, midwives and CHEWs: use your license number.
+        <small class="muted">Doctors, nurses, midwives, CHEWs and independent pharmacists: use your license number.
           Pharmacy staff: the last 6 digits of your phone.</small>
       </label>
       <label>Password<input name="password" type="password" required></label>
@@ -1535,19 +1540,46 @@ function viewLogin() {
   };
 }
 
+/* Self-signup answers two kinds of people. A patient joins one organization.
+   A doctor, nurse, midwife or pharmacist in private practice joins no
+   organization: their seat carries the state on their licence. */
+const SELF_REGISTER_PRESCRIBERS = { doctor: 'Doctor', nurse: 'Nurse', midwife: 'Midwife', pharmacist: 'Pharmacist' };
+
 async function viewRegister() {
   authChrome();
   // Nobody has a tenant to detect before they have an account, so they pick
   // one; the list is the live organizations the server will accept.
-  let orgs = [];
-  try { orgs = await Api.public('/api/auth/register/organizations/'); } catch { /* offline */ }
+  const [orgs, places, terms] = await Promise.all([
+    Api.public('/api/auth/register/organizations/').catch(() => []),
+    Api.public('/api/auth/onboarding/jurisdictions/').catch(() => []),
+    Api.public('/api/auth/register/terms/').catch(() => null),
+  ]);
+  const states = places.filter((j) => j.level === 'state');
   const orgField = orgs.length
     ? `<label>Organization<select name="tenant" required>${orgs.map((o) =>
         `<option value="${esc(o.slug)}"${o.slug === Api.tenant ? ' selected' : ''}>${esc(o.name)} (${esc(o.kind)})</option>`).join('')}</select></label>`
     : `<label>Organization (tenant slug)<input name="tenant" value="${esc(Api.tenant)}" required></label>`;
-  render(authShell('Create account', 'Join your organization', `
+  render(authShell('Create account', 'Join as a patient or as an independent prescriber', `
     <form id="f">
-      ${orgField}
+      <label>I am registering as<select name="role">
+        <option value="public">Patient</option>
+        ${Object.entries(SELF_REGISTER_PRESCRIBERS).map(([v, l]) =>
+          `<option value="${v}">${l} (independent prescriber)</option>`).join('')}
+      </select></label>
+      <fieldset data-for="patient" class="bare">${orgField}</fieldset>
+      <fieldset data-for="prescriber" class="bare" hidden disabled>
+        <label>License number<input name="license_number" required></label>
+        <label>State of licensure<select name="jurisdiction" required>
+          <option value=""></option>
+          ${states.map((j) => `<option value="${j.id}">${esc(j.name)}</option>`).join('')}
+        </select></label>
+        ${terms ? `<details class="card">
+          <summary><strong>${esc(terms.title)}</strong> <span class="muted">(v${esc(terms.version)})</span></summary>
+          <ol>${terms.clauses.map((c) => `<li>${esc(c)}</li>`).join('')}</ol>
+        </details>` : ''}
+        <label><input type="checkbox" name="accept_terms" required> I have read and agree to the Healthcare Terms and Conditions</label>
+        <small class="muted">You sign in with your license number.</small>
+      </fieldset>
       <label>Display name (optional)<input name="username"></label>
       <label>Phone<input name="phone" placeholder="08031234567" required></label>
       <label>Email<input name="email" type="email" required></label>
@@ -1555,15 +1587,36 @@ async function viewRegister() {
       <button type="submit">Register</button>
     </form>`, `
     <p class="muted center"><a href="#/login">Back to sign in</a></p>`));
-  $('#f').onsubmit = async (e) => {
+  const f = $('#f');
+  // A disabled fieldset drops its inputs from both validation and FormData,
+  // so only the half that applies is checked and sent.
+  f.elements.role.onchange = () => {
+    const prescriber = f.elements.role.value in SELF_REGISTER_PRESCRIBERS;
+    for (const fs of f.querySelectorAll('fieldset[data-for]')) {
+      const on = (fs.dataset.for === 'prescriber') === prescriber;
+      fs.hidden = !on;
+      fs.disabled = !on;
+    }
+  };
+  f.onsubmit = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
-    Api.tenant = fd.get('tenant');
-    Api.tenantName = orgs.find((o) => o.slug === Api.tenant)?.name || '';
     const body = { phone: fd.get('phone'), email: fd.get('email'), password: fd.get('password') };
     if (fd.get('username')) body.username = fd.get('username');
     try {
-      const r = await Api.post('/api/auth/register/', body);
+      let r;
+      if (fd.get('role') in SELF_REGISTER_PRESCRIBERS) {
+        // Independent: no organization, so no tenant header either.
+        Object.assign(body, {
+          role: fd.get('role'), license_number: fd.get('license_number'),
+          jurisdiction: Number(fd.get('jurisdiction')), accept_terms: true,
+        });
+        r = await Api.publicPost('/api/auth/register/', body);
+      } else {
+        Api.tenant = fd.get('tenant');
+        Api.tenantName = orgs.find((o) => o.slug === Api.tenant)?.name || '';
+        r = await Api.post('/api/auth/register/', body);
+      }
       toast(r?.message || 'Account created. You can now sign in.');
       location.hash = '#/login';
     } catch (err) { toast(err.message, true); }
@@ -1878,7 +1931,8 @@ async function viewHome() {
   if (!await ensureChrome()) return;
   // Reloading, or a stale bookmark, lands here whoever you are. The dashboard
   // for the role is the one place the seat's own work is, so go there.
-  const home = homeHash(ME.role);
+  // An independent pharmacist has no counter here: their desk is the ward.
+  const home = isIndependent() ? '#/clinical' : homeHash(ME.role);
   if (home !== '#/') { location.hash = home; return; }
   spinner();
   const tiles = [
@@ -2494,9 +2548,14 @@ async function viewForm(slug, id, query) {
           `<option value="${v}">${v}</option>`).join('')}</select></label>`;
     }
     const sheet = !id && res.form;
+    // Fields seldom filled fold under one toggle, opened when any holds a value.
+    const more = (res.more || []).filter((n) => parts[n]);
+    const moreHtml = more.length ? `<details class="more-fields"${more.some((n) => current[n]) ? ' open' : ''}>
+      <summary>More details</summary>${more.map((n) => parts[n]).join('')}</details>` : '';
+    for (const n of more) delete parts[n];
     render(`<div class="sheet">
       <div class="page-head"><h2>${sheet ? esc(sheet.title) : `${id ? 'Edit' : 'New'} — ${esc(res.title)}`}</h2></div>
-      <form id="f" class="card form-card">${layoutHtml(res.layout, parts)}</form>
+      <form id="f" class="card form-card">${layoutHtml(res.layout, parts)}${moreHtml}</form>
       ${multiDrug ? `<div id="drugs"></div>
       <div class="actions">
         <button type="button" id="add-drug" class="btn ghost">+ Add another drug</button>
@@ -2685,11 +2744,15 @@ async function wireScriptLines(existing = []) {
     row.className = 'card form-card';
     row.innerHTML = `<h3></h3>
       <label>From the shelf<select name="item">${options}</select></label>
-      <label>Drug *<input name="name" maxlength="255" value="${esc(line.name ?? '')}"></label>
-      <label>Quantity *<input type="number" name="quantity" min="1" value="${esc(line.quantity ?? 1)}"></label>
-      <label>Dosage<input name="dosage" maxlength="200" value="${esc(line.dosage ?? '')}" placeholder="1 tablet twice daily"></label>
-      <label>Duration<input name="duration" maxlength="100" value="${esc(line.duration ?? '')}" placeholder="5 days"></label>
-      <label>Instructions<input name="instructions" value="${esc(line.instructions ?? '')}"></label>
+      <div class="row2">
+        <label>Drug *<input name="name" maxlength="255" value="${esc(line.name ?? '')}"></label>
+        <label>Quantity *<input type="number" name="quantity" min="1" value="${esc(line.quantity ?? 1)}"></label>
+      </div>
+      <div class="row2">
+        <label>Dosage<input name="dosage" maxlength="200" value="${esc(line.dosage ?? '')}" placeholder="1 tablet twice daily"></label>
+        <label>Duration<input name="duration" maxlength="100" value="${esc(line.duration ?? '')}" placeholder="5 days"></label>
+      </div>
+      <label>Instructions<input name="instructions" value="${esc(line.instructions ?? '')}" placeholder="After meals"></label>
       <div class="actions"><button type="button" class="btn ghost">Remove</button></div>`;
     const sel = row.querySelector('[name="item"]');
     sel.value = line.item ?? '';
@@ -3310,9 +3373,11 @@ function nearestPlace(rows, value) {
 }
 
 function carryPatientFields(form, patient) {
-  for (const name of ['region']) {
+  // A counter script names and reaches the patient under its own field names.
+  const from = { region: 'region', customer_name: 'full_name', customer_phone: 'phone' };
+  for (const [name, key] of Object.entries(from)) {
     const elm = form.elements[name];
-    const value = String(patient[name] ?? '').trim();
+    const value = String(patient[key] ?? '').trim();
     if (!elm || !value || String(elm.value ?? '').trim() !== '') continue;
     elm.value = value;
     // A <select> ignores a value it has no option for; the nearest row that
@@ -3640,6 +3705,11 @@ const CLINICAL_WORK = {
 // The sidebar group each cadre's work sits under (navHtml). Same keys as
 // mobile/lib/screens/home_screen.dart _professionLabel.
 const PROFESSION_NAV = { doctor: 'Doctor', nurse: 'Nursing', midwife: 'Midwifery', chew: 'Community Health' };
+/* A pharmacy's own pharmacist works the counter, not a ward. One in private
+   practice writes under the facility they picked, and prescriptions are
+   what the API opens to them there. */
+const workFor = (role) => CLINICAL_WORK[role]
+  || (role === 'pharmacist' && isIndependent() ? ['prescriptions'] : null);
 
 /* The ward's own home: the same banner a patient lands on, with the day's
    workload as the facts; a box to find a patient by phone or name; and three quick
@@ -3647,11 +3717,11 @@ const PROFESSION_NAV = { doctor: 'Doctor', nurse: 'Nursing', midwife: 'Midwifery
    own pagination — no dashboard endpoint to keep in step with the registry. */
 async function viewClinical() {
   if (!await ensureChrome()) return;
-  if (!isClinicalStaff() && ME?.role !== 'super_admin') {
+  if (!isClinicalStaff() && !isIndependent() && ME?.role !== 'super_admin') {
     return errorBox(new Error('Clinical staff only.'));
   }
   spinner();
-  const slugs = CLINICAL_WORK[ME.role] || CLINICAL_WORK.nurse;
+  const slugs = workFor(ME.role) || CLINICAL_WORK.nurse;
   const count = (list) => (list ? fmtVal(list.count ?? list.rows.length) : '—');
   const [open, latest, ...lists] = await Promise.all([
     Api.list(rpath('consultations'), { status: 'open', ordering: '-created_at' }).catch(() => null),
@@ -3695,7 +3765,7 @@ async function viewClinical() {
     if (!p) return;
     go.innerHTML = `<a class="btn" href="#/r/consultations/new?patient=${p.id}">+ Start visit</a>
       <a class="btn ghost" href="#/r/prescriptions/new?patient=${p.id}">+ Prescribe</a>
-      ${isPharmacyStaff() ? `<a class="btn ghost" href="#/r/pharmacy-scripts/new?patient=${p.id}&customer_name=${encodeURIComponent(p.full_name || '')}&customer_phone=${encodeURIComponent(p.phone || '')}">+ Counter script</a>` : ''}
+      ${isPharmacyStaff() && !isIndependent() ? `<a class="btn ghost" href="#/r/pharmacy-scripts/new?patient=${p.id}&customer_name=${encodeURIComponent(p.full_name || '')}&customer_phone=${encodeURIComponent(p.phone || '')}">+ Counter script</a>` : ''}
       <a class="btn ghost" href="#/r/patients/${p.id}">Open record</a>`;
   });
   $('#patient-q').focus();

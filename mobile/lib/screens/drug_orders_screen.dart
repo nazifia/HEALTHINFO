@@ -225,6 +225,7 @@ class _CardState extends State<_Card> {
     final states = drugs.map((d) => '${d['status']}').toSet();
     final state = states.length == 1 ? states.first : 'part dispensed';
     final patient = '${row['patient_name'] ?? ''}'.trim();
+    final age = '${row['patient_age'] ?? ''}'.trim();
     final prescriber = '${row['prescriber'] ?? ''}'.trim();
     return GlassCard(
       borderRadius: 16,
@@ -287,7 +288,7 @@ class _CardState extends State<_Card> {
           [
             // An order with no patient is the prescriber's working note — the
             // pharmacy never sees it, so say so rather than showing a blank.
-            patient.isEmpty ? 'No patient linked' : patient,
+            patient.isEmpty ? 'No patient linked' : age.isEmpty ? patient : '$patient · Age $age',
             if (prescriber.isNotEmpty) 'by $prescriber',
           ].join('  ·  '),
           style: TextStyle(color: context.hintColor, fontSize: 11),

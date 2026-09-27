@@ -112,6 +112,7 @@ class _Card extends StatelessWidget {
     final cause = '${row['cause_name'] ?? ''}'.trim();
     final maternal = row['maternal_death'] == true;
     final infant = row['infant_death'] == true;
+    final age = '${row['patient_age'] ?? row['patient_age_group'] ?? ''}'.trim();
     final color = isDeath ? EnhancedTheme.errorRed : EnhancedTheme.successGreen;
     return GlassCard(
       borderRadius: 16,
@@ -150,6 +151,10 @@ class _Card extends StatelessWidget {
                   : const SizedBox.shrink(),
             ),
           ]),
+          if (age.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text('Age $age', style: TextStyle(color: context.subLabelColor, fontSize: 13)),
+          ],
           const SizedBox(height: 8),
           RegionEditChip(
             path: '/api/vital-events/${row['id']}/',

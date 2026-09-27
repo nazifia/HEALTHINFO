@@ -58,6 +58,9 @@ const _work = <String, List<_Register>>{
   'nurse': [_cases, _drugOrders, _immunizations, _labs, _appointments],
   'midwife': [_vitalEvents, _drugOrders, _immunizations, _cases, _appointments],
   'chew': [_chwReports, _drugOrders, _immunizations, _cases, _adr],
+  // Only an independent pharmacist reaches the ward: the pharmacy's own
+  // staff work the counter. Drug orders are what the API opens to them.
+  'pharmacist': [_drugOrders],
 };
 
 /// The drawer labels of each cadre's registers, in the same order: the home

@@ -47,7 +47,10 @@ const _roles = [
 /// Change a user's role or activate/deactivate them. Tenant is set at signup
 /// and shown read-only here.
 class UserManagementScreen extends StatefulWidget {
-  const UserManagementScreen({super.key});
+  const UserManagementScreen({super.key, this.role});
+
+  /// Narrows the list to one role, e.g. 'hmo' for the insurers' staff.
+  final String? role;
 
   @override
   State<UserManagementScreen> createState() => _UserManagementScreenState();
@@ -62,13 +65,16 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   @override
   void initState() {
     super.initState();
-    _future = api.getList('/api/users/');
+    _future = _fetch();
     api.me().then((m) {
       if (mounted) setState(() => _me = m);
     });
   }
 
-  void _reload() => setState(() { _future = api.getList('/api/users/'); });
+  Future<List<dynamic>> _fetch() => api.getList('/api/users/',
+      widget.role == null ? null : {'role': widget.role!});
+
+  void _reload() => setState(() { _future = _fetch(); });
 
   /// Only the platform admin picks the organization. Every other admin
   /// writes into their own module, which the API pins from them

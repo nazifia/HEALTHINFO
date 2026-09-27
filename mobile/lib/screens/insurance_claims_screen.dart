@@ -126,6 +126,7 @@ class _Card extends StatelessWidget {
     final status = '${row['status'] ?? ''}';
     final amount = '${row['amount'] ?? ''}'.trim();
     final dx = '${row['diagnosis_name'] ?? ''}'.trim();
+    final age = '${row['patient_age'] ?? row['patient_age_group'] ?? ''}'.trim();
     return GlassCard(
       borderRadius: 16,
       padding: const EdgeInsets.all(14),
@@ -155,6 +156,10 @@ class _Card extends StatelessWidget {
           if (dx.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(dx, style: TextStyle(color: context.subLabelColor, fontSize: 13)),
+          ],
+          if (age.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text('Age $age', style: TextStyle(color: context.subLabelColor, fontSize: 13)),
           ],
           const SizedBox(height: 8),
           RegionEditChip(

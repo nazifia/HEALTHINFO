@@ -56,7 +56,10 @@ class RegisterViewSet(viewsets.ViewSet):
     def create(self, request):
         s = RegisterSerializer(data=request.data, context={"request": request})
         s.is_valid(raise_exception=True)
-        s.save()
+        user = s.save()
+        if user.license_number:
+            return success("Account created. Sign in with your license "
+                           "number.", s.data, status=201)
         return success("Account created. You can now sign in.", s.data, status=201)
 
 

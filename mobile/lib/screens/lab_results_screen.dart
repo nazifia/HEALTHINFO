@@ -128,6 +128,7 @@ class _Card extends StatelessWidget {
     final sus = '${row['susceptibility'] ?? ''}'.trim();
     final test = '${row['lab_test_name'] ?? ''}'.trim();
     final value = '${row['value'] ?? ''}'.trim();
+    final age = '${row['patient_age'] ?? row['patient_age_group'] ?? ''}'.trim();
     final title = test.isNotEmpty
         ? test
         : (organism.isNotEmpty ? organism : 'Result #${row['id']}');
@@ -173,6 +174,10 @@ class _Card extends StatelessWidget {
               style: const TextStyle(
                   color: EnhancedTheme.accentOrange, fontWeight: FontWeight.w600, fontSize: 13),
             ),
+          ],
+          if (age.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text('Age $age', style: TextStyle(color: context.subLabelColor, fontSize: 13)),
           ],
           const SizedBox(height: 8),
           RegionEditChip(

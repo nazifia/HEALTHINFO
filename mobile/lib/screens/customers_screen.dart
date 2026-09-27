@@ -518,3 +518,110 @@ class _CustomerFormState extends State<_CustomerForm> {
     );
   }
 }
+
+/// Wallet ledger — GET /api/wallet-transactions/.
+///
+/// Every wallet movement across all customers: top-ups, deductions and the
+/// sales that spent it. Written by those actions, so read-only here.
+class WalletLedgerScreen extends StatelessWidget {
+  const WalletLedgerScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ReportListScreen(
+      path: '/api/wallet-transactions/',
+      fabLabel: '',
+      showFab: false,
+      emptyIcon: Icons.account_balance_wallet_outlined,
+      emptyTitle: 'No wallet movements',
+      emptyMessage: 'Top-ups and wallet sales appear here.',
+      savedMessage: '',
+      filters: const [
+        ReportFilter(param: 'txn_type', anyLabel: 'Any kind', options: {
+          'topup': 'Top-up',
+          'deduct': 'Deduction',
+          'purchase': 'Purchase',
+        }),
+      ],
+      card: (row, reload, edit) => _LedgerRow(
+        title: '${row['customer_name'] ?? '—'}',
+        subtitle: '${row['txn_type']}'
+            '${'${row['method'] ?? ''}'.isEmpty ? '' : ' · ${row['method']}'}'
+            ' · ${'${row['created_at']}'.split('T').first}'
+            '${'${row['note'] ?? ''}'.isEmpty ? '' : ' · ${row['note']}'}',
+        amount: row['txn_type'] == 'topup'
+            ? money(row['amount'])
+            : '−${money(row['amount'])}',
+        color: row['txn_type'] == 'topup'
+            ? EnhancedTheme.successGreen
+            : EnhancedTheme.errorRed,
+      ),
+      form: (_) => const SizedBox.shrink(),
+    );
+  }
+}
+
+/// Debtors — GET /api/customers/debtors/.
+///
+/// Who owes the counter money, largest first. Debt is settled from the
+/// customer's own wallet, so this list is the reading, not a place to act.
+class DebtorsScreen extends StatelessWidget {
+  const DebtorsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ReportListScreen(
+      path: '/api/customers/debtors/',
+      fabLabel: '',
+      showFab: false,
+      emptyIcon: Icons.money_off_outlined,
+      emptyTitle: 'Nobody owes',
+      emptyMessage: 'Customers with outstanding debt appear here.',
+      savedMessage: '',
+      card: (row, reload, edit) => _LedgerRow(
+        title: '${row['name'] ?? '—'}',
+        subtitle: '${row['phone'] ?? ''}',
+        amount: money(row['outstanding_debt']),
+        color: EnhancedTheme.errorRed,
+      ),
+      form: (_) => const SizedBox.shrink(),
+    );
+  }
+}
+
+class _LedgerRow extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final String amount;
+  final Color color;
+  const _LedgerRow(
+      {required this.title,
+      required this.subtitle,
+      required this.amount,
+      required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassCard(
+      borderRadius: 16,
+      padding: const EdgeInsets.all(14),
+      child: Row(children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title,
+                style: TextStyle(
+                    color: context.labelColor,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15)),
+            const SizedBox(height: 4),
+            Text(subtitle,
+                style: TextStyle(color: context.hintColor, fontSize: 13)),
+          ]),
+        ),
+        Text(amount,
+            style: TextStyle(
+                color: color, fontWeight: FontWeight.w800, fontSize: 15)),
+      ]),
+    );
+  }
+}
