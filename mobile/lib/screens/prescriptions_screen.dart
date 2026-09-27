@@ -263,6 +263,7 @@ class _RxFormState extends State<_RxForm> {
   final _doctor = TextEditingController();
   final _lines = <RxLineDraft>[];
   Map<String, dynamic>? _customer;
+  late Map<String, dynamic>? _patient = widget.patient;
   bool _saving = false;
   String? _error;
 
@@ -297,7 +298,27 @@ class _RxFormState extends State<_RxForm> {
     if (row == null) return;
     setState(() {
       _customer = row;
+      _patient = null;
       _name.text = '${row['name']}';
+      _phone.text = '${row['phone'] ?? ''}';
+    });
+  }
+
+  /// The facility's patient register, so the script lands in their history.
+  Future<void> _pickPatient() async {
+    final row = await pickRow(
+      context,
+      path: '/api/patients/',
+      title: 'Which patient?',
+      hint: 'Name, hospital number or phone…',
+      label: (r) => '${r['full_name']}',
+      subtitle: (r) => '${r['hospital_number'] ?? ''} · ${r['phone'] ?? ''}',
+    );
+    if (row == null) return;
+    setState(() {
+      _patient = row;
+      _customer = null;
+      _name.text = '${row['full_name'] ?? ''}';
       _phone.text = '${row['phone'] ?? ''}';
     });
   }
@@ -338,7 +359,7 @@ class _RxFormState extends State<_RxForm> {
           customerPhone: _phone.text,
           lines: _lines,
           customerId: _customer?['id'] as int?,
-          patientId: widget.patient?['id'] as int?,
+          patientId: _patient?['id'] as int?,
           doctorName: _doctor.text,
           diagnosis: _diagnosis.text,
         ),
@@ -370,16 +391,18 @@ class _RxFormState extends State<_RxForm> {
               decoration: InputDecoration(
                 labelText: 'Patient name',
                 hintText: 'Walk-in',
-                helperText: patient == null
+                helperText: _patient == null
                     ? null
-                    : 'Filed against ${patient['hospital_number']}',
+                    : 'Filed against ${_patient!['hospital_number']}',
               ),
             ),
           ),
-          // Finding a counter customer is how a walk-in gets a name on the
-          // script; a patient's record already carries one.
-          if (patient == null)
-            TextButton(onPressed: _pickCustomer, child: const Text('Find')),
+          // A counter customer or a registered patient puts a name on the
+          // script; writing from a patient's record already carries one.
+          if (patient == null) ...[
+            TextButton(onPressed: _pickCustomer, child: const Text('Customer')),
+            TextButton(onPressed: _pickPatient, child: const Text('Patient')),
+          ],
         ]),
         const SizedBox(height: 12),
         TextField(
