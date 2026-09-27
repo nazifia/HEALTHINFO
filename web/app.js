@@ -245,12 +245,10 @@ const RESOURCES = {
   'prescriptions':     { title: 'Drug Orders',        group: 'Clinical', report: true, filters: [SEX_FILTER], ...ORDER_SHEET,
                           actions: [{ name: 'cancel', label: 'Cancel prescription', danger: true,
                                       when: ['prescribed', 'partially_dispensed'] }] },
-  // ``inline``: the admin moves a price, a reorder level or the counted stock
-  // on the list itself; the API refuses anyone else the PATCH.
+  // ``inline``: the admin moves a price or a reorder level on the list
+  // itself; the API refuses anyone else the PATCH.
   'pharmacy-items':         { title: 'Stock Items',     group: 'Pharmacy', path: 'pharmacy/items',           roles: 'admin', search: true,
-                              inline: ['quantity_on_hand', 'unit_price', 'cost_price', 'reorder_level'],
-                              // Markup prices a new item once; a counted total corrects an existing one.
-                              hideNew: ['set_stock'], hideEdit: ['markup'],
+                              inline: ['unit_price', 'cost_price', 'reorder_level'],
                               actions: [{ name: 'receive', label: 'Receive stock', ask: 'quantity,batch_number' }] },
   // A batch's details (number, expiry, cost, supplier) are edited in place;
   // its quantity is not — stock arrives through the item's receive and
@@ -2527,8 +2525,7 @@ async function viewForm(slug, id, query) {
     }
     const { hints = {}, labels = {} } = res;
     const parts = Object.fromEntries(Object.entries(fields)
-      .filter(([name, f]) => !f.read_only && !res.hide?.includes(name)
-        && !(id ? res.hideEdit : res.hideNew)?.includes(name))
+      .filter(([name, f]) => !f.read_only && !res.hide?.includes(name))
       .map(([name, f]) => [name, fieldHtml(name,
         { ...f, label: labels[name] || f.label, help_text: f.help_text || hints[name] }, current[name])]));
     if (parts.accept_terms && terms) {
@@ -2601,6 +2598,16 @@ async function viewForm(slug, id, query) {
     wireItemField($('#f'), current.item);
     wireRelFields($('#f'), current);
     wireChoiceFields($('#f'));
+    // The sell price follows markup and cost as they are typed — the same
+    // figure the server would set from them.
+    if (slug === 'pharmacy-items') {
+      const f = $('#f');
+      f.addEventListener('input', (e) => {
+        if (!['markup', 'cost_price'].includes(e.target.name) || !f.markup || !f.unit_price) return;
+        const cost = parseFloat(f.cost_price.value), markup = parseFloat(f.markup.value);
+        if (Number.isFinite(cost) && markup > 0) f.unit_price.value = (cost * (100 + markup) / 100).toFixed(2);
+      });
+    }
     wireFormRules($('#f'), res.rules);
     if (isUserRes(slug)) {
       // Only a licensed cadre signs the terms, and only once: a seat already
@@ -4304,7 +4311,7 @@ async function viewSell() {
       e.preventDefault();
       const code = e.target.code.value.trim();
       if (!code) return;
-      let hit = items.find((i) => i.barcode === code || i.gtin === code);
+      let hit = items.find((i) => i.barcode === code);
       if (!hit) {
         hit = await Api.get('/api/pharmacy/items/barcode/', { code }).catch(() => null);
         if (hit) items.push(hit);
@@ -5120,8 +5127,6 @@ matchMedia('(max-width: 760px)').addEventListener('change', () => setNav(false))
 $('#sidebar').addEventListener('click', (e) => { if (e.target.closest('a')) setNav(false); });
 // Click-to-edit cells on a list (``inline`` resources): the cell swaps to a
 // number box, Enter/blur PATCHes just that field, Escape puts the old value back.
-// A read-only figure is written through the field that sets it.
-const INLINE_WRITE_AS = { quantity_on_hand: 'set_stock' };
 $('#main').addEventListener('click', (e) => {
   const td = e.target.closest('td.inline-edit');
   if (!td) return;
@@ -5142,7 +5147,7 @@ $('#main').addEventListener('click', (e) => {
     const val = input.value.trim();
     if (!save || val === (old === '—' ? '' : old)) { td.textContent = old; return; }
     try {
-      const r = await Api.patch(rdetail(slug, `${id}/`), { [INLINE_WRITE_AS[field] || field]: val === '' ? null : val });
+      const r = await Api.patch(rdetail(slug, `${id}/`), { [field]: val === '' ? null : val });
       td.textContent = fmtVal(r[field]);
       toast('Saved.');
     } catch (err) { td.textContent = old; toast(err.message, true); }

@@ -63,7 +63,7 @@ def counter(db_clean):
                                      tenant=tenant, role=Role.PHARMACIST,
                                      username="counterstaff")
     item = StockItem.all_objects.create(
-        tenant=tenant, name="Amoxicillin 250mg", sku="AMOX250", unit="capsule",
+        tenant=tenant, name="Amoxicillin 250mg", unit="capsule",
         cost_price=Decimal("10.00"), unit_price=Decimal("25.00"),
         store=Store.RETAIL, reorder_level=10,
     )
@@ -228,7 +228,7 @@ def test_an_uncounted_line_is_left_alone(counter):
 def test_transfer_moves_units_between_the_two_stores(counter):
     tenant, retail = counter["tenant"], counter["item"]
     wholesale = StockItem.all_objects.create(
-        tenant=tenant, name="Amoxicillin 250mg (pack)", sku="AMOX250W",
+        tenant=tenant, name="Amoxicillin 250mg (pack)",
         unit="pack", cost_price=Decimal("10.00"), unit_price=Decimal("22.00"),
         store=Store.WHOLESALE,
     )
@@ -252,7 +252,7 @@ def test_transfer_moves_units_between_the_two_stores(counter):
 def test_a_transfer_the_shelf_cannot_cover_moves_nothing(counter):
     tenant, retail = counter["tenant"], counter["item"]
     wholesale = StockItem.all_objects.create(
-        tenant=tenant, name="Amoxicillin 250mg (pack)", sku="AMOX250W2",
+        tenant=tenant, name="Amoxicillin 250mg (pack)",
         store=Store.WHOLESALE, cost_price=Decimal("10.00"),
     )
     receive_stock(wholesale, 5, batch_number="AMW-2")
@@ -311,7 +311,7 @@ def test_profit_flags_lines_that_carry_no_cost(counter):
     """An uncosted line is left out of cost of goods, never treated as free."""
     tenant = counter["tenant"]
     free = StockItem.all_objects.create(
-        tenant=tenant, name="Sample sachet", sku="SAMP1",
+        tenant=tenant, name="Sample sachet",
         cost_price=Decimal("0.00"), unit_price=Decimal("50.00"),
     )
     receive_stock(free, 10, batch_number="S-1", cost_price=Decimal("0.00"))

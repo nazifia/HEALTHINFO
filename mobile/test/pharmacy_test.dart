@@ -399,4 +399,24 @@ void main() {
     myHmoId = null;
     myGrants = const {};
   });
+
+  test('a picked prescription puts its drugs first and names the unstocked', () {
+    final items = [
+      {'id': 1, 'name': 'IV Ceftriaxone 1g'},
+      {'id': 2, 'name': 'Amlodipine 5mg tabs'},
+    ];
+    final order = prescribedFirst(items,
+        {'kind': 'order', 'medication_name': 'Amlodipine'});
+    expect([for (final i in order.items) i['id']], [2, 1]);
+    expect(order.unstocked, isEmpty);
+
+    final script = prescribedFirst(items, {
+      'kind': 'script',
+      'lines': [{'name': 'Amitriptyline'}, {'name': 'ceftriaxone'}],
+    });
+    expect([for (final i in script.items) i['id']], [1, 2]);
+    expect(script.unstocked, ['Amitriptyline']);
+
+    expect(prescribedFirst(items, null).unstocked, isEmpty);
+  });
 }

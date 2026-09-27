@@ -433,7 +433,7 @@ def test_a_pharmacy_fills_another_facilitys_prescription_on_the_number(db_clean)
         reporter=doctor, notes="take after food",
     )
     item = StockItem.all_objects.create(
-        tenant=pharm, name="Amoxicillin 250mg", sku="AMOX250", unit="capsule",
+        tenant=pharm, name="Amoxicillin 250mg", unit="capsule",
         cost_price=Decimal("10.00"), unit_price=Decimal("25.00"),
         store=Store.RETAIL, medication=drug,
     )
@@ -521,7 +521,7 @@ def test_a_portal_prescription_is_filled_anywhere(db_clean):
     stock = {}
     for drug, sku, price in ((amox, "AMOX", "25.00"), (para, "PARA", "5.00")):
         item = StockItem.all_objects.create(
-            tenant=pharm, name=drug.generic_name, sku=sku, unit="tab",
+            tenant=pharm, name=drug.generic_name, unit="tab",
             cost_price=Decimal("1.00"), unit_price=Decimal(price),
             store=Store.RETAIL, medication=drug,
         )
@@ -651,7 +651,7 @@ def test_a_counter_script_written_at_one_pharmacy_fills_at_another(db_clean):
 
     drug = Medication.objects.create(generic_name="Amoxicillin")
     item = StockItem.all_objects.create(
-        tenant=other, name="Amoxicillin 250mg", sku="AMOX250", unit="capsule",
+        tenant=other, name="Amoxicillin 250mg", unit="capsule",
         cost_price=Decimal("10.00"), unit_price=Decimal("25.00"),
         store=Store.RETAIL, medication=drug,
     )
@@ -694,7 +694,7 @@ def test_a_counter_script_written_at_one_pharmacy_fills_at_another(db_clean):
 
     # A misspelt label on this shelf still ticks the line it was written for.
     typo = StockItem.all_objects.create(
-        tenant=other, name="Paracetemol", sku="PCM", unit="tablet",
+        tenant=other, name="Paracetemol", unit="tablet",
         cost_price=Decimal("1.00"), unit_price=Decimal("5.00"), store=Store.RETAIL,
     )
     receive_stock(typo, 50, batch_number="PC-1", cost_price=Decimal("1.00"))
@@ -718,7 +718,7 @@ def test_a_sale_off_a_counter_script_ticks_its_lines(db_clean):
     pharmacist = User.objects.create_user(phone="08030000701", password="x",
                                           tenant=a, role=Role.PHARMACIST)
     item = StockItem.all_objects.create(
-        tenant=a, name="Paracetamol 500mg", sku="PCM", unit="tab",
+        tenant=a, name="Paracetamol 500mg", unit="tab",
         cost_price=Decimal("1.00"), unit_price=Decimal("2.00"), store=Store.RETAIL,
     )
     receive_stock(item, 50, batch_number="P-1", cost_price=Decimal("1.00"))

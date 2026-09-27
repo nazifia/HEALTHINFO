@@ -70,7 +70,7 @@ def pharmacy(db_clean):
                                      tenant=tenant, role=Role.PHARMACIST,
                                      username="staff")
     item = StockItem.all_objects.create(
-        tenant=tenant, name="Paracetamol 500mg", sku="PARA500",
+        tenant=tenant, name="Paracetamol 500mg",
         unit="tablet", cost_price=Decimal("5.00"), unit_price=Decimal("12.50"),
         reorder_level=20,
     )
@@ -984,11 +984,11 @@ def test_per_drug_rules_price_each_line_and_zero_excludes(pharmacy):
     nothing for vitamins, is billed line by line - not 80% of the whole bill."""
     tenant, item = pharmacy["tenant"], pharmacy["item"]
     vitamin = StockItem.all_objects.create(
-        tenant=tenant, name="Vitamin C", sku="VITC", unit="tablet",
+        tenant=tenant, name="Vitamin C", unit="tablet",
         cost_price=Decimal("40.00"), unit_price=Decimal("100.00"),
     )
     branded = StockItem.all_objects.create(
-        tenant=tenant, name="Panadol Extra", sku="PANEX", unit="tablet",
+        tenant=tenant, name="Panadol Extra", unit="tablet",
         cost_price=Decimal("30.00"), unit_price=Decimal("50.00"),
     )
     receive_stock(vitamin, 10, batch_number="V-1")
@@ -1184,7 +1184,7 @@ def test_the_insurer_answers_each_ordered_medication_on_its_own(pharmacy):
     other, and the counter dispenses exactly what came back cleared."""
     tenant, item = pharmacy["tenant"], pharmacy["item"]
     vitamin = StockItem.all_objects.create(
-        tenant=tenant, name="Vitamin C", sku="VITC", unit="tablet",
+        tenant=tenant, name="Vitamin C", unit="tablet",
         cost_price=Decimal("40.00"), unit_price=Decimal("100.00"),
     )
     receive_stock(vitamin, 20, batch_number="V-1", cost_price=Decimal("40.00"))
@@ -1540,27 +1540,21 @@ def test_item_form_books_stock_in(pharmacy):
     assert r.json()["quantity_on_hand"] == 50
 
 
-def test_item_edit_sets_the_counted_stock(pharmacy):
-    """An edit can correct the shelf to a count, down across batches and back
-    up, each step an adjustment in the ledger."""
+def test_item_edit_reprices_from_a_changed_markup_or_cost(pharmacy):
+    """An edit that moves the markup or the cost re-prices from cost; one that
+    also sets the sell price keeps that price."""
     admin = _client(pharmacy["admin"], pharmacy["tenant"])
-    item_id = admin.post("/api/pharmacy/items/",
-                         {"name": "Zinc", "add_stock": 30}).json()["id"]
-    admin.post(f"/api/pharmacy/items/{item_id}/receive/",
-               {"quantity": 20, "batch_number": "B2"})
-    r = admin.patch(f"/api/pharmacy/items/{item_id}/", {"set_stock": 12})
+    item_id = admin.post("/api/pharmacy/items/", {
+        "name": "Zinc", "cost_price": "100", "markup": "20"}).json()["id"]
+    url = f"/api/pharmacy/items/{item_id}/"
+    assert admin.get(url).json()["unit_price"] == "120.00"
+    r = admin.patch(url, {"markup": "50"})
     assert r.status_code == 200, r.json()
-    assert r.json()["quantity_on_hand"] == 12
-    r = admin.patch(f"/api/pharmacy/items/{item_id}/", {"set_stock": 15})
-    assert r.json()["quantity_on_hand"] == 15
-    assert StockMovement.all_objects.filter(
-        item_id=item_id, kind=StockMovement.Kind.ADJUSTMENT).count() >= 2
-    r = admin.patch(f"/api/pharmacy/items/{item_id}/",
-                    {"set_stock": 5, "add_stock": 5})
-    assert r.status_code == 400
-    staff = _client(pharmacy["staff"], pharmacy["tenant"])
-    assert staff.patch(f"/api/pharmacy/items/{item_id}/",
-                       {"set_stock": 0}).status_code == 403
+    assert r.json()["unit_price"] == "150.00"
+    assert admin.patch(url, {"cost_price": "200"}).json()["unit_price"] == "300.00"
+    assert admin.patch(url, {"markup": "10", "unit_price": "999"}).json()["unit_price"] == "999.00"
+    assert admin.patch(url, {"reorder_level": 5}).json()["unit_price"] == "999.00"
+    assert "sku" not in r.json() and "gtin" not in r.json()
 
 
 def test_receipt_as_escpos_bytes_for_a_thermal_printer(pharmacy):

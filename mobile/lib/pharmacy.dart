@@ -550,6 +550,40 @@ String fillableLabel(Map<String, dynamic> o) {
   ].where((p) => p.trim().isNotEmpty).join(' · ');
 }
 
+/// The item picker's order once a prescription is picked: stock items that
+/// match a drug it asks for come first, and a drug with no matching item is
+/// returned in `unstocked` so the counter sees why it is not on the list.
+///
+/// ponytail: matched by name (item name contains the drug, or its linked
+/// medication is the drug); tighten to ids if brand names start colliding.
+({List<Map<String, dynamic>> items, List<String> unstocked}) prescribedFirst(
+    List<Map<String, dynamic>> items, Map<String, dynamic>? picked) {
+  if (picked == null) return (items: items, unstocked: const []);
+  final names = [
+    if (picked['kind'] == 'script')
+      for (final l in (picked['lines'] ?? []) as List) '${(l as Map)['name'] ?? ''}'
+    else
+      '${picked['medication_name'] ?? ''}',
+  ].map((n) => n.trim()).where((n) => n.isNotEmpty).toList();
+  bool hit(Map<String, dynamic> i, String n) {
+    final drug = n.toLowerCase();
+    return '${i['name'] ?? ''}'.toLowerCase().contains(drug) ||
+        '${i['medication_name'] ?? ''}'.toLowerCase() == drug;
+  }
+
+  final first = [
+    for (final i in items)
+      if (names.any((n) => hit(i, n))) i,
+  ];
+  return (
+    items: [...first, for (final i in items) if (!first.contains(i)) i],
+    unstocked: [
+      for (final n in names)
+        if (!items.any((i) => hit(i, n))) n,
+    ],
+  );
+}
+
 /// The sale fields that name what a picked row fills: `rx` for a counter
 /// script, `prescription` plus the patient's number for a drug order.
 ({int? rxId, int? prescriptionId}) fillFor(Map<String, dynamic>? picked) {

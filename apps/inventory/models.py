@@ -59,6 +59,11 @@ class Supplier(TenantOwnedModel):
         return self.name
 
 
+def marked_up(cost, markup):
+    """Cost plus a percent markup — the sell price a markup implies."""
+    return _money(Decimal(cost) * (Decimal("100") + Decimal(markup)) / Decimal("100"))
+
+
 class StockItem(TenantOwnedModel):
     """Something the pharmacy holds and sells - a drug or a consumable.
 
@@ -98,13 +103,6 @@ class StockItem(TenantOwnedModel):
         SWEET = "sweet"
         OTHER = "other"
 
-    class BarcodeType(models.TextChoices):
-        UPC = "UPC"
-        EAN13 = "EAN13", "EAN-13"
-        CODE128 = "CODE128", "Code 128"
-        QR = "QR", "QR code"
-        OTHER = "OTHER", "Other"
-
     medication = models.ForeignKey(
         "catalog.Medication", null=True, blank=True, on_delete=models.SET_NULL,
         related_name="stock_items",
@@ -116,7 +114,6 @@ class StockItem(TenantOwnedModel):
     )
     name = models.CharField(max_length=255)
     brand = models.CharField(max_length=200, blank=True)
-    sku = models.CharField(max_length=50, blank=True)
     form = models.CharField(max_length=20, choices=Form.choices, default=Form.TABLET)
     # What one sold unit is ("tablet", "bottle of 100ml"). Prices are per unit.
     unit = models.CharField(max_length=50, default="unit")
@@ -125,18 +122,14 @@ class StockItem(TenantOwnedModel):
     )
     cost_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     unit_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    # Percent added to cost to reach the shelf price. Applied once, when the
-    # row is created — after that the price is whatever it was last set to,
-    # because a repriced item must not silently move when its cost does.
+    # Percent added to cost to reach the shelf price. Applied on create when
+    # no price is given, and on an edit that changes the markup or the cost
+    # (see StockItemSerializer.update).
     markup = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     # Stock at or below this is "low" - the reorder signal the admin dashboard
     # and the low-stock endpoint read.
     reorder_level = models.PositiveIntegerField(default=0)
     barcode = models.CharField(max_length=100, blank=True, db_index=True)
-    barcode_type = models.CharField(
-        max_length=20, choices=BarcodeType.choices, blank=True
-    )
-    gtin = models.CharField(max_length=50, blank=True)
     prescription_only = models.BooleanField(default=False)
     # A poison/controlled drug: what a pharmacy keeps a register for and
     # what the state counts. Flagged on the shelf row rather than the
@@ -151,14 +144,6 @@ class StockItem(TenantOwnedModel):
     class Meta:
         db_table = "pharmacy_stockitem"
         ordering = ("name", "id")
-        constraints = [
-            # An SKU is unique per pharmacy when there is one; items with no SKU
-            # are left alone (blank is not a duplicate of blank).
-            models.UniqueConstraint(
-                fields=["tenant", "sku"], condition=~models.Q(sku=""),
-                name="pharmacy_stockitem_unique_sku_per_tenant",
-            )
-        ]
         indexes = [
             models.Index(fields=["tenant", "name"]),
             models.Index(fields=["tenant", "is_active"]),
@@ -170,11 +155,7 @@ class StockItem(TenantOwnedModel):
 
     def save(self, *args, **kwargs):
         if self._state.adding and self.markup and not self.unit_price:
-            self.unit_price = _money(
-                Decimal(self.cost_price)
-                * (Decimal("100") + Decimal(self.markup))
-                / Decimal("100")
-            )
+            self.unit_price = marked_up(self.cost_price, self.markup)
         super().save(*args, **kwargs)
 
     def _batches(self):
@@ -386,42 +367,6 @@ def adjust_stock(batch, new_quantity, *, reason, user=None,
                 kind=kind, quantity=delta, user=user, reason=reason,
             )
     return locked
-
-
-def set_stock_level(item, counted, *, reason, user=None):
-    """Bring an item's shelf to a counted total, logging each batch it moves.
-
-    A shortfall comes off the batches that would leave first — expired ones
-    before sellable ones, since those are what went missing or got binned.
-    A surplus lands on the newest batch, or a fresh one if the item never had
-    stock. Every change goes through adjust_stock, so the ledger still
-    explains the figure.
-    """
-    if counted < 0:
-        raise ValueError("Quantity cannot be negative.")
-    with transaction.atomic():
-        batches = list(
-            StockBatch.all_objects.select_for_update().filter(item=item)
-            .order_by(models.F("expiry_date").asc(nulls_last=True), "id")
-        )
-        delta = counted - sum(b.quantity for b in batches)
-        if delta > 0:
-            batch = max(batches, key=lambda b: b.id, default=None)
-            if batch is None:
-                batch = StockBatch.all_objects.create(
-                    tenant=item.tenant, item=item,
-                    batch_number=f"COUNT-{timezone.now():%Y%m%d}",
-                    quantity=0, quantity_received=0,
-                    cost_price=item.cost_price,
-                )
-            adjust_stock(batch, batch.quantity + delta, reason=reason, user=user)
-        for batch in batches:
-            if delta >= 0:
-                break
-            take = min(batch.quantity, -delta)
-            if take:
-                adjust_stock(batch, batch.quantity - take, reason=reason, user=user)
-                delta += take
 
 
 def take_stock(item, quantity, *, kind, reason, user=None, sale=None):

@@ -99,7 +99,7 @@ class StockItemViewSet(PharmacyViewSet):
     permission_classes = [IsTenantMember, IsPharmacyStaff, IsPharmacyAdminOrReadOnly]
     filterset_fields = ("form", "store", "branch", "is_active",
                         "prescription_only", "is_controlled", "medication")
-    search_fields = ("name", "brand", "sku", "barcode", "gtin")
+    search_fields = ("name", "brand", "barcode")
     ordering_fields = ("name", "unit_price", "created_at")
 
     def get_queryset(self):
@@ -144,8 +144,6 @@ class StockItemViewSet(PharmacyViewSet):
         if not code:
             raise ValidationError({"code": "Scan or type a barcode to look up."})
         item = self.get_queryset().filter(barcode=code).first()
-        if item is None:
-            item = self.get_queryset().filter(gtin=code).first()
         if item is None:
             return Response({"detail": "No item carries that code."}, status=404)
         return Response(self.get_serializer(item).data)

@@ -21,11 +21,11 @@ class SupplierAdmin(admin.ModelAdmin):
 
 @admin.register(StockItem)
 class StockItemAdmin(admin.ModelAdmin):
-    list_display = ("name", "tenant", "sku", "form", "store", "unit_price",
+    list_display = ("name", "tenant", "form", "store", "unit_price",
                     "reorder_level", "quantity_on_hand", "is_active")
     list_filter = ("tenant", "form", "store", "is_active", "prescription_only",
                    "is_controlled")
-    search_fields = ("name", "brand", "sku", "barcode")
+    search_fields = ("name", "brand", "barcode")
     raw_id_fields = ("medication", "branch")
 
 

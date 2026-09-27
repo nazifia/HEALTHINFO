@@ -177,9 +177,11 @@ class _PickerSheetState<T> extends State<_PickerSheet<T>> {
                       itemCount: matches.length,
                       itemBuilder: (_, i) {
                         final item = matches[i];
-                        final picked = item.value == widget.selected;
+                        final picked =
+                            item.enabled && item.value == widget.selected;
                         return ListTile(
                           dense: true,
+                          enabled: item.enabled,
                           selected: picked,
                           title: DefaultTextStyle.merge(
                             style: Theme.of(context).textTheme.bodyMedium,

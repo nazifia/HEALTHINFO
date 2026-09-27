@@ -35,7 +35,7 @@ def country(db):
     sale(kan, Decimal("250.00"))
 
     item = StockItem.all_objects.create(
-        tenant=lag, name="Paracetamol 500mg", sku="PARA500", unit="tablet",
+        tenant=lag, name="Paracetamol 500mg", unit="tablet",
         cost_price=Decimal("100.00"), unit_price=Decimal("500.00"),
     )
     line = SaleItem.all_objects.create(

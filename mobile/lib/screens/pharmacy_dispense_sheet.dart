@@ -124,7 +124,7 @@ class _DispenseSheetState extends State<DispenseSheet> {
     code = code.trim();
     if (code.isEmpty) return;
     var hit = _items.firstWhere(
-        (i) => '${i['barcode']}' == code || '${i['gtin']}' == code,
+        (i) => '${i['barcode']}' == code,
         orElse: () => const <String, dynamic>{});
     if (hit.isEmpty) {
       try {
@@ -296,6 +296,7 @@ class _DispenseSheetState extends State<DispenseSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final shelf = prescribedFirst(_items, _filling);
     return ReportFormSheet(
       title: 'Dispense',
       saving: _saving,
@@ -382,11 +383,18 @@ class _DispenseSheetState extends State<DispenseSheet> {
           decoration: const InputDecoration(labelText: 'Item'),
           items: [
             const DropdownMenuItem(value: null, child: Text('— select —')),
-            for (final i in _items)
+            for (final i in shelf.items)
               DropdownMenuItem(
                 value: i['id'] as int,
                 child: Text('${i['name']} · ${money(i['unit_price'])}'
                     ' (${units(i['quantity_on_hand'])} left)'),
+              ),
+            // Prescribed but not on this pharmacy's list: shown, not sellable.
+            for (final n in shelf.unstocked)
+              DropdownMenuItem(
+                value: null,
+                enabled: false,
+                child: Text('$n — not stocked'),
               ),
           ],
           onChanged: (v) => setState(() => _itemId = v),

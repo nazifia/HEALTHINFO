@@ -164,13 +164,11 @@ class _ItemCard extends StatelessWidget {
 
   /// Tap-to-edit one number on the card — PATCH /api/pharmacy/items/{id}/
   /// with just that field. Admin only (the API refuses anyone else).
-  /// [sendAs] writes a read-only figure through the field that sets it.
   Future<void> _editField(
     BuildContext context,
     String field,
     String label, {
     bool integer = false,
-    String? sendAs,
   }) async {
     final controller = TextEditingController(text: '${row[field] ?? ''}');
     final value = await showDialog<String>(
@@ -198,7 +196,7 @@ class _ItemCard extends StatelessWidget {
     controller.dispose();
     if (value == null || value.isEmpty || value == '${row[field]}') return;
     try {
-      await api.patch('/api/pharmacy/items/${row['id']}/', {sendAs ?? field: value});
+      await api.patch('/api/pharmacy/items/${row['id']}/', {field: value});
       reload();
       if (context.mounted) showSuccess(context, '$label saved.');
     } catch (e) {
@@ -260,19 +258,9 @@ class _ItemCard extends StatelessWidget {
           Wrap(
             spacing: 16,
             children: [
-              _editable(
-                context,
-                Text(
-                  '${units(row['quantity_on_hand'])} ${row['unit']}(s) on hand',
-                  style: TextStyle(color: context.hintColor, fontSize: 13),
-                ),
-                () => _editField(
-                  context,
-                  'quantity_on_hand',
-                  'Counted stock',
-                  integer: true,
-                  sendAs: 'set_stock',
-                ),
+              Text(
+                '${units(row['quantity_on_hand'])} ${row['unit']}(s) on hand',
+                style: TextStyle(color: context.hintColor, fontSize: 13),
               ),
               _editable(
                 context,
@@ -775,14 +763,11 @@ class _ItemFormState extends State<_ItemForm> {
   final _cost = TextEditingController(text: '0');
   final _reorder = TextEditingController(text: '0');
   final _addStock = TextEditingController();
-  final _setStock = TextEditingController();
   final _brand = TextEditingController();
-  final _sku = TextEditingController();
   final _barcode = TextEditingController();
   final _markup = TextEditingController();
   List<Map<String, dynamic>> _branches = [];
   int? _branchId;
-  String _barcodeType = '';
   String _form = 'tablet';
   String _store = 'retail';
   bool _prescriptionOnly = false;
@@ -804,9 +789,8 @@ class _ItemFormState extends State<_ItemForm> {
       _cost.text = '${e['cost_price'] ?? 0}';
       _reorder.text = '${e['reorder_level'] ?? 0}';
       _brand.text = '${e['brand'] ?? ''}';
-      _sku.text = '${e['sku'] ?? ''}';
       _barcode.text = '${e['barcode'] ?? ''}';
-      _barcodeType = '${e['barcode_type'] ?? ''}';
+      _markup.text = '${e['markup'] ?? ''}';
       _branchId = e['branch'] as int?;
       _form = '${e['form'] ?? 'tablet'}';
       _store = '${e['store'] ?? 'retail'}';
@@ -815,6 +799,18 @@ class _ItemFormState extends State<_ItemForm> {
       _isControlled = e['is_controlled'] == true;
     }
     _loadBranches();
+    _markup.addListener(_reprice);
+    _cost.addListener(_reprice);
+  }
+
+  /// The sell price follows markup and cost as they are typed — the same
+  /// figure the server would set from them.
+  void _reprice() {
+    final cost = double.tryParse(_cost.text.trim());
+    final markup = double.tryParse(_markup.text.trim());
+    if (cost == null || markup == null || markup <= 0) return;
+    final price = (cost * (100 + markup) / 100).toStringAsFixed(2);
+    if (_price.text != price) _price.text = price;
   }
 
   /// Branch is optional (blank means tenant-wide), so a failed list must not
@@ -836,9 +832,7 @@ class _ItemFormState extends State<_ItemForm> {
     _cost.dispose();
     _reorder.dispose();
     _addStock.dispose();
-    _setStock.dispose();
     _brand.dispose();
-    _sku.dispose();
     _barcode.dispose();
     _markup.dispose();
     super.dispose();
@@ -849,12 +843,7 @@ class _ItemFormState extends State<_ItemForm> {
       setState(() => _error = 'Name the item.');
       return;
     }
-    final counted = int.tryParse(_setStock.text.trim());
     final added = int.tryParse(_addStock.text.trim()) ?? 0;
-    if (counted != null && added > 0) {
-      setState(() => _error = 'Add stock or set the count, not both.');
-      return;
-    }
     setState(() {
       _saving = true;
       _error = null;
@@ -863,14 +852,11 @@ class _ItemFormState extends State<_ItemForm> {
       final body = {
         'name': _name.text.trim(),
         'brand': _brand.text.trim(),
-        'sku': _sku.text.trim(),
         'barcode': _barcode.text.trim(),
-        'barcode_type': _barcodeType,
         'branch': _branchId,
-        // Applied by the server once, on create, and only while the sell
-        // price is 0 — so it is not offered on an edit.
-        if (!_isEdit && _markup.text.trim().isNotEmpty)
-          'markup': _markup.text.trim(),
+        // On create it prices the item only while the sell price is 0; on
+        // an edit a changed markup or cost re-prices it from cost.
+        if (_markup.text.trim().isNotEmpty) 'markup': _markup.text.trim(),
         'form': _form,
         'store': _store,
         'is_active': _isActive,
@@ -879,7 +865,6 @@ class _ItemFormState extends State<_ItemForm> {
         'cost_price': _cost.text.trim(),
         'reorder_level': int.tryParse(_reorder.text.trim()) ?? 0,
         'add_stock': added,
-        if (_isEdit && counted != null) 'set_stock': counted,
         'prescription_only': _prescriptionOnly,
         'is_controlled': _isControlled,
       };
@@ -915,37 +900,9 @@ class _ItemFormState extends State<_ItemForm> {
           decoration: const InputDecoration(labelText: 'Brand'),
         ),
         const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _sku,
-                decoration: const InputDecoration(labelText: 'SKU'),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: TextField(
-                controller: _barcode,
-                decoration: const InputDecoration(labelText: 'Barcode'),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        SearchableDropdown<String>(
-          initialValue: _barcodeType,
-          isExpanded: true,
-          decoration: const InputDecoration(labelText: 'Barcode type'),
-          items: const [
-            DropdownMenuItem(value: '', child: Text('— none —')),
-            DropdownMenuItem(value: 'UPC', child: Text('UPC')),
-            DropdownMenuItem(value: 'EAN13', child: Text('EAN-13')),
-            DropdownMenuItem(value: 'CODE128', child: Text('Code 128')),
-            DropdownMenuItem(value: 'QR', child: Text('QR code')),
-            DropdownMenuItem(value: 'OTHER', child: Text('Other')),
-          ],
-          onChanged: (v) => setState(() => _barcodeType = v ?? ''),
+        TextField(
+          controller: _barcode,
+          decoration: const InputDecoration(labelText: 'Barcode'),
         ),
         const SizedBox(height: 12),
         SearchableDropdown<int?>(
@@ -1010,17 +967,17 @@ class _ItemFormState extends State<_ItemForm> {
             ),
           ],
         ),
-        if (!_isEdit) ...[
-          const SizedBox(height: 12),
-          TextField(
-            controller: _markup,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Markup (%)',
-              helperText: 'Sets the sell price from cost when sell price is 0.',
-            ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _markup,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            labelText: 'Markup (%)',
+            helperText: _isEdit
+                ? 'Changing markup or cost re-prices from cost.'
+                : 'Sets the sell price from cost when sell price is 0.',
           ),
-        ],
+        ),
         const SizedBox(height: 12),
         Row(
           children: [
@@ -1051,17 +1008,6 @@ class _ItemFormState extends State<_ItemForm> {
                 : 'Units on the shelf now.',
           ),
         ),
-        if (_isEdit) ...[
-          const SizedBox(height: 12),
-          TextField(
-            controller: _setStock,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Counted stock',
-              helperText: 'Sets the quantity on hand to this count. Blank keeps it.',
-            ),
-          ),
-        ],
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           title: const Text('Prescription only'),

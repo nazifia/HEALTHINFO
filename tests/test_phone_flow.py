@@ -37,7 +37,7 @@ def world(db):
     items = {}
     for t in (hosp, pharm):
         items[t.id] = StockItem.all_objects.create(
-            tenant=t, name="Amoxicillin 250mg", sku="AMOX250", unit="capsule",
+            tenant=t, name="Amoxicillin 250mg", unit="capsule",
             cost_price=Decimal("10.00"), unit_price=Decimal("25.00"),
             store=Store.RETAIL, medication=drug,
         )
