@@ -815,6 +815,15 @@ class _FormState extends State<_Form> {
         await api.patch('/api/consultations/${widget.existing!['id']}/', body);
       } else {
         await api.post('/api/consultations/', body);
+        // A new visit goes straight on to the script, filed against the
+        // diagnosis just settled.
+        if (mounted) {
+          await prescribeFor(
+            context,
+            _patient ?? {'id': _patientId, 'full_name': _patientLabel ?? ''},
+            caseReport: caseReportId,
+          );
+        }
       }
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
@@ -846,7 +855,7 @@ class _FormState extends State<_Form> {
       title: _isEdit ? 'Edit consultation' : 'New consultation',
       saving: _saving,
       error: _error,
-      submitLabel: _isEdit ? 'Save changes' : 'Start consultation',
+      submitLabel: _isEdit ? 'Save changes' : 'Prescribe',
       onSubmit: _submit,
       children: [
         PatientPicker(

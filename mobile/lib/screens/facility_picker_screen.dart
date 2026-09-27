@@ -23,11 +23,17 @@ class FacilityPickerScreen extends StatefulWidget {
 
 class _FacilityPickerScreenState extends State<FacilityPickerScreen> {
   late Future<List<dynamic>> _future;
+  // Named in the empty state: "none in Lagos" says what to fix, "none" doesn't.
+  String _state = 'your state';
 
   @override
   void initState() {
     super.initState();
     _future = api.prescribingFacilities();
+    api.me().then((u) {
+      final name = u?['jurisdiction_name'];
+      if (mounted && name != null) setState(() => _state = '$name');
+    });
     // The list is one state's facilities: re-read it when the seat changes
     // what it is working as, the same way every other scoped screen does.
     tenantChanged.addListener(_onTenantChanged);
@@ -113,13 +119,13 @@ class _FacilityPickerScreenState extends State<FacilityPickerScreen> {
                   ),
                 ),
               if (rows.isEmpty)
-                const EmptyState(
+                EmptyState(
                   icon: Icons.apartment_outlined,
                   title: 'No facility open to you yet',
                   message:
-                      'Ask the platform admin to check the state on your '
-                      'account, and that the facility you work with has been '
-                      'approved.',
+                      'No approved facility is placed in $_state. Ask the '
+                      'platform admin to approve the facility you work with '
+                      'and set its local government to one in $_state.',
                   boxed: true,
                 )
               else
