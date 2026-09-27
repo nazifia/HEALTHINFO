@@ -376,19 +376,8 @@ class _Card extends StatelessWidget {
       backgroundColor: Colors.transparent,
       builder: (_) => _CloseSheet(row: row),
     );
-    if (done == true) {
-      reload();
-      // Most visits end with something to take home, so the toast carries the
-      // next step rather than making the clinician find the patient again.
-      if (context.mounted) {
-        showSuccess(context, 'Consultation closed.',
-            action: SnackBarAction(
-              label: 'Prescribe',
-              textColor: Colors.white,
-              onPressed: () => _prescribe(context),
-            ));
-      }
-    }
+    // Closed cards carry their own Prescribe button, so no toast is needed.
+    if (done == true) reload();
   }
 
   /// Write a drug order for this visit's patient. The order carries the case
@@ -647,7 +636,12 @@ class _FormState extends State<_Form> {
   int? _appointmentId;
   // The diagnosis. It is stored on the case report, not on the consultation —
   // the visit links to the case, so filling this in files or updates one.
-  int? _diseaseId;
+  // Typed, with the catalog offered as suggestions: a diagnosis the catalog
+  // does not carry goes through the diagnose action, which keeps the words.
+  final _dx = TextEditingController();
+  final _dxFocus = FocusNode();
+  // What the linked case already says, so an untouched field is not re-filed.
+  String _dxOnFile = '';
   String _severity = 'mild';
   List<Map<String, dynamic>> _diseases = const [];
   // The linked patient's existing cases, so this visit can be added to one
@@ -657,6 +651,24 @@ class _FormState extends State<_Form> {
   String? _error;
 
   bool get _isEdit => widget.existing != null;
+
+  /// The catalog disease the typed diagnosis names exactly, if any.
+  int? get _diseaseId {
+    final t = _dx.text.trim().toLowerCase();
+    return _diseases
+            .where((d) => '${d['name']}'.toLowerCase() == t)
+            .firstOrNull?['id']
+        as int?;
+  }
+
+  /// Show a case's diagnosis in the field: its catalog name, else its words.
+  void _showCase(Map<String, dynamic> c) {
+    final name = '${c['disease_name'] ?? ''}'.trim();
+    _dx.text = _dxOnFile = name.isNotEmpty
+        ? name
+        : '${c['notes'] ?? ''}'.trim();
+    _severity = '${c['severity'] ?? _severity}';
+  }
 
   static const _vitalFields = {
     'temperature_c': 'Temp C',
@@ -749,10 +761,7 @@ class _FormState extends State<_Form> {
       final linked = cases.where((c) => c['id'] == _caseReportId).firstOrNull;
       setState(() {
         _cases = cases;
-        if (linked != null) {
-          _diseaseId = linked['disease'] as int?;
-          _severity = '${linked['severity'] ?? _severity}';
-        }
+        if (linked != null) _showCase(linked);
       });
     } catch (_) {
       // Same as above: no cases just means no "add to a case" choice.
@@ -762,11 +771,14 @@ class _FormState extends State<_Form> {
   /// File or update the case report that carries this visit's diagnosis, and
   /// return the id to link. Null when no diagnosis was entered — a visit that
   /// reached none is still a visit.
+  /// Free text the catalog does not name is left to [_submit], which files it
+  /// through the diagnose action once the visit exists.
   Future<int?> _settleDiagnosis() async {
-    if (_diseaseId == null) return _caseReportId;
+    final diseaseId = _diseaseId;
+    if (diseaseId == null) return _caseReportId;
     final body = {
       'patient': _patientId,
-      'disease': _diseaseId,
+      'disease': diseaseId,
       'severity': _severity,
       'region': _region,
     };
@@ -782,9 +794,10 @@ class _FormState extends State<_Form> {
 
   @override
   void dispose() {
-    for (final c in [_complaint, _notes, ..._vitals.values]) {
+    for (final c in [_complaint, _notes, _dx, ..._vitals.values]) {
       c.dispose();
     }
+    _dxFocus.dispose();
     super.dispose();
   }
 
@@ -801,7 +814,7 @@ class _FormState extends State<_Form> {
       _error = null;
     });
     try {
-      final caseReportId = await _settleDiagnosis();
+      var caseReportId = await _settleDiagnosis();
       final body = <String, dynamic>{
         'patient': _patientId,
         'case_report': caseReportId,
@@ -811,10 +824,21 @@ class _FormState extends State<_Form> {
         'notes': _notes.text.trim(),
         for (final e in _vitals.entries) e.key: _numOrNull(e.value),
       };
-      if (_isEdit) {
-        await api.patch('/api/consultations/${widget.existing!['id']}/', body);
-      } else {
-        await api.post('/api/consultations/', body);
+      final saved = _isEdit
+          ? await api.patch(
+              '/api/consultations/${widget.existing!['id']}/',
+              body,
+            )
+          : await api.post('/api/consultations/', body);
+      final typed = _dx.text.trim();
+      if (typed.isNotEmpty && typed != _dxOnFile && _diseaseId == null) {
+        final visit = await api.post(
+          '/api/consultations/${saved['id']}/diagnose/',
+          {'diagnosis': typed, 'severity': _severity},
+        );
+        caseReportId = (visit as Map)['case_report'] as int?;
+      }
+      if (!_isEdit) {
         // A new visit goes straight on to the script, filed against the
         // diagnosis just settled.
         if (mounted) {
@@ -885,36 +909,45 @@ class _FormState extends State<_Form> {
         const SizedBox(height: 12),
         // The diagnosis. Saving it files a case report — the row the outcome,
         // the prescriptions and the surveillance rollups all hang off.
-        if (_diseases.isNotEmpty) ...[
-          SearchableDropdown<int?>(
-            initialValue: _diseaseId,
-            isExpanded: true,
+        Autocomplete<String>(
+          textEditingController: _dx,
+          focusNode: _dxFocus,
+          optionsBuilder: (v) {
+            final q = v.text.trim().toLowerCase();
+            if (q.isEmpty) return const [];
+            return _diseases
+                .map((d) => '${d['name']}')
+                .where((n) => n.toLowerCase().contains(q));
+          },
+          onSelected: (_) => setState(() {}),
+          fieldViewBuilder: (context, controller, focus, onSubmit) => TextField(
+            controller: controller,
+            focusNode: focus,
+            maxLength: 255,
+            textCapitalization: TextCapitalization.sentences,
+            onChanged: (_) => setState(() {}),
+            onSubmitted: (_) => onSubmit(),
             decoration: const InputDecoration(
               labelText: 'Diagnosis (optional)',
-              helperText: 'Filed as a case report for this visit',
+              hintText: 'Not diagnosed yet',
+              helperText: 'Pick from the list or type your own',
+              counterText: '',
             ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (_dx.text.trim().isNotEmpty) ...[
+          SearchableDropdown<String>(
+            initialValue: _severity,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Severity'),
             items: [
-              const DropdownMenuItem(value: null, child: Text('Not diagnosed yet')),
-              for (final d in _diseases)
-                DropdownMenuItem(
-                    value: d['id'] as int, child: Text('${d['name']}')),
+              for (final s in _severities)
+                DropdownMenuItem(value: s, child: Text(s)),
             ],
-            onChanged: (v) => setState(() => _diseaseId = v),
+            onChanged: (v) => setState(() => _severity = v!),
           ),
           const SizedBox(height: 12),
-          if (_diseaseId != null) ...[
-            SearchableDropdown<String>(
-              initialValue: _severity,
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: 'Severity'),
-              items: [
-                for (final s in _severities)
-                  DropdownMenuItem(value: s, child: Text(s)),
-              ],
-              onChanged: (v) => setState(() => _severity = v!),
-            ),
-            const SizedBox(height: 12),
-          ],
         ],
         // Linking an existing case is how a return visit for the same illness
         // stays one case report; leaving it unlinked files a new one from the
@@ -944,10 +977,7 @@ class _FormState extends State<_Form> {
                 // Show that case's own diagnosis, so saving cannot silently
                 // rewrite it with whatever was picked before.
                 final picked = _cases.where((c) => c['id'] == v).firstOrNull;
-                if (picked != null) {
-                  _diseaseId = picked['disease'] as int?;
-                  _severity = '${picked['severity'] ?? _severity}';
-                }
+                if (picked != null) _showCase(picked);
               }),
             ),
             const SizedBox(height: 12),
