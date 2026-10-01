@@ -4,7 +4,7 @@ from django.db import transaction
 from django.db.models import Q
 from rest_framework import serializers, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import NotFound, ValidationError
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -13,6 +13,7 @@ from config.responses import success
 
 from apps.accounts.permissions import (
     IsPlatformReader,
+    PHARMACY_STAFF_ROLES,
     IsTenantMember,
     ReadOnlyOrReportRole,
     sees_whole_tenant,
@@ -479,6 +480,20 @@ class PrescriptionViewSet(_ReportViewSet):
             kwargs.setdefault("allow_empty", False)
         return super().get_serializer(*args, **kwargs)
 
+    def perform_update(self, serializer):
+        self._only_pharmacy_dispenses(serializer)
+        serializer.save()
+
+    def _only_pharmacy_dispenses(self, serializer):
+        """Handing a drug over is the pharmacist's act (or an admin's)."""
+        rows = serializer.validated_data
+        if any(r.get("status") in (Prescription.Status.DISPENSED,
+                                   Prescription.Status.PARTIAL)
+               for r in (rows if isinstance(rows, list) else [rows])):
+            user = self.request.user
+            if not (user.is_super_admin or user.role in PHARMACY_STAFF_ROLES):
+                raise PermissionDenied("Only a pharmacist can dispense.")
+
     @transaction.atomic
     def perform_create(self, serializer):
         """Write each order against the diagnosis of the visit it came out of.
@@ -491,6 +506,7 @@ class PrescriptionViewSet(_ReportViewSet):
         Atomic, so a prescription of several drugs is written whole: half a
         prescription is worse than none, because nobody can tell which half.
         """
+        self._only_pharmacy_dispenses(serializer)
         rows = serializer.validated_data
         group = uuid4()
         for data in rows if isinstance(rows, list) else [rows]:

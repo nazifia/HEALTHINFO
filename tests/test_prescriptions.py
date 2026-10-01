@@ -53,6 +53,12 @@ def test_write_then_dispense(db_clean):
     assert "reporter" not in written.json()
     assert rx.status == Prescription.Status.PRESCRIBED and rx.dispensed_at is None
 
+    # Only a pharmacist (or admin) hands a drug over.
+    refused = _client(doctor, a).patch(
+        f"/api/prescriptions/{rx.pk}/", {"status": "dispensed"}, format="json"
+    )
+    assert refused.status_code == 403, refused.content
+
     dispensed = _client(pharmacist, a).patch(
         f"/api/prescriptions/{rx.pk}/", {"status": "dispensed"}, format="json"
     )
