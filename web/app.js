@@ -248,7 +248,7 @@ const RESOURCES = {
   // ``inline``: the admin moves a price or a reorder level on the list
   // itself; the API refuses anyone else the PATCH.
   'pharmacy-items':         { title: 'Stock Items',     group: 'Pharmacy', path: 'pharmacy/items',           roles: 'admin', search: true,
-                              inline: ['unit_price', 'cost_price', 'reorder_level'],
+                              inline: ['quantity_on_hand', 'unit_price', 'cost_price', 'reorder_level'],
                               layout: ['medication', 'name', 'brand', 'form', 'unit', 'store',
                                 'cost_price', 'unit_price', 'markup', 'add_stock'],
                               hints: { name: 'Only for stock the medication list does not carry' },
@@ -4221,7 +4221,9 @@ async function viewSell() {
   const basketHtml = () => basket.length ? `
     <table><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Total</th><th></th></tr></thead>
     <tbody>${basket.map((b, i) => `<tr>
-      <td>${esc(b.name)}</td><td class="num">${b.quantity}</td>
+      <td>${esc(b.name)}</td>
+      <td class="num"><input type="number" min="1" step="1" value="${b.quantity}"
+        data-qty="${i}" aria-label="Quantity of ${esc(b.name)}" style="width:5rem"></td>
       <td class="num">${money(b.price)}</td><td class="num">${money(b.price * b.quantity)}</td>
       <td><button class="btn ghost" data-drop="${i}">Remove</button></td></tr>`).join('')}
     </tbody></table>
@@ -4388,9 +4390,22 @@ async function viewSell() {
       });
       draw();
     };
-    for (const b of document.querySelectorAll('[data-drop]')) {
-      b.onclick = () => { basket.splice(Number(b.dataset.drop), 1); draw(); };
-    }
+    $('#basket').onclick = (e) => {
+      const b = e.target.closest('[data-drop]');
+      if (b) { basket.splice(Number(b.dataset.drop), 1); draw(); }
+    };
+    // Edit a line's quantity in place. Only the basket repaints: a full draw()
+    // would reset the payment and scheme fields the cashier already set.
+    $('#basket').onchange = (e) => {
+      const box = e.target.closest('[data-qty]');
+      if (!box) return;
+      const line = basket[Number(box.dataset.qty)];
+      const qty = Math.floor(Number(box.value));
+      if (!line) return;
+      if (!(qty >= 1)) { box.value = line.quantity; return toast('Quantity must be at least 1.', true); }
+      line.quantity = qty;
+      $('#basket').innerHTML = basketHtml();
+    };
 
     // Same registry type-ahead the report forms use; the sale adds the picked
     // patient's active schemes, which is what decides who pays.
@@ -5200,8 +5215,14 @@ $('#main').addEventListener('click', (e) => {
     if (done) return; done = true;
     const val = input.value.trim();
     if (!save || val === (old === '—' ? '' : old)) { td.textContent = old; return; }
+    // Quantity on hand is a sum over batches, so the typed count goes in as
+    // the difference: the API books a receipt or a FIFO adjustment for it.
+    if (field === 'quantity_on_hand' && val === '') { td.textContent = old; return; }
+    const body = field === 'quantity_on_hand'
+      ? { add_stock: Math.round(Number(val)) - Number(old) }
+      : { [field]: val === '' ? null : val };
     try {
-      const r = await Api.patch(rdetail(slug, `${id}/`), { [field]: val === '' ? null : val });
+      const r = await Api.patch(rdetail(slug, `${id}/`), body);
       td.textContent = fmtVal(r[field]);
       toast('Saved.');
     } catch (err) { td.textContent = old; toast(err.message, true); }

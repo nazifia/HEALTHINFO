@@ -195,8 +195,21 @@ class _ItemCard extends StatelessWidget {
     );
     controller.dispose();
     if (value == null || value.isEmpty || value == '${row[field]}') return;
+    // Quantity on hand is a sum over batches: send the typed count as the
+    // difference and the API books a receipt or a FIFO adjustment for it.
+    final Map<String, dynamic> body;
+    if (field == 'quantity_on_hand') {
+      final counted = int.tryParse(value);
+      if (counted == null || counted < 0) {
+        if (context.mounted) showError(context, 'Enter a whole number, 0 or more.');
+        return;
+      }
+      body = {'add_stock': counted - ((row[field] as num?)?.toInt() ?? 0)};
+    } else {
+      body = {field: value};
+    }
     try {
-      await api.patch('/api/pharmacy/items/${row['id']}/', {field: value});
+      await api.patch('/api/pharmacy/items/${row['id']}/', body);
       reload();
       if (context.mounted) showSuccess(context, '$label saved.');
     } catch (e) {
@@ -258,9 +271,18 @@ class _ItemCard extends StatelessWidget {
           Wrap(
             spacing: 16,
             children: [
-              Text(
-                '${units(row['quantity_on_hand'])} ${row['unit']}(s) on hand',
-                style: TextStyle(color: context.hintColor, fontSize: 13),
+              _editable(
+                context,
+                Text(
+                  '${units(row['quantity_on_hand'])} ${row['unit']}(s) on hand',
+                  style: TextStyle(color: context.hintColor, fontSize: 13),
+                ),
+                () => _editField(
+                  context,
+                  'quantity_on_hand',
+                  'Quantity on hand',
+                  integer: true,
+                ),
               ),
               _editable(
                 context,
