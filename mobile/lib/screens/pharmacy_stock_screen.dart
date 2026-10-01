@@ -1000,11 +1000,11 @@ class _ItemFormState extends State<_ItemForm> {
         const SizedBox(height: 12),
         TextField(
           controller: _addStock,
-          keyboardType: TextInputType.number,
+          keyboardType: const TextInputType.numberWithOptions(signed: true),
           decoration: InputDecoration(
-            labelText: _isEdit ? 'Add stock' : 'Opening stock',
+            labelText: _isEdit ? 'Add or remove stock' : 'Opening stock',
             helperText: _isEdit
-                ? 'Now ${units(widget.existing!['quantity_on_hand'])} on hand; this many more go on the shelf.'
+                ? 'Now ${units(widget.existing!['quantity_on_hand'])} on hand; a positive number adds, a negative one removes (e.g. -5).'
                 : 'Units on the shelf now.',
           ),
         ),

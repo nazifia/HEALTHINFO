@@ -1538,6 +1538,13 @@ def test_item_form_books_stock_in(pharmacy):
     # Blank is nothing, not an error.
     r = admin.patch(f"/api/pharmacy/items/{item_id}/", {"reorder_level": 5})
     assert r.json()["quantity_on_hand"] == 50
+    # Negative removes, and refuses to go below zero without saving the edit.
+    r = admin.patch(f"/api/pharmacy/items/{item_id}/", {"add_stock": -15})
+    assert r.json()["quantity_on_hand"] == 35
+    r = admin.patch(f"/api/pharmacy/items/{item_id}/",
+                    {"add_stock": -99, "reorder_level": 77})
+    assert r.status_code == 400
+    assert admin.get(f"/api/pharmacy/items/{item_id}/").json()["reorder_level"] != 77
 
 
 def test_item_takes_its_name_from_the_picked_medication(pharmacy):

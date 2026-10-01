@@ -1,3 +1,4 @@
+from django.db import transaction
 from rest_framework import serializers
 
 from config.serializers import NamedRelationsMixin
@@ -33,10 +34,12 @@ class StockItemSerializer(serializers.ModelSerializer):
     # The shelf count typed on the item form itself — booked in as a dated
     # batch through receive_stock, so the ledger still explains the figure.
     # Optional on both create and edit: on an edit it adds to what is there.
+    # Negative takes units off first-expiry-first-out, logged as an adjustment.
     add_stock = serializers.IntegerField(
-        min_value=0, required=False, write_only=True,
-        label="Stock to add",
-        help_text="Units to put on the shelf now. Added to the quantity on hand.",
+        required=False, write_only=True,
+        label="Add or remove stock",
+        help_text="Units to put on the shelf now (negative to remove). "
+                  "Added to the quantity on hand.",
     )
 
     class Meta:
@@ -60,23 +63,32 @@ class StockItemSerializer(serializers.ModelSerializer):
     def _book_in(self, item, quantity):
         if quantity:
             from django.utils import timezone
-            from .models import receive_stock
-            request = self.context.get("request")
-            receive_stock(item, quantity,
-                          batch_number=f"ADD-{timezone.now():%Y%m%d}",
-                          cost_price=item.cost_price,
-                          user=getattr(request, "user", None))
+            from .models import OutOfStock, StockMovement, receive_stock, take_stock
+            user = getattr(self.context.get("request"), "user", None)
+            if quantity > 0:
+                receive_stock(item, quantity,
+                              batch_number=f"ADD-{timezone.now():%Y%m%d}",
+                              cost_price=item.cost_price, user=user)
+            else:
+                try:
+                    take_stock(item, -quantity,
+                               kind=StockMovement.Kind.ADJUSTMENT,
+                               reason="Quantity corrected on the item", user=user)
+                except OutOfStock as exc:
+                    raise serializers.ValidationError({"add_stock": str(exc)})
             # The list annotation on an edited row is now stale; the
             # property recounts.
             if hasattr(item, "stock_on_hand"):
                 del item.stock_on_hand
 
+    @transaction.atomic
     def create(self, validated_data):
         quantity = validated_data.pop("add_stock", 0)
         item = super().create(validated_data)
         self._book_in(item, quantity)
         return item
 
+    @transaction.atomic
     def update(self, instance, validated_data):
         quantity = validated_data.pop("add_stock", 0)
         # A changed markup or cost re-prices the item from cost, unless the
