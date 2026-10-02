@@ -492,14 +492,13 @@ class _DrugOrderFormState extends State<DrugOrderForm> {
 
   @override
   Widget build(BuildContext context) {
-    final written = _drugs.length + (_pending() == null ? 0 : 1);
     return ReportFormSheet(
       title: _isEdit ? 'Edit order' : 'Prescribe',
       saving: _saving,
       error: _error,
       submitLabel: _isEdit
           ? 'Save changes'
-          : 'Write order${written == 1 ? '' : 's'}',
+          : 'Send',
       onSubmit: _submit,
       children: [
         // Prescribing off a patient's record fixes who it is for; the picker
