@@ -182,12 +182,17 @@ Map<String, dynamic> saleBody({
   int? rxId,
   String? patientNumber,
   int? authorizationId,
+  String? buyerName,
+  String? buyerAddress,
 }) {
   final insured = paymentMethod == 'hmo';
   final number = (patientNumber ?? '').trim();
   return {
     'payment_method': paymentMethod,
     'patient': ?patientId,
+    if ((buyerName ?? '').trim().isNotEmpty) 'buyer_name': buyerName!.trim(),
+    if ((buyerAddress ?? '').trim().isNotEmpty)
+      'buyer_address': buyerAddress!.trim(),
     if (insured && enrollmentId != null) 'enrollment': enrollmentId,
     // Only an insured sale can spend a clearance, so it travels with the card.
     if (insured && authorizationId != null) 'authorization': authorizationId,

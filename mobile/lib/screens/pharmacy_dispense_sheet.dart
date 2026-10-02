@@ -25,6 +25,8 @@ class _DispenseSheetState extends State<DispenseSheet> {
   final _quantity = TextEditingController(text: '1');
   final _discount = TextEditingController(text: '0');
   final _number = TextEditingController();
+  final _buyer = TextEditingController();
+  final _buyerAddress = TextEditingController();
   final List<BasketLine> _basket = [];
   List<Map<String, dynamic>> _items = [];
   List<Map<String, dynamic>> _enrollments = [];
@@ -59,6 +61,8 @@ class _DispenseSheetState extends State<DispenseSheet> {
     _quantity.dispose();
     _discount.dispose();
     _number.dispose();
+    _buyer.dispose();
+    _buyerAddress.dispose();
     super.dispose();
   }
 
@@ -282,6 +286,8 @@ class _DispenseSheetState extends State<DispenseSheet> {
           prescriptionId: fillFor(_filling).prescriptionId,
           rxId: fillFor(_filling).rxId,
           patientNumber: _number.text,
+          buyerName: _patientId == null ? _buyer.text : null,
+          buyerAddress: _patientId == null ? _buyerAddress.text : null,
         ),
       );
       if (mounted) Navigator.of(context).pop(sale as Map<String, dynamic>?);
@@ -362,6 +368,21 @@ class _DispenseSheetState extends State<DispenseSheet> {
             _loadEnrollments(id);
           },
         ),
+        // A walk-in has no record to print from, so the receipt takes what is typed.
+        if (_patientId == null) ...[
+          const SizedBox(height: 12),
+          TextField(
+            controller: _buyer,
+            decoration: const InputDecoration(
+                labelText: 'Customer name (walk-in, printed on receipt)'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _buyerAddress,
+            decoration:
+                const InputDecoration(labelText: 'Customer address / phone'),
+          ),
+        ],
         const SizedBox(height: 12),
         TextField(
           controller: _barcode,

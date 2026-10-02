@@ -477,7 +477,17 @@ details.tbl summary { cursor: pointer; color: var(--muted); font-size: 13px; }
   #topbar .brand { font-size: 0; }
   #topbar .brand::after { content: "HI"; font-size: 15px; letter-spacing: 1px; }
   #user-badge { max-width: 8ch; }
+  #tenant-badge { display: none; }
 }
+/* Sign out stays visible and tappable at any width: solid, never shrunk. */
+#topbar-logout {
+  background: #fff; color: var(--brand-dark); border-color: #fff;
+  font-size: 16px; font-weight: 700; cursor: pointer;
+  width: 36px; height: 36px; flex: 0 0 36px; overflow: visible;
+}
+#topbar-logout:hover { background: rgba(255,255,255,.85); }
+.topbar-actions { flex: 0 0 auto; }
+#topbar .spacer { min-width: 0; }
 /* Dashboards and stat screens: cards rise in (staggered), bars grow, lines
    draw, numbers count (countUp in app.js). Everything starts paused at its
    first frame and runs once scrolled into view (.seen, set by the observer in

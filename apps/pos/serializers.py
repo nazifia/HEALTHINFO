@@ -101,6 +101,9 @@ class SaleSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     items = SaleLineInputSerializer(many=True, write_only=True)
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     customer_name = serializers.CharField(source="customer.name", read_only=True)
+    # Printed on the receipt beside whoever the sale is for.
+    patient_phone = serializers.CharField(source="patient.phone", read_only=True)
+    customer_phone = serializers.CharField(source="customer.phone", read_only=True)
     branch_name = serializers.CharField(source="branch.name", read_only=True)
     served_by_name = serializers.CharField(source="served_by.username",
                                            read_only=True)

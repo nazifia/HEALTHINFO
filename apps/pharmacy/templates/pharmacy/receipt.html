@@ -60,6 +60,14 @@
     {% if sale.patient %}
       <div><span>Patient</span><span>{{ sale.patient.full_name }}</span></div>
       <div><span>Hospital no.</span><span>{{ sale.patient.hospital_number }}</span></div>
+      {% if sale.patient.phone %}<div><span>Phone</span><span>{{ sale.patient.phone }}</span></div>{% endif %}
+    {% elif sale.customer %}
+      <div><span>Customer</span><span>{{ sale.customer.name }}</span></div>
+      {% if sale.customer.phone %}<div><span>Phone</span><span>{{ sale.customer.phone }}</span></div>{% endif %}
+      {% if sale.customer.address %}<div><span>Address</span><span>{{ sale.customer.address }}</span></div>{% endif %}
+    {% elif sale.buyer_name %}
+      <div><span>Customer</span><span>{{ sale.buyer_name }}</span></div>
+      {% if sale.buyer_address %}<div><span>Address</span><span>{{ sale.buyer_address }}</span></div>{% endif %}
     {% endif %}
     {% if sale.enrollment %}
       <div><span>Scheme</span><span>{{ sale.enrollment.hmo.name }}</span></div>

@@ -61,6 +61,18 @@ def render(sale, lines, tenant, paper=80):
     if sale.patient:
         text(row("Patient", sale.patient.full_name))
         text(row("Hospital no.", sale.patient.hospital_number))
+        if sale.patient.phone:
+            text(row("Phone", sale.patient.phone))
+    elif sale.customer:
+        text(row("Customer", sale.customer.name))
+        if sale.customer.phone:
+            text(row("Phone", sale.customer.phone))
+        if sale.customer.address:
+            text(row("Address", sale.customer.address))
+    elif sale.buyer_name:
+        text(row("Customer", sale.buyer_name))
+        if sale.buyer_address:
+            text(row("Address", sale.buyer_address))
     if sale.enrollment:
         text(row("Scheme", sale.enrollment.hmo.name))
         text(row("Member no.", sale.enrollment.member_number))

@@ -165,19 +165,9 @@ class _SaleSheetState extends State<SaleSheet> {
   }
 
   Future<void> _pay() async {
-    final amount = await _askAmount(
-        context, 'Take payment', 'Cash tendered (₦)', '${_sale['balance_due']}');
-    if (amount == null) return;
-    if (!mounted) return;
-    // Only cash reaches the drawer, so how this payment arrived is asked
-    // whenever the sale itself is not a cash sale - an insured bill is often
-    // part settled in notes, part on a card.
-    final method = _sale['payment_method'] == 'cash'
-        ? 'cash'
-        : await _askMethod(context);
-    if (method == null) return;
+    // Full balance, by the server's default method — no prompts (same as web).
     await _run('/api/pharmacy/sales/${_sale['id']}/pay/',
-        {'amount': amount, 'method': method});
+        {'amount': '${_sale['balance_due']}'});
   }
 
   /// Settle the bill out of the customer's wallet.
@@ -445,7 +435,18 @@ class ReceiptSheet extends StatelessWidget {
       row('Receipt', '${sale['reference']}'),
       row('Date', '${sale['created_at']}'.replaceAll('T', ' ').split('.').first),
       if ((sale['patient_name'] ?? '').toString().isNotEmpty)
-        row('Patient', '${sale['patient_name']}'),
+        row('Patient', '${sale['patient_name']}')
+      else if ((sale['customer_name'] ?? '').toString().isNotEmpty)
+        row('Customer', '${sale['customer_name']}')
+      else if ((sale['buyer_name'] ?? '').toString().isNotEmpty)
+        row('Customer', '${sale['buyer_name']}'),
+      if ((sale['patient_phone'] ?? sale['customer_phone'] ?? '')
+          .toString()
+          .isNotEmpty)
+        row('Phone', '${sale['patient_phone'] ?? sale['customer_phone']}'),
+      if ((sale['patient_name'] ?? '').toString().isEmpty &&
+          (sale['buyer_address'] ?? '').toString().isNotEmpty)
+        row('Address', '${sale['buyer_address']}'),
       '',
       for (final l in lines) ...[
         '${l['item_name']}',
@@ -516,26 +517,6 @@ Future<String?> _askAmount(BuildContext context, String title, String label,
     ),
   );
 }
-
-/// How the money arrived. Cash is the counter default; the other two are
-/// settled elsewhere and never touch the drawer.
-Future<String?> _askMethod(BuildContext context) => showDialog<String>(
-      context: context,
-      builder: (dialogContext) => SimpleDialog(
-        title: const Text('How was it paid?'),
-        children: [
-          for (final entry in const {
-            'cash': 'Cash',
-            'card': 'Card',
-            'transfer': 'Transfer',
-          }.entries)
-            SimpleDialogOption(
-              onPressed: () => Navigator.of(dialogContext).pop(entry.key),
-              child: Text(entry.value),
-            ),
-        ],
-      ),
-    );
 
 Future<String?> _askText(
     BuildContext context, String title, String label) async {

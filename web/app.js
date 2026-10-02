@@ -306,9 +306,9 @@ const RESOURCES = {
   // for a unit of it. 0 cover is the exclusion; no row means the scheme's own
   // default covers it. The insurer keeps its own list (roles: 'scheme').
   // ``inline``: the two numbers a scheme tunes are edited on the list itself
-  // (click the cell); the shelf price is the pharmacy's and stays read-only.
+  // (click the cell); the shelf price edits the stock item itself (pharmacy admin only; the API refuses others).
   'pharmacy-item-rules':    { title: 'Price List',      group: 'Pharmacy', hmo: true, path: 'pharmacy/item-rules',      roles: 'scheme', search: true,
-                              inline: ['coverage_percent', 'tariff'],
+                              inline: ['coverage_percent', 'tariff', 'item_price'],
                               filters: [{ param: 'hmo', label: 'Scheme', path: '/api/pharmacy/hmos/', text: (r) => r.name }] },
   // The insurer's answer is four fields at once — a code, what they stand
   // behind, when it lapses, or why they refused — so it gets a form of its own
@@ -316,7 +316,7 @@ const RESOURCES = {
   'pharmacy-preauths':      { title: 'Authorisations',  group: 'Pharmacy', hmo: true, path: 'pharmacy/pre-authorizations', roles: 'staff', search: true, extra: 'preauth',
                               actions: [{ name: 'cancel', label: 'Withdraw request', ask: 'reason', danger: true, when: ['requested', 'approved'] }] },
   'pharmacy-sales':         { title: 'Sales',           group: 'Pharmacy', path: 'pharmacy/sales',           roles: 'staff', search: true, readOnly: true, receipt: true,
-                              actions: [{ name: 'pay', label: 'Take payment', ask: 'amount', choose: 'method:cash,card,transfer', when: ['pending'] },
+                              actions: [{ name: 'pay', label: 'Take payment', when: ['pending'] },
                                         { name: 'cancel', label: 'Cancel sale', danger: true, when: ['pending', 'paid'] }] },
   'pharmacy-claims':        { title: 'Claims',          group: 'Pharmacy', hmo: true, path: 'pharmacy/claims',          roles: 'staff', search: true, readOnly: true,
                               actions: [{ name: 'submit', label: 'Submit', when: ['draft', 'rejected'] },
@@ -1462,7 +1462,7 @@ function tableHtml(rows, linkFor, rowAction, inline) {
     + (rowAction ? '<th></th>' : '');
   const body = rows.map((r, i) => {
     const cells = cols.map((c) => inline?.fields.includes(c)
-      ? `<td class="inline-edit" title="Click to edit" data-slug="${inline.slug}" data-id="${r.id}" data-field="${c}">${cellHtml(c, r[c])}</td>`
+      ? `<td class="inline-edit" title="Click to edit" data-slug="${c === 'item_price' ? 'pharmacy-items' : inline.slug}" data-id="${c === 'item_price' ? r.item : r.id}" data-field="${c}">${cellHtml(c, r[c])}</td>`
       : `<td>${cellHtml(c, r[c])}</td>`).join('')
       + (rowAction ? `<td>${rowAction(r)}</td>` : '');
     const href = linkFor && linkFor(r);
@@ -2331,7 +2331,8 @@ async function viewDetail(slug, id) {
     // record rather than asked again, with an allergy in front of whoever is
     // about to prescribe (the app's _PatientDetails panel).
     const withPatient = obj.patient && ['consultations', 'prescriptions'].includes(slug);
-    if (res.receipt) actions += `<button id="receipt" class="btn ghost">Print receipt</button>`;
+    const printable = res.receipt && !['pending', 'credit', 'cancelled'].includes(obj.status);
+    if (printable) actions += `<button id="receipt" class="btn ghost">Print receipt</button>`;
     // Filing a record against the one on screen. The links travel as query
     // params so the new-record form opens with them already filled in. A drug
     // order written off a visit carries that visit's diagnosis, so it is filed
@@ -2368,7 +2369,7 @@ async function viewDetail(slug, id) {
       ${res.extra === 'preauth' ? preauthItemsHtml(obj) + preauthDecisionHtml(obj)
         + preauthTrailHtml() : ''}
 `);
-    if (res.receipt) $('#receipt').onclick = () => printReceipt(id);
+    if (printable) $('#receipt').onclick = () => printReceipt(id);
     if (sendHtml) {
       Api.get(rdetail(slug, 'prescribers/')).then((rows) => {
         $('#send-to').innerHTML = rows.length
@@ -2404,6 +2405,8 @@ async function viewDetail(slug, id) {
         // ``body`` is what the action always sends — the half of the call the
         // label already states, so the user is not prompted for it.
         let body = b.dataset.body ? JSON.parse(b.dataset.body) : {};
+        // A sale's payment is the full balance, by the sale's own method — no prompts.
+        if (res.receipt && b.dataset.pa === 'pay') body.amount = obj.balance_due;
         // ``ask`` is one key, or several comma-separated — an optional one
         // left blank (a drawer's closing note) stays out of the body.
         for (const key of (b.dataset.ask || '').split(',').filter(Boolean)) {
@@ -2424,8 +2427,6 @@ async function viewDetail(slug, id) {
           if (!options.includes(picked)) return toast(`${key} must be one of ${options.join(', ')}.`, true);
           body[key] = picked;
         }
-        // Taking payment on a sale reprints the receipt, now marked paid.
-        const w = res.receipt && b.dataset.pa === 'pay' ? receiptWindow() : null;
         try {
           // The duplicate is named by hospital number; the API wants its id.
           if (slug === 'patients' && b.dataset.pa === 'merge') {
@@ -2446,9 +2447,8 @@ async function viewDetail(slug, id) {
           // Most visits end with something to take home, so the toast carries
           // the next step; the "+ Prescription" link is on the page below.
           toast(r?.message || 'Done.');
-          if (w) printReceipt(id, w);
           viewDetail(slug, id);
-        } catch (e) { w?.close(); toast(e.message, true); }
+        } catch (e) { toast(e.message, true); }
       };
     }
     if (canWrite && !res.editOnly) {
@@ -2921,7 +2921,9 @@ function collapseByGroup(rows) {
 
 /* Nothing to stop once every drug on the prescription is dispensed or
  * cancelled, so the row offers no button at all. */
-const printButtonHtml = (row) => `<button class="btn ghost" data-print="${row.id}">Print</button>`;
+// Unpaid or cancelled sales have no receipt yet — the server refuses it.
+const printButtonHtml = (row) => ['pending', 'credit', 'cancelled'].includes(row.status)
+  ? '' : `<button class="btn ghost" data-print="${row.id}">Print</button>`;
 
 function cancelButtonHtml(row) {
   const live = ['prescribed', 'partially_dispensed', 'part-dispensed'];
@@ -4325,6 +4327,10 @@ async function viewSell() {
           <input name="patient_search" placeholder="Name, hospital number or phone…"
                  autocomplete="off" value="${esc(patientQuery)}"></label>
         <div id="patient-hit" class="muted">${patient ? patientHitHtml(patient) : ''}</div>
+        <label>Customer name (walk-in — printed on the receipt)
+          <input name="buyer_name" maxlength="200" autocomplete="off"></label>
+        <label>Customer address / phone
+          <input name="buyer_address" maxlength="300" autocomplete="off"></label>
         <label>Payment<select name="payment_method">
           <option value="cash">Cash</option><option value="card">Card</option>
           <option value="transfer">Transfer</option><option value="hmo">HMO / scheme</option>
@@ -4484,6 +4490,10 @@ async function viewSell() {
         items: basket.map((b) => ({ item: b.item, quantity: b.quantity, discount: b.discount })),
       };
       if (patient) body.patient = patient.id;
+      else {
+        body.buyer_name = String(fd.get('buyer_name') || '').trim();
+        body.buyer_address = String(fd.get('buyer_address') || '').trim();
+      }
       Object.assign(body, sellFillBody(filling, rxNumber));
       if (fd.get('enrollment')) body.enrollment = Number(fd.get('enrollment'));
       if (fd.get('authorization')) body.authorization = Number(fd.get('authorization'));
@@ -5202,6 +5212,7 @@ $('#main').addEventListener('click', (e) => {
   e.stopPropagation();  // the row's own click would open the detail page
   if (td.querySelector('input')) return;
   const { slug, id, field } = td.dataset;
+  const key = field === 'item_price' ? 'unit_price' : field;  // shelf price lives on the stock item
   const old = td.textContent;
   const input = document.createElement('input');
   input.type = 'number'; input.step = '0.01'; input.min = '0';
@@ -5220,10 +5231,10 @@ $('#main').addEventListener('click', (e) => {
     if (field === 'quantity_on_hand' && val === '') { td.textContent = old; return; }
     const body = field === 'quantity_on_hand'
       ? { add_stock: Math.round(Number(val)) - Number(old) }
-      : { [field]: val === '' ? null : val };
+      : { [key]: val === '' ? null : val };
     try {
       const r = await Api.patch(rdetail(slug, `${id}/`), body);
-      td.textContent = fmtVal(r[field]);
+      td.textContent = fmtVal(r[key]);
       toast('Saved.');
     } catch (err) { td.textContent = old; toast(err.message, true); }
   };
