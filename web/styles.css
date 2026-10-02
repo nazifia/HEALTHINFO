@@ -568,3 +568,8 @@ details.tbl summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 /* A form section with no frame of its own: toggled whole via hidden+disabled. */
 fieldset.bare { border: 0; margin: 0; padding: 0; min-width: 0; display: contents; }
 fieldset.bare[hidden] { display: none; }
+
+.rx-alert { background: #c62828; color: #fff; animation: rx-blink 1s steps(2, start) infinite; }
+.rx-alert h3, .rx-alert p { color: #fff; }
+@keyframes rx-blink { 50% { background: #ff5252; } }
+@media (prefers-reduced-motion: reduce) { .rx-alert { animation: none; } }

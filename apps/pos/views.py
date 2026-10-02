@@ -193,6 +193,9 @@ class SaleViewSet(mixins.CreateModelMixin, mixins.ListModelMixin,
         form to a 58mm roll; the default is 80mm.
         """
         sale = self.get_object()
+        if sale.status in (Sale.Status.PENDING, Sale.Status.CREDIT, Sale.Status.CANCELLED):
+            raise ValidationError(
+                {"status": "Complete the sale (take full payment) before printing the receipt."})
         # Serving the page is the print (it prints itself on load); ?print=0
         # is a look, and leaves a kept receipt in the queue.
         if request.query_params.get("print") != "0":

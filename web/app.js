@@ -4487,16 +4487,13 @@ async function viewSell() {
       Object.assign(body, sellFillBody(filling, rxNumber));
       if (fd.get('enrollment')) body.enrollment = Number(fd.get('enrollment'));
       if (fd.get('authorization')) body.authorization = Number(fd.get('authorization'));
-      // The receipt prints as the sale lands: the window is claimed now,
-      // while this is still the cashier's click, and filled once the sale has
-      // a number. Closed again if the sale is refused.
-      const w = receiptWindow();
+      // No receipt yet: the sale is not complete until it is paid, and the
+      // Pay action on the sale prints it once it is.
       try {
         const sale = await Api.post('/api/pharmacy/sales/', body);
         toast(`Sale ${sale.reference} — patient pays ${money(sale.patient_payable)}.`);
-        printReceipt(sale.id, w);
         location.hash = `#/r/pharmacy-sales/${sale.id}`;
-      } catch (err) { w?.close(); toast(err.message, true); }
+      } catch (err) { toast(err.message, true); }
     };
   };
   draw();
@@ -4865,8 +4862,8 @@ function portalMedsHtml(rows, empty = 'You have not collected any medication yet
       <td>${esc(r.frequency || '—')}</td>
       <td>${esc(r.duration_days ?? '—')}</td>
       <td>${cellHtml('status', r.status)}</td>
-      <td><button class="btn find-drug" data-medication="${esc(r.medication)}"
-        >Where to get it</button></td></tr>`).join('')}</tbody></table></div>`;
+      <td>${r.medication ? `<button class="btn find-drug" data-medication="${esc(r.medication)}"
+        >Where to get it</button>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
 }
 
 function pharmaciesHtml(rows) {
@@ -4996,17 +4993,20 @@ function dependentsHtml(cards, rows) {
 async function viewPortal() {
   if (!await ensureChrome()) return;
   spinner();
-  let me, meds, cards, deps;
+  let me, meds, cards, deps, pending;
   try {
-    [me, meds, cards, deps] = await Promise.all([
+    [me, meds, cards, deps, pending] = await Promise.all([
       Api.get('/api/portal/me/'),
       Api.get('/api/portal/medications/'),
       Api.get('/api/portal/enrollments/').catch(() => []),
       Api.get('/api/portal/dependents/').catch(() => []),
+      Api.get('/api/portal/pending/').catch(() => []),
     ]);
   } catch (e) { return errorBox(e); }
 
-  render(`${portalHeroHtml(me, meds, cards)}
+  render(`${pending.length ? `<div class="card rx-alert" role="alert"><h3>${pending.length} prescription${pending.length === 1 ? '' : 's'} waiting at the pharmacy</h3>
+      <p>${esc(pending.map((p) => p.medication_name).join(', '))}</p></div>` : ''}
+    ${portalHeroHtml(me, meds, cards)}
     <div class="card"><h3>My medications</h3>${portalMedsHtml(meds)}</div>
     <div class="card"><h3>My dependents</h3>${dependentsHtml(cards, deps)}</div>
     <div class="card"><h3>Where to get them</h3>

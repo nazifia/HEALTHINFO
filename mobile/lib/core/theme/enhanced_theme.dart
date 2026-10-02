@@ -26,6 +26,8 @@ class EnhancedTheme {
 
   static ThemeData get enhancedDarkTheme {
     return ThemeData(
+      fontFamily: 'Roboto',
+      fontFamilyFallback: const ['NotoSansSymbols2'],
       useMaterial3: true,
       brightness: Brightness.dark,
       colorScheme: ColorScheme.fromSeed(
@@ -111,6 +113,8 @@ class EnhancedTheme {
 
   static ThemeData get enhancedLightTheme {
     return ThemeData(
+      fontFamily: 'Roboto',
+      fontFamilyFallback: const ['NotoSansSymbols2'],
       useMaterial3: true,
       brightness: Brightness.light,
       colorScheme: ColorScheme.fromSeed(

@@ -109,6 +109,7 @@ class _MyHealthScreenState extends State<MyHealthScreen>
         api.portalMedications(),
         api.portalEnrollments().catchError((_) => <dynamic>[]),
         api.portalDependents().catchError((_) => <dynamic>[]),
+        api.portalPending().catchError((_) => <dynamic>[]),
       ]);
 
   void _reload() => setState(() {
@@ -173,9 +174,20 @@ class _MyHealthScreenState extends State<MyHealthScreen>
             final meds = (snap.data![1] as List).cast<Map<String, dynamic>>();
             final cards = (snap.data![2] as List).cast<Map<String, dynamic>>();
             final deps = (snap.data![3] as List).cast<Map<String, dynamic>>();
+            final pending = (snap.data![4] as List).cast<Map<String, dynamic>>();
             return ListView(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
               children: [
+                if (pending.isNotEmpty) ...[
+                  _BlinkingAlert(
+                    title:
+                        '${pending.length} prescription${pending.length == 1 ? '' : 's'} waiting at the pharmacy',
+                    subtitle: pending
+                        .map((p) => _text(p['medication_name']))
+                        .join(', '),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 _HeroCard(me: me, meds: meds, cards: cards,
                     onOpenProfile: widget.onOpenProfile),
                 const SizedBox(height: 12),
@@ -195,6 +207,54 @@ class _MyHealthScreenState extends State<MyHealthScreen>
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+/// Red alert that blinks; stays solid when the OS asks to reduce motion.
+class _BlinkingAlert extends StatefulWidget {
+  final String title;
+  final String subtitle;
+  const _BlinkingAlert({required this.title, required this.subtitle});
+
+  @override
+  State<_BlinkingAlert> createState() => _BlinkingAlertState();
+}
+
+class _BlinkingAlertState extends State<_BlinkingAlert>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 600))
+    ..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    return super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (MediaQuery.of(context).disableAnimations) {
+      _c.stop();
+    } else if (!_c.isAnimating) {
+      _c.repeat(reverse: true);
+    }
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (_, child) => Card(
+        color: Color.lerp(Colors.red.shade700, Colors.red.shade300, _c.value),
+        child: child,
+      ),
+      child: ListTile(
+        leading: const Icon(Icons.notifications_active_outlined,
+            color: Colors.white),
+        title: Text(widget.title,
+            style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.w600)),
+        subtitle: Text(widget.subtitle,
+            style: const TextStyle(color: Colors.white)),
       ),
     );
   }
@@ -332,7 +392,9 @@ class _MedicationsCard extends StatelessWidget {
                   if (m['duration_days'] != null) '${m['duration_days']} days',
                   _text(m['status']).replaceAll('_', ' '),
                 ].where((s) => s != '—').join(' · ')),
-                trailing: TextButton(
+                trailing: m['medication'] == null
+                    ? null
+                    : TextButton(
                   onPressed: () => onFind(m['medication']),
                   child: const Text('Where to get it'),
                 ),

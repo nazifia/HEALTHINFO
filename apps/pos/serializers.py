@@ -200,9 +200,21 @@ class SaleSerializer(NamedRelationsMixin, serializers.ModelSerializer):
         tenant_id = getattr(getattr(self.context.get("request"), "tenant", None),
                             "id", None)
         order = attrs.get("prescription")
+        # A filled or cancelled order is closed to everyone, own facility
+        # included — otherwise a second sale off it double-dispenses.
+        if order is not None and order.status in (DrugOrder.Status.DISPENSED,
+                                                  DrugOrder.Status.CANCELLED):
+            raise serializers.ValidationError(
+                {"prescription": "That prescription has already been filled or stopped."}
+            )
+        rx = attrs.get("rx")
+        if rx is not None and rx.status in (CounterScript.Status.DISPENSED,
+                                            CounterScript.Status.CANCELLED):
+            raise serializers.ValidationError(
+                {"rx": "That prescription has already been filled or stopped."}
+            )
         if order is not None and order.tenant_id != tenant_id:
-            closed = order.status in (DrugOrder.Status.DISPENSED,
-                                      DrugOrder.Status.CANCELLED)
+            closed = False
             holder = (order.patient_id is not None
                       and patients_by_number(number).filter(pk=order.patient_id))
             self._require_holder("prescription", closed, holder, number)

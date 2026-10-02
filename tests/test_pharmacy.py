@@ -523,11 +523,9 @@ def test_receipt_prints_the_sale(pharmacy):
         f"/api/pharmacy/sales/{sale_id}/receipt/"
     ).content.decode()
 
-    # A cancelled sale still prints, stamped so it cannot pass as a live receipt.
+    # A cancelled sale is not complete, so it has no receipt.
     staff.post(f"/api/pharmacy/sales/{sale_id}/cancel/", {}, format="json")
-    assert "CANCELLED" in staff.get(
-        f"/api/pharmacy/sales/{sale_id}/receipt/"
-    ).content.decode()
+    assert staff.get(f"/api/pharmacy/sales/{sale_id}/receipt/").status_code == 400
 
 
 def test_receipt_kept_on_a_phone_prints_later_at_the_counter(pharmacy):
@@ -537,6 +535,8 @@ def test_receipt_kept_on_a_phone_prints_later_at_the_counter(pharmacy):
         "payment_method": "cash",
         "items": [{"item": item.id, "quantity": 1}],
     }, format="json").json()["id"]
+    staff.post(f"/api/pharmacy/sales/{sale_id}/pay/", {"amount": "1000.00"},
+               format="json")
     queue = "/api/pharmacy/sales/?kept=1"
     assert staff.get(queue).json()["count"] == 0
 
@@ -1605,3 +1605,44 @@ def test_receipt_as_escpos_bytes_for_a_thermal_printer(pharmacy):
     # The HTML form takes the same width for @page.
     html = staff.get(f"/api/pharmacy/sales/{sale_id}/receipt/?paper=58").content.decode()
     assert "size: 58mm auto" in html and "width: 54mm" in html
+
+
+def test_dispensed_drug_shows_on_the_patients_portal(pharmacy):
+    from apps.catalog.models import Medication
+
+    tenant, item = pharmacy["tenant"], pharmacy["item"]
+    user = User.objects.create_user(phone="08030000299", password="x",
+                                    tenant=tenant, role=Role.PUBLIC)
+    patient = Patient.all_objects.create(tenant=tenant, first_name="Ada",
+                                         last_name="Obi", user=user)
+    # On the shelf as "Paracetamol 500mg", in the catalog as "Paracetamol".
+    Medication.objects.create(tenant=tenant, generic_name="Paracetamol")
+    staff = _client(pharmacy["staff"], tenant)
+    assert staff.post("/api/pharmacy/sales/", {
+        "payment_method": "cash", "patient": patient.id,
+        "items": [{"item": item.id, "quantity": 2}],
+    }, format="json").status_code == 201
+
+    rows = _client(user, tenant).get("/api/portal/medications/").json()
+    assert [r["medication_name"] for r in rows] == ["Paracetamol"]
+
+
+def test_uncatalogued_item_shows_on_the_portal_under_its_own_name(pharmacy):
+    tenant, item = pharmacy["tenant"], pharmacy["item"]
+    user = User.objects.create_user(phone="08030000298", password="x",
+                                    tenant=tenant, role=Role.PUBLIC)
+    patient = Patient.all_objects.create(tenant=tenant, first_name="Ada",
+                                         last_name="Obi", user=user)
+    staff = _client(pharmacy["staff"], tenant)
+    sale_id = staff.post("/api/pharmacy/sales/", {
+        "payment_method": "cash", "patient": patient.id,
+        "items": [{"item": item.id, "quantity": 2}],
+    }, format="json").json()["id"]
+
+    rows = _client(user, tenant).get("/api/portal/medications/").json()
+    assert [(r["medication_name"], r["medication"]) for r in rows] == [
+        ("Paracetamol 500mg", None)]
+
+    # A cancelled sale was never handed over.
+    staff.post(f"/api/pharmacy/sales/{sale_id}/cancel/", {}, format="json")
+    assert _client(user, tenant).get("/api/portal/medications/").json() == []

@@ -192,9 +192,52 @@ class PatientPortalViewSet(viewsets.ViewSet):
             status__in=(Prescription.Status.DISPENSED,
                         Prescription.Status.PARTIAL),
         ).select_related("medication")
-        data = PrescriptionSerializer(rows, many=True).data
+        data = list(PrescriptionSerializer(rows, many=True).data)
+        data += self._uncatalogued(patient)
         self._log(patient, PatientAccessLog.Action.HISTORY, len(data))
         return Response(data)
+
+    @action(detail=False, methods=["get"])
+    def pending(self, request):
+        """Drugs ordered for this patient and not yet handed over.
+
+        Kept off ``medications`` on purpose (an order can still change at the
+        counter); served on its own so the portal can alert, not list it as
+        something the patient has.
+        """
+        from apps.analytics.models import Prescription
+
+        patient = self._record()
+        rows = Prescription.all_objects.filter(
+            patient=patient, status=Prescription.Status.PRESCRIBED,
+        ).select_related("medication")
+        return Response([{
+            "id": r.id, "medication_name": r.medication.generic_name,
+            "dose": r.dose, "frequency": r.frequency,
+            "duration_days": r.duration_days, "created_at": r.created_at,
+        } for r in rows])
+
+    @staticmethod
+    def _uncatalogued(patient):
+        """Items handed over at a counter that match no catalog drug.
+
+        capture_dispense files only catalog drugs, so these have no Prescription
+        row; they are read straight off the dispensing log under the item's own
+        name, with ``medication`` null (nothing to look up a pharmacy for).
+        ponytail: matched per row, fine at one patient's volume.
+        """
+        from apps.analytics.capture import medication_for
+        from apps.pos.models import DispensingLog, Sale
+
+        logs = DispensingLog.all_objects.filter(
+            sale__patient=patient, status=DispensingLog.Status.DISPENSED,
+        ).exclude(sale__status=Sale.Status.CANCELLED).select_related("item")
+        return [{
+            "id": f"dispense-{log.pk}", "medication": None,
+            "medication_name": log.name, "dose": "", "frequency": "",
+            "duration_days": None, "status": "dispensed",
+            "created_at": log.created_at,
+        } for log in logs if medication_for(log.tenant_id, log.item, log.name) is None]
 
     # --- the people on my card ---------------------------------------------
     @action(detail=False, methods=["get"])

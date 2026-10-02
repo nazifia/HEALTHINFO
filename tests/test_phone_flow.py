@@ -126,6 +126,12 @@ def test_visit_to_counter_on_the_phone_number(world):
     assert sold.status_code == 201, sold.content
     assert DrugOrder.all_objects.get(pk=oid).status == DrugOrder.Status.DISPENSED
     assert _lookup(out, PHONE, undispensed=1)["orders_elsewhere"] == []
+    # A second sale off the filled order is refused, not dispensed again.
+    again = out.post("/api/pos/sales/", {
+        "items": [{"item": world["items"][world["pharm"].id].pk, "quantity": 10}],
+        "prescription": oid, "patient_number": PHONE,
+    }, format="json")
+    assert again.status_code == 400, again.content
     assert _lookup(hp, PHONE, undispensed=1)["orders"] == []
 
 

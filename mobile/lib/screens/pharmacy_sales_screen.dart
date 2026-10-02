@@ -358,7 +358,10 @@ class _SaleSheetState extends State<SaleSheet> {
             ],
             const SizedBox(height: 16),
             Wrap(spacing: 10, runSpacing: 10, children: [
-              OutlinedButton.icon(
+              // Same rule as the server: no receipt until the sale is complete.
+              if (!const {'pending', 'credit', 'cancelled'}
+                  .contains(_sale['status']))
+                OutlinedButton.icon(
                 onPressed: () => showModalBottomSheet<void>(
                   context: context,
                   isScrollControlled: true,

@@ -108,12 +108,6 @@ def test_a_pending_script_cannot_be_asked_for(linked):
     assert r.data == []
 
 
-def test_there_is_no_pending_list(linked):
-    """Undispensed orders are not served to the patient by any route."""
-    _, user, _ = linked
-    assert _portal(user).get("/api/portal/pending/").status_code == 404
-
-
 def test_the_clinical_timeline_is_not_served_to_patients(linked):
     _tenant, user, _patient = linked
     assert _portal(user).get("/api/portal/history/").status_code == 404
@@ -184,3 +178,17 @@ def test_pharmacies_without_a_position_still_answer(linked):
 def test_haversine_matches_a_known_distance():
     # Lagos to Abuja is about 525 km great-circle.
     assert 515 < haversine_km(6.46, 3.40, 9.05, 7.49) < 535
+
+
+def test_pending_script_is_served_for_an_alert_only(linked):
+    tenant, user, patient = linked
+    drug = Medication.objects.create(tenant=tenant, generic_name="Ibuprofen")
+    Prescription.objects.create(tenant=tenant, patient=patient, medication=drug,
+                                status=Prescription.Status.PRESCRIBED)
+    Prescription.objects.create(tenant=tenant, patient=patient, medication=drug,
+                                status=Prescription.Status.CANCELLED)
+
+    pending = _portal(user).get("/api/portal/pending/")
+    assert [r["medication_name"] for r in pending.data] == ["Ibuprofen"]
+    # Still not something the patient has collected.
+    assert _portal(user).get("/api/portal/medications/").data == []
