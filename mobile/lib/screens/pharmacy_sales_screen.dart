@@ -132,7 +132,7 @@ class _SaleCard extends StatelessWidget {
         Text(
           [
             patient.isEmpty ? 'Walk-in' : patient,
-            '${row['payment_method']}'.toUpperCase(),
+            '${row['payment_summary'] ?? row['payment_method']}',
           ].join(' · '),
           style: TextStyle(color: context.hintColor, fontSize: 13),
         ),
@@ -297,7 +297,7 @@ class _SaleSheetState extends State<SaleSheet> {
             Text(
               [
                 '${_sale['patient_name'] ?? 'Walk-in'}',
-                '${_sale['payment_method']}'.toUpperCase(),
+                '${_sale['payment_summary'] ?? _sale['payment_method']}',
               ].join(' · '),
               style: TextStyle(color: context.hintColor, fontSize: 13),
             ),

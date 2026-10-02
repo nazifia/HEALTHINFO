@@ -178,7 +178,7 @@ const PATIENT_SHEET = {
   },
 };
 const VISIT_SHEET = {
-  form: { title: 'New consultation', submit: 'Start consultation' },
+  form: { title: 'New consultation', submit: 'Prescribe' },
   labels: { patient: 'Patient (optional)', case_report: 'Existing case (optional)', appointment: 'Appointment (optional)',
     temperature_c: 'Temp C', pulse_bpm: 'Pulse', systolic_bp: 'Systolic', diastolic_bp: 'Diastolic',
     respiratory_rate: 'Resp rate', oxygen_saturation: 'SpO2 %', weight_kg: 'Weight kg', height_cm: 'Height cm' },
@@ -195,7 +195,7 @@ const VISIT_SHEET = {
   },
 };
 const ORDER_SHEET = {
-  form: { title: 'Prescribe', submit: 'Write orders' },
+  form: { title: 'Prescribe', submit: 'Send' },
   layout: ['patient', 'medication', 'dose', 'frequency', 'duration_days', 'region', 'notes'],
   labels: { medication: 'Drug', duration_days: 'Duration in days', patient: 'Patient (optional)' },
   // The counter moves the status and stamps the dispensing, not the prescriber.
@@ -1506,7 +1506,7 @@ function pickColumns(rows, keep = []) {
   const row = mergedRow(rows);
   const keys = Object.keys(row);
   const resolved = (k) => namedElsewhere(keys, k);
-  const first = keys.filter((k) => ['id', 'reference', 'status', 'name', 'generic_name', 'title', 'phone', 'slug', ...keep].includes(k));
+  const first = keys.filter((k) => ['id', 'reference', 'status', 'payment_summary', 'name', 'generic_name', 'title', 'phone', 'slug', ...keep].includes(k));
   // null is a scalar here, not an object — a column empty on the sampled row
   // still belongs in the table.
   // age_group only repeats `age` as a band — the exact age is the column.
@@ -3202,6 +3202,14 @@ const PICKERS = {
     none: 'No patient found.', which: 'Which patient?',
     name: (p) => p.full_name || '',
   },
+  customer: {
+    path: '/api/customers/',
+    hit: (c) => `<div class="muted">${esc(c.name)} · ${esc(c.phone)}${c.is_wholesale ? ' · wholesale' : ''}
+      · wallet ${money(c.wallet_balance)}${Number(c.outstanding_debt) > 0 ? ` · owes ${money(c.outstanding_debt)}` : ''}</div>`,
+    placeholder: 'Name or phone…',
+    none: 'No customer found.', which: 'Which customer?',
+    name: (c) => c.name || '',
+  },
   user: {
     path: '/api/users/', hit: userHitHtml,
     placeholder: 'Name, phone or email…',
@@ -4237,6 +4245,8 @@ async function viewSell() {
   // patient again (and must never have a picked patient silently dropped).
   let patient = null;      // the chosen row, or null for a walk-in
   let patientQuery = '';   // what is in the search box
+  let customer = null;     // the saved customer picked for this sale
+  let customerQuery = '';  // what is in their search box
   let schemes = [];        // active enrollments for `patient`
   let schemeId = '';
   // Clearances the insurer has already given this member. A high-value covered
@@ -4327,13 +4337,18 @@ async function viewSell() {
           <input name="patient_search" placeholder="Name, hospital number or phone…"
                  autocomplete="off" value="${esc(patientQuery)}"></label>
         <div id="patient-hit" class="muted">${patient ? patientHitHtml(patient) : ''}</div>
+        <label>Customer (optional — a saved customer, for their wallet and history)
+          <input name="customer_search" placeholder="Name or phone…"
+                 autocomplete="off" value="${esc(customerQuery)}"></label>
+        <div id="customer-hit" class="muted">${customer ? PICKERS.customer.hit(customer) : ''}</div>
         <label>Customer name (walk-in — printed on the receipt)
           <input name="buyer_name" maxlength="200" autocomplete="off"></label>
         <label>Customer address / phone
           <input name="buyer_address" maxlength="300" autocomplete="off"></label>
         <label>Payment<select name="payment_method">
           <option value="cash">Cash</option><option value="card">Card</option>
-          <option value="transfer">Transfer</option><option value="hmo">HMO / scheme</option>
+          <option value="transfer">Transfer</option><option value="wallet">Customer wallet</option>
+          <option value="hmo">HMO / scheme</option>
         </select></label>
         <label>Scheme membership<select name="enrollment">${schemeOptions()}</select></label>
         <label>Authorisation (only for a covered sale above the insurer's threshold)
@@ -4434,6 +4449,9 @@ async function viewSell() {
     });
     // Adding a basket line re-renders the form, so what was typed is kept.
     search.addEventListener('input', () => { patientQuery = search.value; });
+    const cbox = $('#checkout').customer_search;
+    picker(cbox, $('#customer-hit'), PICKERS.customer, (c) => { customer = c; });
+    cbox.addEventListener('input', () => { customerQuery = cbox.value; });
     $('#checkout').enrollment.onchange = (e) => {
       schemeId = e.target.value;
       loadAuths();
@@ -4484,13 +4502,20 @@ async function viewSell() {
       if (patientQuery.trim() && !patient) {
         return toast('Pick the patient first — the lookup has no single match.', true);
       }
+      if (customerQuery.trim() && !customer) {
+        return toast('Pick the customer first — the lookup has no single match.', true);
+      }
       const fd = new FormData(e.target);
+      if (fd.get('payment_method') === 'wallet' && !customer) {
+        return toast('A wallet sale needs the customer whose wallet pays.', true);
+      }
       const body = {
         payment_method: fd.get('payment_method'),
         items: basket.map((b) => ({ item: b.item, quantity: b.quantity, discount: b.discount })),
       };
+      if (customer) body.customer = customer.id;
       if (patient) body.patient = patient.id;
-      else {
+      else if (!customer) {
         body.buyer_name = String(fd.get('buyer_name') || '').trim();
         body.buyer_address = String(fd.get('buyer_address') || '').trim();
       }
@@ -4502,6 +4527,11 @@ async function viewSell() {
       try {
         const sale = await Api.post('/api/pharmacy/sales/', body);
         toast(`Sale ${sale.reference} — patient pays ${money(sale.patient_payable)}.`);
+        // The wallet pays on the spot; a short wallet leaves the rest as debt.
+        if (body.payment_method === 'wallet') {
+          const paid = await Api.post(`/api/pharmacy/sales/${sale.id}/pay-wallet/`, {});
+          toast(paid.message || 'Paid from wallet.');
+        }
         location.hash = `#/r/pharmacy-sales/${sale.id}`;
       } catch (err) { toast(err.message, true); }
     };

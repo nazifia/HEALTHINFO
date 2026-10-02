@@ -106,7 +106,10 @@
       <div><span>Covered by {{ sale.enrollment.hmo.name|default:"scheme" }}</span><span>{{ sale.hmo_payable }}</span></div>
       <div><span>Patient pays</span><span>{{ sale.patient_payable }}</span></div>
     {% endif %}
-    <div><span>Paid ({{ sale.get_payment_method_display }})</span><span>{{ sale.amount_paid }}</span></div>
+    <div><span>Paid ({{ sale.payment_summary }})</span><span>{{ sale.amount_paid }}</span></div>
+    {% if sale.payments.all|length > 1 %}{% for p in sale.payments.all %}
+      <div class="muted"><span>&nbsp;&nbsp;{{ p.get_method_display }}</span><span>{{ p.applied }}</span></div>
+    {% endfor %}{% endif %}
     {% if sale.change_due %}
       <div><span>Tendered</span><span>{{ sale.amount_tendered }}</span></div>
       <div><span>Change</span><span>{{ sale.change_due }}</span></div>

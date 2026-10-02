@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
@@ -108,6 +109,7 @@ class SaleSerializer(NamedRelationsMixin, serializers.ModelSerializer):
     served_by_name = serializers.CharField(source="served_by.username",
                                            read_only=True)
     buyer = serializers.CharField(read_only=True)
+    payment_summary = serializers.CharField(read_only=True)
     balance_due = serializers.DecimalField(max_digits=12, decimal_places=2,
                                            read_only=True)
     change_due = serializers.DecimalField(max_digits=12, decimal_places=2,
@@ -181,7 +183,12 @@ class SaleSerializer(NamedRelationsMixin, serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"authorization": "Only an HMO sale carries an authorisation."}
             )
-        if method == Sale.PaymentMethod.WALLET and not attrs.get("customer"):
+        customer = attrs.get("customer")
+        if customer is not None and not customer.is_active:
+            raise serializers.ValidationError(
+                {"customer": "That customer is inactive."}
+            )
+        if method == Sale.PaymentMethod.WALLET and not customer:
             raise serializers.ValidationError(
                 {"customer": "A wallet sale needs the customer whose wallet pays."}
             )
@@ -282,6 +289,10 @@ class SaleSerializer(NamedRelationsMixin, serializers.ModelSerializer):
             # The sale is what fills the script — this pharmacy's own or
             # another's — so it follows the sale, not the writing of the script.
             sale.rx.fill_from(sale)
+        if sale.customer_id:
+            # A sale to a known customer is a visit, whoever pays for it.
+            sale.customer.last_visit = timezone.localdate()
+            sale.customer.save(update_fields=["last_visit", "updated_at"])
         sale.refresh_from_db()
         return sale
 

@@ -73,6 +73,13 @@ class Customer(TenantOwnedModel):
         return _money(total or 0)
 
     # --- wallet ----------------------------------------------------------
+    def _lock(self):
+        """Re-read balances under a row lock, so two tills cannot both spend
+        the same naira from stale in-memory values."""
+        fresh = Customer.all_objects.select_for_update().get(pk=self.pk)
+        self.wallet_balance = fresh.wallet_balance
+        self.outstanding_debt = fresh.outstanding_debt
+
     def _wallet_row(self, txn_type, amount, *, method="", note=""):
         return WalletTransaction.all_objects.create(
             tenant=self.tenant, customer=self, txn_type=txn_type,
@@ -90,22 +97,48 @@ class Customer(TenantOwnedModel):
         if amount <= 0:
             raise ValueError("A top-up must be positive.")
         with transaction.atomic():
+            self._lock()
             row = self._wallet_row("topup", amount, method=method, note=note)
             settled = min(self.outstanding_debt, amount)
             self.outstanding_debt = _money(self.outstanding_debt - settled)
             self.wallet_balance = _money(self.wallet_balance + amount - settled)
             self.save(update_fields=["wallet_balance", "outstanding_debt",
                                      "updated_at"])
+            self._settle_credit_sales(settled)
         return row
+
+    def _settle_credit_sales(self, amount):
+        """Spend debt repayment on this customer's CREDIT sales, oldest first,
+        so a sale flips to PAID (and into revenue) once its share is covered.
+
+        Only the sale's own totals move: the cash already sits on the top-up
+        row, and a SalePayment here would count it twice.
+        """
+        from apps.pos.models import Sale
+
+        for sale in Sale.all_objects.select_for_update().filter(
+            customer=self, status=Sale.Status.CREDIT
+        ).order_by("created_at", "id"):
+            if amount <= 0:
+                break
+            applied = min(sale.balance_due, amount)
+            amount = _money(amount - applied)
+            sale.amount_paid = _money(sale.amount_paid + applied)
+            sale.amount_tendered = _money(sale.amount_tendered + applied)
+            if sale.balance_due <= 0:
+                sale.status = Sale.Status.PAID
+            sale.save(update_fields=["amount_paid", "amount_tendered", "status",
+                                     "updated_at"])
 
     def deduct(self, amount, *, note=""):
         """Take money off the wallet outright — a correction, not a purchase."""
         amount = _money(amount)
         if amount <= 0:
             raise ValueError("A deduction must be positive.")
-        if amount > self.wallet_balance:
-            raise ValueError("That is more than the wallet holds.")
         with transaction.atomic():
+            self._lock()
+            if amount > self.wallet_balance:
+                raise ValueError("That is more than the wallet holds.")
             row = self._wallet_row("deduct", amount, note=note)
             self.wallet_balance = _money(self.wallet_balance - amount)
             self.save(update_fields=["wallet_balance", "updated_at"])
@@ -121,6 +154,7 @@ class Customer(TenantOwnedModel):
         if amount <= 0:
             raise ValueError("A charge must be positive.")
         with transaction.atomic():
+            self._lock()
             paid = min(self.wallet_balance, amount)
             credit = _money(amount - paid)
             row = self._wallet_row("purchase", amount, note=note)
@@ -130,6 +164,19 @@ class Customer(TenantOwnedModel):
             self.save(update_fields=["wallet_balance", "outstanding_debt",
                                      "last_visit", "updated_at"])
         return paid, credit, row
+
+    def reverse_charge(self, paid, credit, *, note=""):
+        """Undo a ``charge`` (a cancelled sale): the wallet part goes back, the
+        debt part is written off. Unlike ``refund`` it does not settle debt."""
+        paid, credit = _money(paid), _money(credit)
+        with transaction.atomic():
+            self._lock()
+            if paid > 0:
+                self._wallet_row("topup", paid, note=note or "Sale cancelled")
+            self.wallet_balance = _money(self.wallet_balance + paid)
+            self.outstanding_debt = _money(max(self.outstanding_debt - credit, 0))
+            self.save(update_fields=["wallet_balance", "outstanding_debt",
+                                     "updated_at"])
 
     def refund(self, amount, *, note=""):
         """Put a refund back onto the wallet."""

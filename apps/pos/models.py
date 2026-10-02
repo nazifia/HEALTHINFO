@@ -340,6 +340,17 @@ class Sale(TenantOwnedModel):
         return self.buyer_name or "Walk-in"
 
     @property
+    def payment_summary(self):
+        """How it was paid, as a name to print: the forms of money actually
+        taken ("Cash + Wallet"), else the method the sale was opened with."""
+        seen = []
+        for p in self.payments.all():
+            label = p.get_method_display()
+            if label not in seen:
+                seen.append(label)
+        return " + ".join(seen) or self.get_payment_method_display()
+
+    @property
     def balance_due(self):
         """What the patient still owes. Never negative - an overpayment is
         change given, not a debt owed back through this field."""
@@ -640,6 +651,14 @@ class Sale(TenantOwnedModel):
             DispensingLog.all_objects.filter(sale=self).update(
                 status=DispensingLog.Status.RETURNED
             )
+            if self.customer_id:
+                wallet_paid = sum(
+                    (p.applied for p in SalePayment.all_objects.filter(
+                        sale=self, method=SalePayment.Method.WALLET)), ZERO)
+                debt = self.balance_due if self.status == self.Status.CREDIT else ZERO
+                if wallet_paid or debt:
+                    self.customer.reverse_charge(
+                        wallet_paid, debt, note=f"Sale {self.reference} cancelled")
             self.status = self.Status.CANCELLED
             self.save(update_fields=["status", "updated_at"])
         return self

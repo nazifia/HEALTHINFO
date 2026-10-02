@@ -177,6 +177,7 @@ Map<String, dynamic> saleBody({
   required List<BasketLine> lines,
   required String paymentMethod,
   int? patientId,
+  int? customerId,
   int? enrollmentId,
   int? prescriptionId,
   int? rxId,
@@ -190,6 +191,7 @@ Map<String, dynamic> saleBody({
   return {
     'payment_method': paymentMethod,
     'patient': ?patientId,
+    'customer': ?customerId,
     if ((buyerName ?? '').trim().isNotEmpty) 'buyer_name': buyerName!.trim(),
     if ((buyerAddress ?? '').trim().isNotEmpty)
       'buyer_address': buyerAddress!.trim(),

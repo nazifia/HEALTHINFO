@@ -40,6 +40,8 @@ class _DispenseSheetState extends State<DispenseSheet> {
   bool _finding = false;
   int? _itemId;
   int? _patientId;
+  // A saved customer, for their wallet and history. Independent of the patient.
+  Map<String, dynamic>? _customer;
   int? _enrollmentId;
   int? _authId;
   String _method = 'cash';
@@ -235,6 +237,32 @@ class _DispenseSheetState extends State<DispenseSheet> {
     }
   }
 
+  Future<void> _pickCustomer() async {
+    final picked = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => SearchSheet(
+        path: '/api/customers/',
+        title: 'Select a customer',
+        hint: 'Name or phone',
+        errorTitle: 'Could not load customers',
+        emptyIcon: Icons.person_search_outlined,
+        emptyTitle: 'No customers found',
+        emptyMessage: 'Add the customer first, or search again.',
+        label: (r) => '${r['name']}',
+        sub: (r) => [
+          '${r['phone'] ?? ''}',
+          if (r['is_wholesale'] == true) 'wholesale',
+          'wallet ${money(r['wallet_balance'])}',
+          if ((num.tryParse('${r['outstanding_debt']}') ?? 0) > 0)
+            'owes ${money(r['outstanding_debt'])}',
+        ].join(' · '),
+      ),
+    );
+    if (picked != null) setState(() => _customer = picked);
+  }
+
   void _add() {
     final item = _items.firstWhere((i) => i['id'] == _itemId,
         orElse: () => <String, dynamic>{});
@@ -266,6 +294,10 @@ class _DispenseSheetState extends State<DispenseSheet> {
       setState(() => _error = 'Add at least one item.');
       return;
     }
+    if (_method == 'wallet' && _customer == null) {
+      setState(() => _error = 'A wallet sale needs the customer whose wallet pays.');
+      return;
+    }
     if (_insured && _enrollmentId == null) {
       setState(() => _error = 'An HMO sale needs the patient\'s scheme card.');
       return;
@@ -281,16 +313,31 @@ class _DispenseSheetState extends State<DispenseSheet> {
           lines: _basket,
           paymentMethod: _method,
           patientId: _patientId,
+          customerId: _customer?['id'] as int?,
           enrollmentId: _enrollmentId,
           authorizationId: _authId,
           prescriptionId: fillFor(_filling).prescriptionId,
           rxId: fillFor(_filling).rxId,
           patientNumber: _number.text,
-          buyerName: _patientId == null ? _buyer.text : null,
-          buyerAddress: _patientId == null ? _buyerAddress.text : null,
+          buyerName: _patientId == null && _customer == null ? _buyer.text : null,
+          buyerAddress:
+              _patientId == null && _customer == null ? _buyerAddress.text : null,
         ),
       );
-      if (mounted) Navigator.of(context).pop(sale as Map<String, dynamic>?);
+      var result = sale as Map<String, dynamic>?;
+      if (_method == 'wallet' && result != null) {
+        // The wallet pays on the spot; a short wallet leaves the rest as debt.
+        try {
+          result = await api.post(
+              '/api/pharmacy/sales/${result['id']}/pay-wallet/', {})
+              as Map<String, dynamic>?;
+        } catch (e) {
+          if (mounted) {
+            showSuccess(context, 'Sale saved, wallet not charged: $e');
+          }
+        }
+      }
+      if (mounted) Navigator.of(context).pop(result);
     } catch (e) {
       // Out of stock, a lapsed card, a short batch — the API says which, and
       // nothing was dispensed, so the basket stays intact for a second try.
@@ -368,8 +415,36 @@ class _DispenseSheetState extends State<DispenseSheet> {
             _loadEnrollments(id);
           },
         ),
+        const SizedBox(height: 12),
+        InputDecorator(
+          decoration: const InputDecoration(labelText: 'Customer (optional)'),
+          child: Row(children: [
+            Expanded(
+              child: Text(
+                _customer == null
+                    ? 'Not selected'
+                    : '${_customer!['name']} · ${_customer!['phone'] ?? ''}'
+                        ' · wallet ${money(_customer!['wallet_balance'])}',
+                style: TextStyle(
+                    color: _customer == null
+                        ? context.hintColor
+                        : context.labelColor),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (_customer != null)
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.clear, size: 18),
+                onPressed: () => setState(() => _customer = null),
+              ),
+            TextButton(
+                onPressed: _pickCustomer,
+                child: Text(_customer == null ? 'Select' : 'Change')),
+          ]),
+        ),
         // A walk-in has no record to print from, so the receipt takes what is typed.
-        if (_patientId == null) ...[
+        if (_patientId == null && _customer == null) ...[
           const SizedBox(height: 12),
           TextField(
             controller: _buyer,
@@ -479,6 +554,7 @@ class _DispenseSheetState extends State<DispenseSheet> {
             DropdownMenuItem(value: 'cash', child: Text('Cash')),
             DropdownMenuItem(value: 'card', child: Text('Card')),
             DropdownMenuItem(value: 'transfer', child: Text('Transfer')),
+            DropdownMenuItem(value: 'wallet', child: Text('Customer wallet')),
             DropdownMenuItem(value: 'hmo', child: Text('HMO / scheme')),
           ],
           onChanged: (v) => setState(() => _method = v ?? 'cash'),

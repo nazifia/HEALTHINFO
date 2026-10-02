@@ -100,7 +100,11 @@ def render(sale, lines, tenant, paper=80):
         text(row(f"Covered by {sale.enrollment.hmo.name if sale.enrollment else 'scheme'}",
                  sale.hmo_payable))
         text(row("Patient pays", sale.patient_payable))
-    text(row(f"Paid ({sale.get_payment_method_display()})", sale.amount_paid))
+    text(row(f"Paid ({sale.payment_summary})", sale.amount_paid))
+    payments = list(sale.payments.all())
+    if len(payments) > 1:
+        for p in payments:
+            text(row(f"  {p.get_method_display()}", p.applied))
     if sale.change_due:
         text(row("Tendered", sale.amount_tendered))
         text(row("Change", sale.change_due))

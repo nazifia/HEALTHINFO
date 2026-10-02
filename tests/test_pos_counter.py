@@ -142,6 +142,80 @@ def test_a_funded_wallet_settles_the_sale_outright(counter):
     assert customer.outstanding_debt == Decimal("0.00")
 
 
+def test_cancelling_a_credit_sale_gives_back_wallet_and_writes_off_debt(counter):
+    customer = counter["customer"]
+    customer.top_up(Decimal("40.00"))
+    sale = _sell(counter, quantity=4, customer=customer.pk,
+                 payment_method=Sale.PaymentMethod.WALLET)
+    sale.pay_from_wallet()
+    sale.cancel()
+    customer.refresh_from_db()
+
+    assert customer.wallet_balance == Decimal("40.00")
+    assert customer.outstanding_debt == Decimal("0.00")
+
+
+def test_stale_customer_object_cannot_overspend_the_wallet(counter):
+    from apps.customers.models import Customer
+    customer = counter["customer"]
+    customer.top_up(Decimal("100.00"))
+    stale = Customer.all_objects.get(pk=customer.pk)
+    customer.charge(Decimal("100.00"))
+    paid, credit, _ = stale.charge(Decimal("100.00"))
+
+    assert (paid, credit) == (Decimal("0.00"), Decimal("100.00"))
+
+
+def test_repaying_debt_turns_the_credit_sale_into_revenue(counter):
+    customer = counter["customer"]
+    customer.top_up(Decimal("40.00"))
+    sale = _sell(counter, quantity=4, customer=customer.pk,
+                 payment_method=Sale.PaymentMethod.WALLET)
+    sale.pay_from_wallet()                      # 40 paid, 60 debt
+    customer.top_up(Decimal("20.00"))
+    sale.refresh_from_db()
+    assert sale.status == Sale.Status.CREDIT and sale.balance_due == Decimal("40.00")
+
+    customer.top_up(Decimal("50.00"))           # 40 clears debt, 10 credit
+    sale.refresh_from_db()
+    customer.refresh_from_db()
+    assert sale.status == Sale.Status.PAID and sale.balance_due == 0
+    assert customer.outstanding_debt == 0 and customer.wallet_balance == Decimal("10.00")
+
+
+def test_sale_to_a_selected_customer_names_them_and_marks_the_visit(counter):
+    customer = counter["customer"]
+    sale = _sell(counter, quantity=1, customer=customer.pk)
+    customer.refresh_from_db()
+
+    assert sale.buyer == customer.name
+    assert customer.last_visit is not None
+
+
+def test_an_inactive_customer_cannot_be_sold_to(counter):
+    customer = counter["customer"]
+    customer.is_active = False
+    customer.save()
+    with pytest.raises(Exception) as exc:
+        _sell(counter, quantity=1, customer=customer.pk)
+    assert "inactive" in str(exc.value)
+
+
+def test_sale_and_receipt_say_how_it_was_paid(counter):
+    customer = counter["customer"]
+    customer.top_up(Decimal("500.00"))
+    sale = _sell(counter, quantity=1, customer=customer.pk,
+                 payment_method=Sale.PaymentMethod.WALLET)
+    assert sale.payment_summary == "Wallet"      # nothing taken yet: opened as
+    sale.pay_from_wallet()
+    sale = Sale.all_objects.get(pk=sale.pk)
+    assert sale.payment_summary == "Wallet"
+    client = _client(counter["staff"], counter["tenant"])
+    assert client.get(f"/api/pos/sales/{sale.pk}/").data["payment_summary"] == "Wallet"
+    html = client.get(f"/api/pos/sales/{sale.pk}/receipt/?print=0").content.decode()
+    assert "Paid (Wallet)" in html
+
+
 # --- returns --------------------------------------------------------------
 
 def test_partial_return_puts_stock_back_and_refunds_to_the_wallet(counter):
