@@ -5134,6 +5134,7 @@ async function viewPortal() {
    admits pharmacy staff only, so everyone else keeps a hidden bell rather than
    a 403 on every page. */
 let bellTimer = null;
+let lastUnread = null;
 
 async function refreshBell() {
   const bell = $('#bell');
@@ -5147,6 +5148,15 @@ async function refreshBell() {
                                      { is_read: false, page_size: 1 });
     bell.textContent = count ? `\u{1F514} ${count}` : '\u{1F514}';
     bell.classList.toggle('unread', !!count);
+    // Surface a new request/answer the moment the poll sees it, not only on the bell.
+    if (lastUnread !== null && count > lastUnread) {
+      try {
+        const { rows } = await Api.list('/api/pos/notifications/',
+                                        { is_read: false, page_size: 1 });
+        toast(rows[0]?.title || 'New notification');
+      } catch { /* the bell already shows it */ }
+    }
+    lastUnread = count;
   } catch { bell.hidden = true; }
 }
 

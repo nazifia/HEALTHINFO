@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -447,12 +449,40 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _loadClosed();
     _loadRole();
     tenantChanged.addListener(_loadRole);
+    // ponytail: one poll for the session, like the web bell. Swap for push
+    // (FCM) if a minute of staleness ever matters.
+    _bellTimer = Timer.periodic(const Duration(seconds: 60), (_) => _refreshBell());
   }
 
   @override
   void dispose() {
+    _bellTimer?.cancel();
     tenantChanged.removeListener(_loadRole);
     super.dispose();
+  }
+
+  Timer? _bellTimer;
+
+  // Unread notifications for this seat; null until the first read, or when the
+  // menu has no Notifications page (the API only admits staff and insurers).
+  int? _unread;
+
+  int get _notificationsIndex =>
+      _flat.indexWhere((s) => s.page is NotificationsScreen);
+
+  Future<void> _refreshBell() async {
+    if (!mounted || !_roleKnown || _notificationsIndex < 0) {
+      if (_unread != null && mounted) setState(() => _unread = null);
+      return;
+    }
+    try {
+      final data = await api.get(
+          '/api/pos/notifications/', {'is_read': 'false', 'page_size': '1'});
+      final count = data is Map ? data['count'] as int? : null;
+      if (mounted) setState(() => _unread = count);
+    } catch (_) {
+      // The bell is a convenience; the Notifications page reports real errors.
+    }
   }
 
   Future<void> _loadClosed() async {
@@ -490,6 +520,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       // of range.
       if (_index >= _flat.length) _index = 0;
     });
+    _refreshBell();
   }
 
   // A seat that runs its own portal's user list gets the staff screen inside
@@ -834,6 +865,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         actions: [
           if ((_role == 'super_admin' || _independent) && tenantSlug.isNotEmpty)
             _leaveTenantChip(),
+          if (_unread != null)
+            IconButton(
+              icon: Badge(
+                isLabelVisible: _unread! > 0,
+                label: Text('$_unread'),
+                child: const Icon(Icons.notifications_outlined),
+              ),
+              // ponytail: count refreshes on this tap and the 60s poll, not on
+              // each mark-read inside the page.
+              onPressed: () {
+                setState(() => _index = _notificationsIndex);
+                _refreshBell();
+              },
+              tooltip: 'Notifications',
+            ),
           IconButton(
             icon: const Icon(Icons.search),
             onPressed: () => Navigator.of(context).push(

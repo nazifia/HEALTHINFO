@@ -227,7 +227,7 @@ class PreAuthorizationViewSet(PharmacyViewSet):
 
     def perform_create(self, serializer):
         """The insurer's answer goes back to whoever asked."""
-        serializer.save(requested_by=self.request.user)
+        serializer.save(requested_by=self.request.user).notify_insurer()
 
     def _transition(self, call, message):
         auth = self.get_object()

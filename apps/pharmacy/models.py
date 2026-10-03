@@ -408,6 +408,33 @@ class PreAuthorization(TenantOwnedModel):
             title=title[:200], message=message,
         )
 
+    def notify_insurer(self):
+        """Tell the scheme's seats a request is waiting on their answer.
+
+        Without this the insurer only learns of a request by opening the list.
+        With no seat on the scheme the pharmacy admin records the answer, so
+        the admins hear instead.
+        """
+        from apps.accounts.models import Role, User
+        from apps.pos.models import Notification
+
+        seats = User.objects.filter(tenant_id=self.tenant_id, is_active=True)
+        by_scheme = seats.filter(role=Role.HMO, hmo_id=self.hmo_id)
+        audience = by_scheme if by_scheme.exists() else seats.filter(
+            role=Role.TENANT_ADMIN)
+        if self.requested_by_id:
+            audience = audience.exclude(pk=self.requested_by_id)
+        Notification.objects.bulk_create([
+            Notification(
+                tenant_id=self.tenant_id, user=user,
+                kind=Notification.Kind.SYSTEM,
+                priority=Notification.Priority.HIGH,
+                title=f"{self.reference} needs authorisation",
+                message=f"{self.amount} requested from {self.hmo.name}.",
+            )
+            for user in audience
+        ])
+
     _ALLOWED = {
         "approve": {Status.REQUESTED},
         "decline": {Status.REQUESTED},

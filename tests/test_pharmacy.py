@@ -1105,6 +1105,10 @@ def test_high_value_cover_needs_a_recorded_authorisation(pharmacy):
     auth = PreAuthorization.all_objects.get(pk=asked.json()["id"])
     assert (auth.status, auth.hmo_id) == (PreAuthorization.Status.REQUESTED,
                                           enrollment.hmo_id)
+    # The insurer side is alerted, the asker is not; no scheme seat -> admins.
+    alert = Notification.all_objects.filter(title=f"{auth.reference} needs authorisation")
+    assert alert.exists()
+    assert not alert.filter(user=pharmacy["staff"]).exists()
     assert staff.post(f"/api/pharmacy/pre-authorizations/{auth.pk}/approve/",
                       {"code": "AUTH-77"}, format="json").status_code == 403
 
