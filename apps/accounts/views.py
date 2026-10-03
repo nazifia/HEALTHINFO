@@ -1,5 +1,6 @@
 from django.db.models import Q
 from rest_framework import viewsets
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -14,8 +15,8 @@ from apps.tenants.scope import selected_jurisdiction
 
 from .models import Role, User
 from .permissions import (
-    INSURER_ROLES, OVERSIGHT_ROLES, PATIENT_ROLES, RECEPTION_ROLES,
-    IsSelfOrModuleAdmin, IsTenantMember, is_module_admin,
+    ALL_PRIVILEGES, INSURER_ROLES, OVERSIGHT_ROLES, PATIENT_ROLES, RECEPTION_ROLES,
+    IsSelfOrModuleAdmin, IsTenantMember, granted, is_module_admin,
 )
 from .serializers import (
     LoginSerializer, OnboardingSerializer, PasswordResetConfirmSerializer,
@@ -206,6 +207,51 @@ class UserViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"])
     def me(self, request):
         return Response(UserSerializer(request.user).data)
+
+    @action(detail=True, methods=["post"])
+    def grant(self, request, pk=None):
+        """Add grants to this user: ``{"privileges": ["dispense", ...]}``."""
+        return self._change_grants(request, add=True)
+
+    @action(detail=True, methods=["post"])
+    def revoke(self, request, pk=None):
+        """Take grants away from this user, same body as ``grant``."""
+        return self._change_grants(request, add=False)
+
+    def _change_grants(self, request, add):
+        """Grant or revoke on one user, leaving their other grants as they are.
+
+        Only the portal's admin (or a platform admin) hands grants out, and
+        only ones they hold themselves — both ways, so someone trusted with
+        the user list cannot strip the money screens off a seat they could not
+        have given them to. The write itself runs through the serializer, so
+        the module and role fences are the ones every other user edit has.
+        """
+        actor = request.user
+        if not (actor.is_super_admin or is_module_admin(actor)):
+            raise PermissionDenied("Only an admin can grant or revoke privileges.")
+        target = self.get_object()
+        names = request.data.get("privileges")
+        if not isinstance(names, list) or not names:
+            raise ValidationError({"privileges": "Send a list of privileges."})
+        names = set(names)
+        unknown = names - ALL_PRIVILEGES
+        if unknown:
+            raise ValidationError({
+                "privileges": "Unknown privilege: " + ", ".join(sorted(unknown)),
+            })
+        if not add and not actor.is_super_admin:
+            beyond = (names & set(target.privileges or [])) - granted(actor)
+            if beyond:
+                raise ValidationError({
+                    "privileges": "You cannot revoke: " + ", ".join(sorted(beyond)),
+                })
+        current = set(target.privileges or [])
+        new = current | names if add else current - names
+        s = self.get_serializer(target, data={"privileges": sorted(new)}, partial=True)
+        s.is_valid(raise_exception=True)
+        s.save()
+        return Response(s.data)
 
 
 class PasswordResetViewSet(viewsets.ViewSet):

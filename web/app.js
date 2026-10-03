@@ -2379,6 +2379,7 @@ async function viewDetail(slug, id) {
       ${res.extra === 'close' ? closeVisitHtml(obj) : ''}
       ${res.extra === 'preauth' ? preauthItemsHtml(obj) + preauthDecisionHtml(obj)
         + preauthTrailHtml() : ''}
+      ${isUserRes(slug) && canWrite ? userGrantsHtml(obj) : ''}
 `);
     if (printable) $('#receipt').onclick = () => printReceipt(id);
     if (sendHtml) {
@@ -2406,6 +2407,7 @@ async function viewDetail(slug, id) {
     if (res.extra === 'count') wireStockCount(obj);
     if (res.extra === 'script') wireScriptDispense(id, () => viewDetail(slug, id));
     if (res.extra === 'close') wireCloseVisit(id, () => viewDetail(slug, id));
+    if (isUserRes(slug) && canWrite) wireUserGrants(slug, id, () => viewDetail(slug, id));
     if (res.extra === 'preauth') {
       wirePreauthItems(() => viewDetail(slug, id));
       wirePreauthDecision(slug, id, () => viewDetail(slug, id));
@@ -2795,6 +2797,34 @@ function narrowUserFields(fields) {
   if (module === 'scheme') { delete fields.hmo; delete fields.jurisdiction; }
   if (module === 'oversight') delete fields.hmo;
   if (module === 'facility') delete fields.jurisdiction;
+}
+
+/* The grants a user holds, each with a Revoke, and the ones this seat may still
+ * hand them (what the writer holds, in the user's own module, not already
+ * theirs). An admin seat holds its module's catalog implicitly, so there is
+ * nothing on its row to grant or revoke. Hits POST /api/users/{id}/grant|revoke/. */
+const userModule = (u) => (u.role === 'hmo' ? 'scheme' : u.role === 'government' ? 'oversight' : 'facility');
+const isImplicitAdmin = (u) => ['super_admin', 'tenant_admin'].includes(u.role) || u.is_admin;
+
+function userGrantsHtml(u) {
+  if (isImplicitAdmin(u) || u.id === ME?.id) return '';
+  const held = (u.privileges || []).filter((p) => MODULE_PRIVILEGES[userModule(u)].includes(p));
+  const mine = myGrants();
+  const offer = MODULE_PRIVILEGES[userModule(u)].filter((p) => mine.includes(p) && !held.includes(p));
+  return `<div class="card"><h3>Privileges</h3><div class="actions">
+    ${held.map((p) => `<span class="chip">${esc(label(p))}${mine.includes(p)
+      ? ` <button class="btn ghost" data-revoke="${p}">Revoke</button>` : ''}</span>`).join('') || '<span class="muted">None</span>'}
+    ${offer.length ? `<select id="grant-pick">${offer.map((p) => `<option value="${p}">${esc(label(p))}</option>`).join('')}</select>
+      <button class="btn" id="grant-go">Grant</button>` : ''}</div></div>`;
+}
+
+function wireUserGrants(slug, id, reload) {
+  const call = async (verb, name) => {
+    try { await Api.post(rdetail(slug, `${id}/${verb}/`), { privileges: [name] }); toast('Updated.'); reload(); }
+    catch (e) { toast(e.message, true); }
+  };
+  for (const b of document.querySelectorAll('[data-revoke]')) b.onclick = () => call('revoke', b.dataset.revoke);
+  if ($('#grant-go')) $('#grant-go').onclick = () => call('grant', $('#grant-pick').value);
 }
 
 /* Repeat the drug fields on demand, so one visit's drugs are prescribed in one

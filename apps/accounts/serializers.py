@@ -72,13 +72,18 @@ def apply_admin_scope(actor, attrs, instance=None):
     if "privileges" in attrs:
         # You grant what you hold and nothing more: a pharmacist trusted with
         # the user list cannot hand themselves the money screens too.
+        # A grant already on the row that you do not hold is not yours to take
+        # away either: the form only lists what you hold, so saving it must not
+        # silently drop the rest. Use revoke, which says so, when you hold it.
+        held = granted(actor)
+        existing = set(getattr(instance, "privileges", None) or [])
         wanted = set(attrs["privileges"] or [])
-        beyond = wanted - granted(actor)
+        beyond = wanted - existing - held
         if beyond:
             raise serializers.ValidationError({
                 "privileges": "You cannot grant: " + ", ".join(sorted(beyond)),
             })
-        attrs["privileges"] = sorted(wanted)
+        attrs["privileges"] = sorted((wanted & held) | (existing - held))
     role = attrs.get("role") or getattr(instance, "role", None) or (
         Role.PUBLIC if actor.role == Role.TENANT_ADMIN else actor.role
     )

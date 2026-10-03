@@ -6,6 +6,7 @@ a health authority seat flagged ``is_admin`` staffs its patch. None of them can
 reach out of their own module, and an unflagged seat mints nobody.
 """
 import pytest
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.accounts.models import Role, User
@@ -274,3 +275,51 @@ def test_new_insurer_seat_gets_role_default_grants(world):
     c.post("/api/users/", {"phone": "08030000033", "password": PASSWORD, "role": "pharmacist"},
            format="json")
     assert User.objects.get(phone="08030000033").privileges == []
+
+
+def test_admin_grants_and_revokes_without_touching_other_grants(world):
+    admin = seat(phone="08030000040", tenant=world["tenant"], role=Role.TENANT_ADMIN)
+    nurse = seat(phone="08030000041", tenant=world["tenant"], role=Role.NURSE,
+                 license_number="NMCN/41", terms_accepted_at=timezone.now(),
+                 privileges=["pharmacy_admin"])
+    c = client_for(admin)
+    r = c.post(f"/api/users/{nurse.id}/grant/", {"privileges": ["dispense"]}, format="json")
+    assert r.status_code == 200, r.content
+    nurse.refresh_from_db()
+    assert nurse.privileges == ["dispense", "pharmacy_admin"]
+    r = c.post(f"/api/users/{nurse.id}/revoke/", {"privileges": ["pharmacy_admin"]}, format="json")
+    assert r.status_code == 200, r.content
+    nurse.refresh_from_db()
+    assert nurse.privileges == ["dispense"]
+    # A typo is a 400, not a stored dead grant.
+    assert c.post(f"/api/users/{nurse.id}/grant/", {"privileges": ["fly"]},
+                  format="json").status_code == 400
+
+
+def test_grant_and_revoke_are_bounded_by_what_the_caller_holds(world):
+    clerk = seat(phone="08030000042", tenant=world["tenant"], role=Role.PHARMACIST,
+                 privileges=["manage_users"])
+    mate = seat(phone="08030000043", tenant=world["tenant"], role=Role.NURSE,
+                license_number="NMCN/43", terms_accepted_at=timezone.now(),
+                privileges=["pharmacy_admin"])
+    plain = seat(phone="08030000044", tenant=world["tenant"], role=Role.NURSE,
+                 license_number="NMCN/44", terms_accepted_at=timezone.now())
+    # A user-list grantee runs the actions, but only with what they hold.
+    c = client_for(clerk)
+    assert c.post(f"/api/users/{plain.id}/grant/", {"privileges": ["pharmacy_admin"]},
+                  format="json").status_code == 400
+    assert c.post(f"/api/users/{mate.id}/revoke/", {"privileges": ["pharmacy_admin"]},
+                  format="json").status_code == 400
+    assert c.post(f"/api/users/{plain.id}/grant/", {"privileges": ["manage_users"]},
+                  format="json").status_code == 200
+    # Someone with no grant at all is no admin.
+    assert client_for(mate).post(f"/api/users/{plain.id}/grant/",
+                                 {"privileges": ["dispense"]}, format="json").status_code == 403
+    # A form save by a limited manager must not wipe a grant it cannot see.
+    r = c.patch(f"/api/users/{mate.id}/", {"privileges": []}, format="json")
+    assert r.status_code == 200, r.content
+    mate.refresh_from_db()
+    assert mate.privileges == ["pharmacy_admin"]
+    # ...nor add one it does not hold.
+    assert c.patch(f"/api/users/{plain.id}/", {"privileges": ["pharmacy_admin"]},
+                   format="json").status_code == 400

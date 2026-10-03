@@ -104,4 +104,22 @@ api.applyDefaultGrants(select, 'pharmacist');
 assert.deepStrictEqual(picked(), []);
 api.applyDefaultGrants(null, 'hmo');   // no select for a seat that holds nothing to pass on
 
+// The user page offers Revoke on grants the writer holds and Grant for the rest
+// of what they hold; an admin seat (implicit catalog) or oneself gets nothing.
+const panel = slice('const userModule =', 'function wireUserGrants');
+const grantsFor = (me, user) => new Function('ME', 'esc', 'label', `${grants}
+${panel}
+  return userGrantsHtml;`)(me, (x) => x, (x) => x)(user);
+const boss = { id: 1, role: 'tenant_admin', tenant: 1 };
+const nurse = { id: 2, role: 'nurse', tenant: 1, privileges: ['pharmacy_admin', 'decide_claims'] };
+let html = grantsFor(boss, nurse);
+assert.ok(html.includes('data-revoke="pharmacy_admin"'));
+assert.ok(!html.includes('decide_claims'), 'a scheme grant on a facility seat counts for nothing');
+assert.ok(html.includes('<option value="dispense">') && !html.includes('<option value="pharmacy_admin">'));
+assert.strictEqual(grantsFor(boss, { id: 3, role: 'tenant_admin' }), '');
+assert.strictEqual(grantsFor(boss, { ...nurse, id: 1 }), '');
+const limited = { id: 4, role: 'pharmacist', tenant: 1, privileges: ['manage_users'] };
+html = grantsFor(limited, nurse);
+assert.ok(!html.includes('data-revoke'), 'cannot revoke what you do not hold');
+
 console.log('privileges.test.js ok');
