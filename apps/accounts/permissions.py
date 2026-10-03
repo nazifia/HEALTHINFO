@@ -79,6 +79,15 @@ MODULE_PRIVILEGES = {
 }
 ALL_PRIVILEGES = frozenset().union(*MODULE_PRIVILEGES.values())
 
+# What a new seat holds when its creator names no grants. An insurer seat on a
+# desk answers claims and keeps the tariff, as migration 0012 gave the ones
+# already there. Every other role starts with its role alone: a default must
+# never widen what that role could do before. An explicit list, even an empty
+# one, replaces the default.
+ROLE_DEFAULT_GRANTS = {
+    Role.HMO: [DECIDE_CLAIMS, EDIT_TARIFF],
+}
+
 
 def module_of(user):
     """Which portal this seat works in, or None for a seat in no module."""

@@ -343,7 +343,15 @@ class _UserFormState extends State<_UserForm> {
   /// they have (mirrors apply_admin_scope).
   List<String> get _grantChoices {
     final held = Api.grantsOf(widget.me);
-    return (Api.modulePrivileges[_module ?? 'facility'] ?? const <String>{})
+    // The platform admin has no module of their own: the seat being edited
+    // decides which catalog is on offer.
+    final module = _module ??
+        (_role == 'hmo'
+            ? 'scheme'
+            : _role == 'government'
+                ? 'oversight'
+                : 'facility');
+    return (Api.modulePrivileges[module] ?? const <String>{})
         .where(held.contains)
         .toList();
   }
@@ -564,7 +572,15 @@ class _UserFormState extends State<_UserForm> {
                     DropdownMenuItem(value: r, child: Text(r)),
                 ],
                 onChanged: (v) {
-                  setState(() => _role = v ?? _role);
+                  setState(() {
+                    _role = v ?? _role;
+                    // A new seat starts with its role's default grants.
+                    if (widget.user == null) {
+                      _privileges
+                        ..clear()
+                        ..addAll(Api.roleDefaultGrants[_role] ?? const <String>{});
+                    }
+                  });
                   if (_role == 'hmo') _loadHmos();
                   if (_role == 'government' || _independent) _loadJurisdictions();
                   if (_asksTerms) _loadTerms();

@@ -578,6 +578,17 @@ const MODULE_PRIVILEGES = {
   oversight: ['manage_users'],
 };
 
+/* What a new seat of a role starts with (accounts.permissions.ROLE_DEFAULT_GRANTS). */
+const ROLE_DEFAULT_GRANTS = { hmo: ['decide_claims', 'edit_tariff'] };
+
+/* Tick a role's default grants in the privileges select, leaving out any the
+   writer does not hold (the select only lists what they may pass on). */
+function applyDefaultGrants(select, role) {
+  if (!select) return;
+  const want = ROLE_DEFAULT_GRANTS[role] || [];
+  for (const o of select.options) o.selected = want.includes(o.value);
+}
+
 /* Which roles each module's admin may mint (accounts.permissions.MANAGEABLE_ROLES). */
 const MODULE_ROLES = {
   facility: ['tenant_admin', 'doctor', 'pharmacist', 'nurse', 'midwife', 'chew', 'receptionist', 'hmo', 'public'],
@@ -2673,6 +2684,13 @@ async function viewForm(slug, id, query) {
         box.hidden = !ask;
         f.elements.accept_terms.required = ask;
       });
+    }
+    if (isUserRes(slug) && !id) {
+      // A new seat starts with its role's default grants, ticked for its admin
+      // to untick (accounts.permissions.ROLE_DEFAULT_GRANTS).
+      const form = $('#f');
+      form.elements.role?.addEventListener('change', () =>
+        applyDefaultGrants(form.elements.privileges, form.elements.role.value));
     }
     const drugRows = multiDrug ? wireExtraDrugs(fields, res) : null;
     const lineRows = scriptLines ? await wireScriptLines(current.lines) : null;

@@ -36,6 +36,11 @@ class Api {
     'oversight': {'manage_users'},
   };
 
+  // What a new seat of a role starts with (ROLE_DEFAULT_GRANTS on the server).
+  static const roleDefaultGrants = {
+    'hmo': {'decide_claims', 'edit_tariff'},
+  };
+
   // Which roles each module's admin may mint (MANAGEABLE_ROLES on the server).
   static const moduleRoles = {
     'facility': [
@@ -60,7 +65,9 @@ class Api {
   static Set<String> grantsOf(Map<String, dynamic>? u) {
     final module = moduleOf(u);
     if (module == null) {
-      return u?['role'] == 'super_admin' ? modulePrivileges['facility']! : {};
+      return u?['role'] == 'super_admin'
+          ? modulePrivileges.values.expand((s) => s).toSet()
+          : {};
     }
     final catalog = modulePrivileges[module]!;
     if (u?['role'] == 'super_admin' ||

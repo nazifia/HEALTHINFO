@@ -22,7 +22,7 @@ from .models import (
     phone_validator,
 )
 from .permissions import (
-    ALL_PRIVILEGES, granted, is_module_admin, manageable_roles,
+    ALL_PRIVILEGES, ROLE_DEFAULT_GRANTS, granted, is_module_admin, manageable_roles,
 )
 
 
@@ -455,6 +455,8 @@ class UserSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         self._stamp_terms(validated_data)
+        role = validated_data.get("role") or Role.PUBLIC
+        validated_data.setdefault("privileges", list(ROLE_DEFAULT_GRANTS.get(role, ())))
         return User.objects.create_user(**validated_data)
 
     def update(self, instance, validated_data):

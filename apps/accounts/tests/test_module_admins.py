@@ -257,3 +257,20 @@ def test_pharmacy_admin_cannot_register_a_scheme(world):
     )
     assert resp.status_code == 403, resp.content
     assert not HMO.all_objects.filter(name="Leadway").exists()
+
+
+def test_new_insurer_seat_gets_role_default_grants(world):
+    admin = seat(phone="08030000030", tenant=world["tenant"], role=Role.TENANT_ADMIN)
+    body = {"password": PASSWORD, "role": "hmo", "hmo": world["hmo"].id}
+    c = client_for(admin)
+    assert c.post("/api/users/", {**body, "phone": "08030000031"},
+                  format="json").status_code == 201
+    assert User.objects.get(phone="08030000031").privileges == ["decide_claims", "edit_tariff"]
+    # An explicit list, even empty, replaces the default.
+    assert c.post("/api/users/", {**body, "phone": "08030000032", "privileges": []},
+                  format="json").status_code == 201
+    assert User.objects.get(phone="08030000032").privileges == []
+    # Roles with no default start with none.
+    c.post("/api/users/", {"phone": "08030000033", "password": PASSWORD, "role": "pharmacist"},
+           format="json")
+    assert User.objects.get(phone="08030000033").privileges == []

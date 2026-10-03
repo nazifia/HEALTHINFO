@@ -34,6 +34,17 @@ void main() {
     expect(Api.grantsOf(authority), {'manage_users'});
   });
 
+  test('the platform admin holds every grant, whichever module it is in', () {
+    expect(Api.grantsOf({'role': 'super_admin', 'tenant': null}), {
+      'manage_users', 'pharmacy_admin', 'decide_claims', 'edit_tariff',
+    });
+  });
+
+  test('a new insurer seat starts with its role\'s default grants', () {
+    expect(Api.roleDefaultGrants['hmo'], {'decide_claims', 'edit_tariff'});
+    expect(Api.roleDefaultGrants['pharmacist'], isNull);
+  });
+
   test('a grant is not the role', () {
     // The facility's admin staffs the facility, the tenant_admin seat included.
     expect(Api.manageableRoles({'role': 'tenant_admin', 'tenant': 3}),

@@ -20,7 +20,7 @@ const form = slice('function narrowUserFields(fields) {', '/* Repeat the drug fi
 
 // ME is a module-level global in app.js; the slice reads it off the closure.
 const load = (me) => new Function('ME', `${grants}\n${form}
-  return { myGrants, hasPriv, myManageableRoles, narrowUserFields };`)(me);
+  return { myGrants, hasPriv, myManageableRoles, narrowUserFields, applyDefaultGrants };`)(me);
 
 const userFields = () => ({
   role: { choices: ['super_admin', 'tenant_admin', 'doctor', 'pharmacist', 'hmo', 'government', 'public']
@@ -94,5 +94,14 @@ fields = userFields();
 api.narrowUserFields(fields);
 assert.strictEqual(fields.role.choices.length, 7);
 assert.ok(fields.tenant && fields.jurisdiction && fields.hmo);
+
+// A new seat's role ticks its default grants in the select; others clear it.
+const select = { options: ['decide_claims', 'edit_tariff', 'manage_users'].map((value) => ({ value, selected: false })) };
+const picked = () => select.options.filter((o) => o.selected).map((o) => o.value);
+api.applyDefaultGrants(select, 'hmo');
+assert.deepStrictEqual(picked(), ['decide_claims', 'edit_tariff']);
+api.applyDefaultGrants(select, 'pharmacist');
+assert.deepStrictEqual(picked(), []);
+api.applyDefaultGrants(null, 'hmo');   // no select for a seat that holds nothing to pass on
 
 console.log('privileges.test.js ok');
