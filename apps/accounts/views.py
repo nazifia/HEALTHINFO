@@ -15,8 +15,9 @@ from apps.tenants.scope import selected_jurisdiction
 
 from .models import Role, User
 from .permissions import (
-    ALL_PRIVILEGES, INSURER_ROLES, OVERSIGHT_ROLES, PATIENT_ROLES, RECEPTION_ROLES,
-    IsSelfOrModuleAdmin, IsTenantMember, granted, is_module_admin,
+    ALL_PRIVILEGES, INSURER_ROLES, OVERSIGHT_ROLES, PATIENT_ROLES, PHARMACY_ADMIN,
+    RECEPTION_ROLES,
+    IsSelfOrModuleAdmin, IsTenantMember, granted, has_privilege, is_module_admin,
 )
 from .serializers import (
     LoginSerializer, OnboardingSerializer, PasswordResetConfirmSerializer,
@@ -193,6 +194,13 @@ class UserViewSet(viewsets.ModelViewSet):
         # directory. Unless the admin handed them the user list to run.
         if user.role in RECEPTION_ROLES and not is_module_admin(user):
             return User.objects.filter(pk=user.pk)
+        # The pharmacy admin runs the pharmacy's staff, not the whole facility:
+        # pharmacists and themselves. (Holding the user list too makes them a
+        # module admin above, who reads the facility's whole list.)
+        if has_privilege(user, PHARMACY_ADMIN) and not is_module_admin(user):
+            return User.objects.filter(
+                Q(pk=user.pk) | Q(tenant=user.tenant, role=Role.PHARMACIST)
+            )
         # Tenant-scoped: only see users of your own tenant.
         return User.objects.filter(tenant=user.tenant)
 

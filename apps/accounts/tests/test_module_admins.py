@@ -323,3 +323,24 @@ def test_grant_and_revoke_are_bounded_by_what_the_caller_holds(world):
     # ...nor add one it does not hold.
     assert c.patch(f"/api/users/{plain.id}/", {"privileges": ["pharmacy_admin"]},
                    format="json").status_code == 400
+
+
+def test_pharmacy_admin_lists_only_pharmacy_staff(world):
+    t = world["tenant"]
+    boss = seat(phone="08030000050", tenant=t, role=Role.TENANT_ADMIN)
+    pharm_admin = seat(phone="08030000051", tenant=t, role=Role.PHARMACIST,
+                       privileges=["pharmacy_admin"])
+    mate = seat(phone="08030000052", tenant=t, role=Role.PHARMACIST)
+    doc = seat(phone="08030000053", tenant=t, role=Role.DOCTOR, license_number="MDCN/53",
+               terms_accepted_at=timezone.now())
+
+    def ids(user):
+        rows = client_for(user).get("/api/users/").json()
+        return {r["id"] for r in rows.get("results", rows)}
+
+    assert ids(pharm_admin) == {pharm_admin.id, mate.id}
+    assert {boss.id, pharm_admin.id, mate.id, doc.id} <= ids(boss)
+    # With the user list too, they run the whole facility's list.
+    pharm_admin.privileges = ["pharmacy_admin", "manage_users"]
+    pharm_admin.save()
+    assert doc.id in ids(pharm_admin)

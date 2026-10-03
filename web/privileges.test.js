@@ -123,3 +123,7 @@ html = grantsFor(limited, nurse);
 assert.ok(!html.includes('data-revoke'), 'cannot revoke what you do not hold');
 
 console.log('privileges.test.js ok');
+
+// The pharmacy admin's staff list is a registry entry over the users endpoint,
+// narrowed to pharmacists, and read-only (the API refuses their writes anyway).
+assert.ok(/'pharmacy-staff':\s*\{[^}]*path: 'users'[^}]*readOnly: true[^}]*role: 'pharmacist'/s.test(src));

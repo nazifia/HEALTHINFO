@@ -349,6 +349,11 @@ const RESOURCES = {
                                         { name: 'receive', label: 'Confirm received', when: ['approved'] }] },
   'pharmacy-returns':       { title: 'Returns',         group: 'Pharmacy', path: 'pharmacy/returns',         roles: 'staff', readOnly: true, noLink: true },
   'pharmacy-dispensing-log':{ title: 'Dispensing Log',  group: 'Pharmacy', path: 'pharmacy/dispensing-log',  roles: 'staff', search: true, readOnly: true, noLink: true },
+  // The pharmacy admin's own people: the API narrows /api/users/ to the pharmacy's
+  // pharmacists for them, so this is the list of who they run (read-only — adding
+  // staff is the facility admin's, or a holder of the user list).
+  'pharmacy-staff':         { title: 'Pharmacy Staff',  group: 'Pharmacy', path: 'users', roles: 'admin', search: true,
+                              readOnly: true, query: { role: 'pharmacist' } },
   'pharmacy-cashiers':      { title: 'Cashiers',        group: 'Pharmacy', path: 'pharmacy/cashiers',        roles: 'admin', search: true },
   // The dispenser's basket. Nothing leaves the shelf until ``complete`` —
   // until then this is an intention to sell, not a sale.
@@ -636,7 +641,7 @@ const PHARMACY_NAV = {
   'pharmacy-customers': 'Customers', 'pharmacy-wallet': 'Customers', 'pharmacy-debtors': 'Customers',
   'pharmacy-expenses': 'Finance', 'pharmacy-expense-cats': 'Finance',
   'pharmacy-commission-configs': 'Finance',
-  'pharmacy-cashiers': 'Pharmacy Setup', 'branches': 'Pharmacy Setup',
+  'pharmacy-cashiers': 'Pharmacy Setup', 'pharmacy-staff': 'Pharmacy Setup', 'branches': 'Pharmacy Setup',
 };
 
 const navGroup = (name, links) =>
@@ -709,6 +714,10 @@ function navHtml() {
     if (r.superOnly && ME?.role !== 'super_admin') continue;
     if (isIndependent() && !INDEPENDENT_OPEN.has(slug)) continue;
     if (slug === 'shifts' && prescriber) continue;
+    // Only a pharmacy admin with no user list of their own needs this one: the
+    // facility's admin and the holders of the user list have the Users screen.
+    if (slug === 'pharmacy-staff' && (!isPharmacyAdmin() || ['super_admin', 'tenant_admin'].includes(ME?.role)
+        || ME?.is_admin || hasPriv('manage_users'))) continue;
     if (r.adminOnly && !['super_admin', 'tenant_admin'].includes(ME?.role)
         && !(slug === 'users' && hasPriv('manage_users'))) continue;
     // An independent pharmacist is a visitor: the facility's counter and
