@@ -31,7 +31,7 @@ class Api {
   // something (mirrors accounts.permissions.MODULE_PRIVILEGES). A grant held
   // outside the seat's own module counts for nothing, here and on the server.
   static const modulePrivileges = {
-    'facility': {'manage_users', 'pharmacy_admin'},
+    'facility': {'manage_users', 'pharmacy_admin', 'dispense'},
     'scheme': {'manage_users', 'decide_claims', 'edit_tariff'},
     'oversight': {'manage_users'},
   };

@@ -67,13 +67,15 @@ PHARMACY_ADMIN = "pharmacy_admin"   # the facility's money screens: prices,
 DECIDE_CLAIMS = "decide_claims"     # answer the scheme's pre-authorizations
                                     # and claims
 EDIT_TARIFF = "edit_tariff"         # keep the scheme's own price list
+DISPENSE = "dispense"               # mark a drug order handed over, without being
+                                    # a pharmacist (a clinic with no pharmacy)
 
 # Which grants mean anything in which portal. A scheme's desk splits the way
 # the facility's does: its admin decides who on the desk answers claims and
 # who moves the tariff, and a seat with neither reads the desk and nothing
 # more. A health authority's office has only the user list to hand out.
 MODULE_PRIVILEGES = {
-    "facility": frozenset({MANAGE_USERS, PHARMACY_ADMIN}),
+    "facility": frozenset({MANAGE_USERS, PHARMACY_ADMIN, DISPENSE}),
     "scheme": frozenset({MANAGE_USERS, DECIDE_CLAIMS, EDIT_TARIFF}),
     "oversight": frozenset({MANAGE_USERS}),
 }

@@ -10,7 +10,7 @@ void main() {
 
   test('a module admin holds its whole catalog, a granted seat only its row', () {
     final admin = {'role': 'tenant_admin', 'tenant': 3};
-    expect(Api.grantsOf(admin), {'manage_users', 'pharmacy_admin'});
+    expect(Api.grantsOf(admin), {'manage_users', 'pharmacy_admin', 'dispense'});
 
     final clerk = {'role': 'pharmacist', 'tenant': 3, 'privileges': ['manage_users']};
     expect(Api.grantsOf(clerk), {'manage_users'});
@@ -36,7 +36,7 @@ void main() {
 
   test('the platform admin holds every grant, whichever module it is in', () {
     expect(Api.grantsOf({'role': 'super_admin', 'tenant': null}), {
-      'manage_users', 'pharmacy_admin', 'decide_claims', 'edit_tariff',
+      'manage_users', 'pharmacy_admin', 'dispense', 'decide_claims', 'edit_tariff',
     });
   });
 

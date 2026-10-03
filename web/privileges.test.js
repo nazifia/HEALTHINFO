@@ -25,14 +25,14 @@ const load = (me) => new Function('ME', `${grants}\n${form}
 const userFields = () => ({
   role: { choices: ['super_admin', 'tenant_admin', 'doctor', 'pharmacist', 'hmo', 'government', 'public']
     .map((value) => ({ value, display_name: value })) },
-  privileges: { child: { choices: [{ value: 'manage_users' }, { value: 'pharmacy_admin' }] } },
+  privileges: { child: { choices: [{ value: 'manage_users' }, { value: 'pharmacy_admin' }, { value: 'dispense' }] } },
   tenant: {}, hmo: {}, jurisdiction: {}, license_number: {},
 });
 
 // The facility's admin staffs the facility: every role of that module, the
 // whole grant catalog, and no organization field — it is pinned to their own.
 let api = load({ role: 'tenant_admin', tenant: 3 });
-assert.deepStrictEqual(api.myGrants(), ['manage_users', 'pharmacy_admin']);
+assert.deepStrictEqual(api.myGrants(), ['manage_users', 'pharmacy_admin', 'dispense']);
 let fields = userFields();
 api.narrowUserFields(fields);
 assert.deepStrictEqual(fields.role.choices.map((c) => c.value),
@@ -85,7 +85,7 @@ fields = userFields();
 api.narrowUserFields(fields);
 assert.strictEqual(fields.role.choices.length, 7);
 assert.ok(fields.tenant);
-assert.deepStrictEqual(api.myGrants(), ['manage_users', 'pharmacy_admin', 'decide_claims', 'edit_tariff']);
+assert.deepStrictEqual(api.myGrants(), ['manage_users', 'pharmacy_admin', 'dispense', 'decide_claims', 'edit_tariff']);
 
 // Still the platform admin when their own row happens to carry a tenant.
 api = load({ role: 'super_admin', tenant: 1 });

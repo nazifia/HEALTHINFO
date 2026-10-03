@@ -66,6 +66,15 @@ def test_write_then_dispense(db_clean):
     rx.refresh_from_db()
     assert rx.status == "dispensed" and rx.dispensed_at is not None
 
+    # A grant lets a nurse in a clinic with no pharmacist hand a drug over.
+    nurse = User.objects.create_user(phone="08030000104", password="x", tenant=a,
+                                     role=Role.NURSE, license_number="NMCN/1234",
+                                     privileges=["dispense"])
+    rx2 = Prescription.objects.create(tenant=a, patient=patient, medication=rx.medication,
+                                      reporter=doctor)
+    assert _client(nurse, a).patch(f"/api/prescriptions/{rx2.pk}/", {"status": "dispensed"},
+                                   format="json").status_code == 200
+
     # Another tenant's pharmacist can't reach the order at all.
     assert _client(outsider, b).get(f"/api/prescriptions/{rx.pk}/").status_code == 404
 

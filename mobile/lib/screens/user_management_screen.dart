@@ -20,6 +20,7 @@ const _grantLabels = {
   'pharmacy_admin': 'Pharmacy admin screens',
   'decide_claims': 'Answer claims',
   'edit_tariff': 'Price list',
+  'dispense': 'Dispense drug orders',
 };
 
 const _grantHints = {
@@ -27,6 +28,7 @@ const _grantHints = {
   'pharmacy_admin': 'Prices, stock corrections and claim settlement',
   'decide_claims': "Approve or reject the scheme's pre-authorizations and claims",
   'edit_tariff': "Add, move and drop drugs on the scheme's price list",
+  'dispense': 'Mark drug orders handed over, without being a pharmacist',
 };
 
 const _roles = [

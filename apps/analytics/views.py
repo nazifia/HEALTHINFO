@@ -13,7 +13,9 @@ from config.responses import success
 
 from apps.accounts.permissions import (
     IsPlatformReader,
+    DISPENSE,
     PHARMACY_STAFF_ROLES,
+    has_privilege,
     IsTenantMember,
     ReadOnlyOrReportRole,
     sees_whole_tenant,
@@ -452,7 +454,12 @@ class PrescriptionViewSet(_ReportViewSet):
     lookup_value_regex = r"[0-9]+"
 
     def get_queryset(self):
-        qs = super().get_queryset().select_related("reporter")
+        # Dispensing needs every order, not just the clinician's own caseload:
+        # a seat granted ``dispense`` reads the facility's orders like a pharmacist.
+        user = self.request.user
+        base = (self.model.objects.all() if has_privilege(user, DISPENSE)
+                else super().get_queryset())
+        qs = base.select_related("reporter")
         tenant = getattr(self.request, "tenant", None)
         if tenant is not None and tenant.kind == Tenant.Kind.PHARMACY:
             qs = qs.filter(patient__isnull=False)
@@ -491,7 +498,8 @@ class PrescriptionViewSet(_ReportViewSet):
                                    Prescription.Status.PARTIAL)
                for r in (rows if isinstance(rows, list) else [rows])):
             user = self.request.user
-            if not (user.is_super_admin or user.role in PHARMACY_STAFF_ROLES):
+            if not (user.is_super_admin or user.role in PHARMACY_STAFF_ROLES
+                    or has_privilege(user, DISPENSE)):
                 raise PermissionDenied("Only a pharmacist can dispense.")
 
     @transaction.atomic

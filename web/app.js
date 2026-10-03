@@ -573,7 +573,7 @@ const needsFacility = () => isIndependent() && !Api.tenant;
    something. Mirrors accounts.permissions.MODULE_PRIVILEGES — a grant outside
    the seat's own module counts for nothing, here and on the server. */
 const MODULE_PRIVILEGES = {
-  facility: ['manage_users', 'pharmacy_admin'],
+  facility: ['manage_users', 'pharmacy_admin', 'dispense'],
   scheme: ['manage_users', 'decide_claims', 'edit_tariff'],
   oversight: ['manage_users'],
 };
