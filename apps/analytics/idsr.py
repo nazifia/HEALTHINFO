@@ -26,6 +26,8 @@ from django.db.models.functions import TruncDay
 from django.utils import timezone
 
 
+from apps.governance.models import runtime_value
+
 from .models import CaseReport
 from .stats import _rollup_by_tier, _scoped, _tiers_for
 
@@ -37,7 +39,6 @@ SUMMARY_COLUMNS = (
 
 # Hours IDSR allows between suspecting an immediately-notifiable case and
 # notifying the next tier up.
-IMMEDIATE_DEADLINE_HOURS = 24
 
 
 def daily_summary(reports, days=30):
@@ -89,7 +90,7 @@ ALERT_COLUMNS = (
 )
 
 
-def immediate_alerts(reports, hours=IMMEDIATE_DEADLINE_HOURS, notified=False):
+def immediate_alerts(reports, hours=None, notified=False):
     """Single cases of immediately-notifiable disease whose 24-hour clock runs.
 
     One row per case, not per day: the epidemic-prone diseases are notified up
@@ -105,7 +106,8 @@ def immediate_alerts(reports, hours=IMMEDIATE_DEADLINE_HOURS, notified=False):
     their clock at ``notified_at`` — that is what says whether the facility made
     the 24 hours, and it must not keep counting up afterwards.
     """
-    since = timezone.now() - timedelta(hours=hours)
+    deadline = runtime_value("idsr_deadline_hours")
+    since = timezone.now() - timedelta(hours=hours or deadline)
     rows = reports.filter(
         disease__notify_immediately=True, created_at__gte=since
     ).select_related(
@@ -138,7 +140,7 @@ def immediate_alerts(reports, hours=IMMEDIATE_DEADLINE_HOURS, notified=False):
                 "notified_at": c.notified_at,
                 "notified_by": c.notified_by.username if c.notified_by_id else "",
                 "hours_elapsed": round(elapsed, 1),
-                "overdue": elapsed > IMMEDIATE_DEADLINE_HOURS,
+                "overdue": elapsed > deadline,
             }
         )
     return out

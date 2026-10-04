@@ -23,6 +23,13 @@ class RuntimeConfig(models.Model):
         PROD = "prod", "Production"
 
     mode = models.CharField(max_length=4, choices=Mode.choices, default=Mode.DEV)
+    # Tunable numbers the apps show or act on; edit in admin, live next request.
+    surveillance_min_cases = models.PositiveSmallIntegerField(
+        default=3, help_text="Cases in a day before a disease spike can alarm.")
+    surveillance_z_threshold = models.FloatField(
+        default=2.0, help_text="Std-devs above the daily baseline that count as a spike.")
+    idsr_deadline_hours = models.PositiveSmallIntegerField(
+        default=24, help_text="Hours to notify an immediately-notifiable case before it is overdue.")
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
@@ -50,6 +57,12 @@ def current_mode():
         # instantly across workers.
         cache.set(_MODE_CACHE_KEY, mode, 30)
     return mode
+
+
+def runtime_value(name):
+    """One tunable from the singleton row, or the field default before it exists."""
+    cfg = RuntimeConfig.objects.first()
+    return getattr(cfg, name) if cfg else RuntimeConfig._meta.get_field(name).default
 
 
 def is_prod():

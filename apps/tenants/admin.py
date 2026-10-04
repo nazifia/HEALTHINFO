@@ -19,7 +19,7 @@ class TenantAdmin(admin.ModelAdmin):
     list_filter = ("kind", "jurisdiction__level", "subscription_status", "status")
     search_fields = ("name", "slug", "domain", "contact")
     actions = ("approve_subscription", "reject_subscription",
-               "mark_hospital", "mark_pharmacy")
+               "mark_hospital", "mark_pharmacy", "suspend", "reactivate")
 
     @admin.action(description="Approve selected tenant subscriptions")
     def approve_subscription(self, request, queryset):
@@ -40,3 +40,13 @@ class TenantAdmin(admin.ModelAdmin):
     def mark_pharmacy(self, request, queryset):
         n = queryset.update(kind=Tenant.Kind.PHARMACY)
         self.message_user(request, f"{n} tenant(s) marked as pharmacies.")
+
+    @admin.action(description="Suspend selected tenants (blocks their seats)")
+    def suspend(self, request, queryset):
+        n = queryset.update(status=Tenant.Status.SUSPENDED)
+        self.message_user(request, f"{n} tenant(s) suspended.")
+
+    @admin.action(description="Reactivate selected tenants")
+    def reactivate(self, request, queryset):
+        n = queryset.update(status=Tenant.Status.ACTIVE)
+        self.message_user(request, f"{n} tenant(s) reactivated.")

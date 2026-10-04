@@ -24,6 +24,15 @@ class CashierAdmin(admin.ModelAdmin):
     list_filter = ("tenant", "kind", "is_active")
     search_fields = ("name", "code")
     raw_id_fields = ("user",)
+    actions = ("activate", "deactivate")
+
+    @admin.action(description="Activate selected cashiers")
+    def activate(self, request, queryset):
+        self.message_user(request, f"{queryset.update(is_active=True)} activated.")
+
+    @admin.action(description="Deactivate selected cashiers")
+    def deactivate(self, request, queryset):
+        self.message_user(request, f"{queryset.update(is_active=False)} deactivated.")
 
 
 class SaleItemInline(admin.TabularInline):
@@ -119,6 +128,15 @@ class NotificationAdmin(admin.ModelAdmin):
     list_filter = ("tenant", "kind", "priority", "is_read")
     search_fields = ("title", "message")
     raw_id_fields = ("user", "item")
+    actions = ("mark_read", "mark_unread")
+
+    @admin.action(description="Mark selected as read")
+    def mark_read(self, request, queryset):
+        self.message_user(request, f"{queryset.update(is_read=True)} marked read.")
+
+    @admin.action(description="Mark selected as unread")
+    def mark_unread(self, request, queryset):
+        self.message_user(request, f"{queryset.update(is_read=False)} marked unread.")
 
 
 class PurchaseOrderLineInline(admin.TabularInline):

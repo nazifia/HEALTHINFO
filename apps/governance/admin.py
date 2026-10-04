@@ -5,7 +5,8 @@ from .models import AuditLog, RuntimeConfig
 
 @admin.register(RuntimeConfig)
 class RuntimeConfigAdmin(admin.ModelAdmin):
-    list_display = ("mode", "updated_at")
+    list_display = ("mode", "surveillance_min_cases", "surveillance_z_threshold",
+                    "idsr_deadline_hours", "updated_at")
 
     def has_add_permission(self, request):
         # Singleton: only one row, seeded by migration.

@@ -13,6 +13,8 @@ from django.db.models import Count
 from django.db.models.functions import TruncDay
 from django.utils import timezone
 
+from apps.governance.models import runtime_value
+
 from .models import CaseReport
 from .stats import _scoped
 
@@ -20,8 +22,8 @@ from .stats import _scoped
 # enough above baseline to be a real signal not noise.
 # ponytail: 3/day is the daily equivalent of the old 5/week floor; tune if a
 # facility's normal daily volume makes it noisy.
-MIN_CASES = 3
-Z_THRESHOLD = 2.0  # current day > mean + 2*stdev of prior days
+# Live values come from governance.RuntimeConfig (admin-editable); current day
+# > mean + z*stdev of prior days.
 
 
 def _daily_counts(reports, days):
@@ -73,6 +75,8 @@ def detect_spikes(reports, days=30):
     day if the daily email starts missing outbreaks.
     """
     alerts = []
+    min_cases = runtime_value("surveillance_min_cases")
+    z = runtime_value("surveillance_z_threshold")
     for d in _daily_counts(reports, days).values():
         series = d["days"]
         # ponytail: this is window length, not data length — a tenant in its
@@ -80,12 +84,12 @@ def detect_spikes(reports, days=30):
         if len(series) < 3:
             continue  # not enough history to call a baseline
         current, baseline = series[-1], series[:-1]
-        if current < MIN_CASES:
+        if current < min_cases:
             continue
         mu = mean(baseline)
         sigma = pstdev(baseline)
-        # sigma==0 (flat baseline): any jump past MIN_CASES counts as a spike.
-        threshold = mu + Z_THRESHOLD * sigma if sigma else mu
+        # sigma==0 (flat baseline): any jump past min_cases counts as a spike.
+        threshold = mu + z * sigma if sigma else mu
         if current > threshold and current > mu:
             alerts.append(
                 {
