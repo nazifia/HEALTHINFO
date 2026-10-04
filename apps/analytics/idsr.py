@@ -98,7 +98,7 @@ ALERT_COLUMNS = (
 )
 
 
-def immediate_alerts(reports, hours=None, notified=False):
+def immediate_alerts(reports, hours=None, notified=False, start=None, end=None):
     """Single cases of immediately-notifiable disease whose 24-hour clock runs.
 
     One row per case, not per day: the epidemic-prone diseases are notified up
@@ -115,10 +115,17 @@ def immediate_alerts(reports, hours=None, notified=False):
     the 24 hours, and it must not keep counting up afterwards.
     """
     deadline = runtime_value("idsr_deadline_hours")
-    since = timezone.now() - timedelta(hours=hours or deadline)
-    rows = reports.filter(
-        disease__notify_immediately=True, created_at__gte=since
-    ).select_related(
+    rows = reports.filter(disease__notify_immediately=True)
+    if start or end:  # a calendar window replaces the trailing hours
+        if start:
+            rows = rows.filter(created_at__date__gte=start)
+        if end:
+            rows = rows.filter(created_at__date__lte=end)
+    else:
+        rows = rows.filter(
+            created_at__gte=timezone.now() - timedelta(hours=hours or deadline)
+        )
+    rows = rows.select_related(
         "disease", "tenant", "tenant__jurisdiction", "notified_by"
     ).order_by("created_at", "id")
     if not notified:
@@ -154,7 +161,7 @@ def immediate_alerts(reports, hours=None, notified=False):
     return out
 
 
-def timeliness(reports, hours=72):
+def timeliness(reports, hours=72, start=None, end=None):
     """How the immediate notifications in the window went: sent, late, still owed.
 
     The compliance line an IDSR review asks for, derived from the same rows the
@@ -165,10 +172,10 @@ def timeliness(reports, hours=72):
     report `late` as 0 forever. 72 hours shows the last two days of misses
     beside today's work.
     """
-    rows = immediate_alerts(reports, hours=hours, notified=True)
+    rows = immediate_alerts(reports, hours=hours, notified=True, start=start, end=end)
     sent = [r for r in rows if r["notified_at"] is not None]
     return {
-        "window_hours": hours,
+        "window_hours": hours,  # trailing hours; moot when a calendar window is read
         "cases": len(rows),
         "notified": len(sent),
         "on_time": len([r for r in sent if not r["overdue"]]),
@@ -188,7 +195,7 @@ def tenant_idsr_report(days=30, start=None, end=None):
         "days": days,
         "summary": daily_summary(reports, days, start, end),
         "immediate": immediate_alerts(reports),
-        "timeliness": timeliness(reports),
+        "timeliness": timeliness(reports, days * 24, start, end),
     }
 
 
@@ -206,7 +213,7 @@ def platform_idsr_report(days=30, jurisdiction=None, start=None, end=None):
         # Centrally the window is 48 hours, not 24: what the tiers below missed
         # yesterday is exactly what the centre is watching for.
         "immediate": immediate_alerts(reports, hours=48),
-        "timeliness": timeliness(reports),
+        "timeliness": timeliness(reports, days * 24, start, end),
         # Tiers above the seat's own are left out: folded to national, a state
         # seat's rows would read as the country's return when they are not.
         **{
