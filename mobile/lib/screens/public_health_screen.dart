@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../shared/period_range.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../main.dart';
@@ -28,6 +30,23 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> with LiveRefres
   void refresh() => setState(() { _future = _loadAll(); });
 
   late Future<List<Map<String, dynamic>>> _future;
+  DateTimeRange? _range; // null = all time
+
+  Map<String, String>? get _query => _range == null
+      ? null
+      : {
+          'from': _range!.start.toIso8601String().substring(0, 10),
+          'to': _range!.end.toIso8601String().substring(0, 10),
+        };
+
+  Future<void> _pickRange() async {
+    final picked = await pickPeriodRange(context, _range);
+    if (picked == null) return;
+    setState(() {
+      _range = picked;
+      _future = _loadAll();
+    });
+  }
 
   @override
   void initState() {
@@ -41,7 +60,7 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> with LiveRefres
   Future<Map<String, dynamic>> _load(String platformPath, String tenantPath) async {
     for (final p in [platformPath, tenantPath]) {
       try {
-        final r = await api.get(p);
+        final r = await api.get(p, _query);
         return (r as Map).cast<String, dynamic>();
       } catch (_) {}
     }
@@ -112,6 +131,16 @@ class _PublicHealthScreenState extends State<PublicHealthScreen> with LiveRefres
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             children: [
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: _pickRange,
+                  icon: const Icon(Icons.date_range),
+                  label: Text(_range == null
+                      ? 'All time'
+                      : '${_query!['from']} → ${_query!['to']}'),
+                ),
+              ),
               // ── Prescribing & dispensing ──
               _SectionTitle('Prescribing & dispensing', Icons.description_outlined),
               MetricCard(

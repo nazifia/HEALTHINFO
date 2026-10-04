@@ -3772,8 +3772,8 @@ async function viewAnalytics(registry, prefix, key) {
   if (!m) return errorBox(new Error('Unknown metric: ' + key));
   const controls = [];
   if (m.dates) controls.push('<label>From <input type="date" name="from"></label>', '<label>To <input type="date" name="to"></label>');
-  // Trading reports also take a whole month or year (blank month = whole year).
-  if (m.dates && prefix === '/trading') controls.push('<label>Year <input type="number" name="year" min="2000" placeholder="any"></label>',
+  // Dated reports also take a whole month or year (blank month = whole year).
+  if (m.dates) controls.push('<label>Year <input type="number" name="year" min="2000" placeholder="any"></label>',
     '<label>Month <input type="number" name="month" min="1" max="12" placeholder="all"></label>');
   if (m.days) controls.push('<label>Days <input type="number" name="days" min="1" value="30"></label>');
   if (m.ym) {
