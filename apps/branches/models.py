@@ -1,6 +1,6 @@
 """Branches: the physical sites one pharmacy (tenant) trades from.
 
-A tenant is the business; a branch is a shop. Stock, sales, shifts and
+A tenant is the business; a branch is a shop. Stock, sales and
 prescriptions carry the branch they happened at, so a two-shop pharmacy can
 count one drawer without counting the other's.
 
@@ -10,7 +10,6 @@ operational fact, not something sold.
 from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from django.utils import timezone
 
 from apps.tenants.current import get_current_tenant
 from apps.tenants.models import Tenant, TenantOwnedModel
@@ -69,64 +68,12 @@ class Branch(TenantOwnedModel):
         super().save(*args, **kwargs)
 
 
-class Shift(TenantOwnedModel):
-    """One staff member rostered at one branch, from starts_at to ends_at.
-
-    The roster is what makes "on duty" a fact instead of a number somebody
-    typed: FacilityMetric.staff_on_duty is self-reported, this is not.
-    """
-
-    user = models.ForeignKey(
-        "accounts.User", on_delete=models.CASCADE, related_name="shifts"
-    )
-    branch = models.ForeignKey(
-        Branch, null=True, blank=True, on_delete=models.SET_NULL,
-        related_name="shifts",
-    )
-    starts_at = models.DateTimeField()
-    ends_at = models.DateTimeField()
-    notes = models.CharField(max_length=200, blank=True)
-
-    class Meta:
-        ordering = ("-starts_at", "-id")
-        indexes = [models.Index(fields=["tenant", "starts_at"])]
-        constraints = [
-            models.CheckConstraint(
-                condition=models.Q(ends_at__gt=models.F("starts_at")),
-                name="shift_ends_after_it_starts",
-            )
-        ]
-
-    def __str__(self):
-        return f"{self.user} @ {self.branch or '—'} {self.starts_at:%Y-%m-%d %H:%M}"
-
-    @classmethod
-    def on_duty(cls, at=None, branch=None):
-        """Shifts covering ``at`` (default now), tenant-scoped by the manager.
-
-        Half-open on purpose: a shift ending at 14:00 and the next starting at
-        14:00 hand over without both counting at 14:00.
-
-        ponytail: overlapping shifts for one person are allowed — count
-        people with .values("user").distinct() and a double booking is
-        harmless. Add a constraint if the roster starts being paid from.
-        """
-        at = at or timezone.now()
-        qs = cls.objects.filter(starts_at__lte=at, ends_at__gt=at)
-        return qs.filter(branch=branch) if branch else qs
-
-    @classmethod
-    def count_on_duty(cls, at=None, branch=None):
-        """How many distinct people are on duty — the derived staff_on_duty."""
-        return cls.on_duty(at, branch).values("user").distinct().count()
-
-
 def ensure_pharmacy(tenant):
     """Give a tenant the site it dispenses from. Idempotent.
 
     Every facility dispenses from somewhere: a pharmacy trades from its own
     shop, a hospital from the pharmacy inside it. Both are the tenant's main
-    branch — stock, sales and shifts hang off a branch, so a hospital without
+    branch — stock and sales hang off a branch, so a hospital without
     one has nowhere to put a drug or take a payment.
 
     Returns the branch, existing or new. Safe to call again on a tenant that

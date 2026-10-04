@@ -48,7 +48,6 @@ import 'dispensing_log_screen.dart';
 import 'chw_reports_screen.dart';
 import 'facility_metrics_screen.dart';
 import 'facility_picker_screen.dart';
-import 'shifts_screen.dart';
 import 'insurance_claims_screen.dart';
 import 'appointments_screen.dart';
 import 'consultations_screen.dart';
@@ -133,7 +132,6 @@ const _toolsGroup = _Group('Tools', [
 const _reportsGroup = _Group('Reports', [
   _Section('Pharmacy stock', Icons.inventory_2_outlined, StockReportsScreen()),
   _Section('CHW reports', Icons.groups_outlined, ChwReportsScreen()),
-  _Section('Staff roster', Icons.schedule_outlined, ShiftsScreen()),
   _Section('Facility KPIs', Icons.local_hospital_outlined, FacilityMetricsScreen()),
   _Section('Insurance claims', Icons.receipt_long_outlined, InsuranceClaimsScreen()),
   _Section('IDSR report', Icons.assignment_outlined, IdsrScreen()),
@@ -150,23 +148,21 @@ List<_Group> get _baseGroups =>
     [_catalogGroup, _recordsGroup, _toolsGroup, _reportsGroup, _accountGroup];
 
 /// The same groups with the clinical records first — a prescriber's own desk
-/// ahead of the references (same order as web/app.js navHtml). The roster is
-/// the administrator's, so it is not in here; the dashboard and analytics are,
-/// narrowed by each screen to the cadre's own work.
+/// ahead of the references (same order as web/app.js navHtml). The dashboard
+/// and analytics are narrowed by each screen to the cadre's own work.
 List<_Group> get _prescriberGroups => [
       _recordsGroup,
       for (final g in _baseGroups.where((g) => g != _recordsGroup))
         g == _reportsGroup
             ? _Group(g.label, [
                 _dashboard,
-                for (final s in g.sections)
-                  if (s.label != 'Staff roster') s,
+                ...g.sections,
               ])
             : g,
     ];
 
 /// A pharmacist's menu matches the web sidebar: the pharmacy's trading reports
-/// replace the Reports group, so of the report screens only the roster,
+/// replace the Reports group, so of the report screens only
 /// notifiable cases and analytics stay (web/app.js navHtml).
 const _pharmacistHidden = {
   'Case reports', 'Adverse reactions', 'Lab results', 'Immunizations',

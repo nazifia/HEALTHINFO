@@ -3,8 +3,7 @@
     python manage.py seed_ops                 # demo tenant
     python manage.py seed_ops --tenant foo
 
-Fills the operational side of a pharmacy so every screen has rows: staff
-roster, customers with wallets and debt, a stocktake, a retail-to-wholesale
+Fills the operational side of a pharmacy so every screen has rows: customers with wallets and debt, a stocktake, a retail-to-wholesale
 transfer, an HMO price list and a pre-authorisation, cashiers and a payment
 request, a return, expenses, notifications, counter scripts (one part-filled)
 and commission terms.
@@ -22,7 +21,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.accounts.models import LICENSED_ROLES, Role, User
-from apps.branches.models import Shift, ensure_pharmacy
+from apps.branches.models import ensure_pharmacy
 from apps.customers.models import Customer
 from apps.inventory.models import (
     StockCheck, StockCheckItem, StockItem, Store, TransferRequest,
@@ -44,7 +43,7 @@ PASSWORD = "devpass123"  # ponytail: dev-only shared password, never ships to pr
 
 
 class Command(BaseCommand):
-    help = "Seed operational demo data: roster, customers, stocktake, POS, scripts."
+    help = "Seed operational demo data: customers, stocktake, POS, scripts."
 
     def add_arguments(self, parser):
         parser.add_argument("--tenant", default="demo", help="Tenant slug.")
@@ -71,25 +70,6 @@ class Command(BaseCommand):
         def open_till():
             return TillSession.all_objects.filter(
                 tenant=tenant, status=TillSession.Status.OPEN).first()
-
-        # --- roster: a week of shifts, today's covers now ------------------
-        if not Shift.all_objects.filter(tenant=tenant).exists():
-            start = now.replace(hour=8, minute=0, second=0, microsecond=0)
-            for d in range(-3, 4):
-                day = start + timedelta(days=d)
-                for who, h0, h1 in ((pharmacist, 0, 8), (nurse, 8, 14), (manager, 0, 10)):
-                    Shift.all_objects.create(
-                        tenant=tenant, user=who, branch=branch,
-                        starts_at=day + timedelta(hours=h0),
-                        ends_at=day + timedelta(hours=h1),
-                    )
-            # Make sure someone is on duty right now, whatever the clock says.
-            Shift.all_objects.create(
-                tenant=tenant, user=pharmacist, branch=branch,
-                starts_at=now - timedelta(hours=1), ends_at=now + timedelta(hours=7),
-                notes="Cover",
-            )
-        log("shifts", Shift.all_objects)
 
         # --- customers: cash, wallet-funded, in debt, wholesale --------------
         if not Customer.all_objects.filter(tenant=tenant).exists():

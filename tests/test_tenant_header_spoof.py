@@ -68,18 +68,6 @@ def test_settings_patch_refuses_another_tenants_slug(two_tenants):
     assert b.idle_logout_minutes == 30
 
 
-def test_shift_refuses_another_tenants_user(two_tenants):
-    a, b, admin = two_tenants
-    outsider = User.objects.create(phone="08030000002", tenant=b, role=Role.PHARMACIST)
-    client = APIClient()
-    client.force_authenticate(admin)
-    body = {"user": outsider.id, "starts_at": "2026-09-14T08:00:00Z",
-            "ends_at": "2026-09-14T16:00:00Z"}
-    resp = client.post("/api/shifts/", body, format="json", HTTP_X_TENANT_ID=a.slug)
-    assert resp.status_code == 400, resp.content
-    assert "user" in resp.json()["errors"]
-
-
 def test_self_edit_cannot_change_license_number(two_tenants):
     a, b, _ = two_tenants
     doctor = User.objects.create(phone="08030000003", tenant=a, role=Role.DOCTOR,

@@ -158,8 +158,6 @@ class _FormState extends State<_Form> {
   final _bedsTotal = TextEditingController(text: '0');
   final _bedsOccupied = TextEditingController(text: '0');
   final _wait = TextEditingController(text: '0');
-  // Blank on a new snapshot on purpose: the API fills staffing from the
-  // roster when the reporter leaves it empty (see apps/branches Shift).
   final _staff = TextEditingController();
   final _treated = TextEditingController(text: '0');
   final _notes = TextEditingController();
@@ -253,7 +251,7 @@ class _FormState extends State<_Form> {
         Row(children: [
           Expanded(child: _numField(_wait, 'Avg wait (min)')),
           const SizedBox(width: 12),
-          Expanded(child: _numField(_staff, 'Staff on duty (blank = roster)')),
+          Expanded(child: _numField(_staff, 'Staff on duty')),
         ]),
         const SizedBox(height: 12),
         _numField(_treated, 'Patients treated'),

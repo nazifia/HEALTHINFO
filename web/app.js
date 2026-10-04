@@ -393,11 +393,6 @@ const RESOURCES = {
   // the API narrows it again to what the reader may see.
   'authority-users':   { title: 'Authority Users',    group: 'Analytics', path: 'users', superOnly: true,
                           search: true, query: { role: 'government' }, filters: ORG_FILTERS },
-  // The roster. Everyone in the tenant reads it — a nurse needs to know who
-  // else is on — but only the tenant admin sets it, same as the API.
-  'shifts':            { title: 'Staff Roster',       group: 'Admin', roles: 'tenant_admin',
-                          filters: [{ param: 'branch', label: 'Branch', path: '/api/branches/', text: (r) => r.name },
-                                    { param: 'user', label: 'Staff', path: '/api/users/', text: (r) => r.username }] },
   // The audit trail of who read which patient record. Tenant admins only, and
   // read-only for them too — the API writes it, nobody edits it.
   'patient-access-log':{ title: 'Patient Access Log', group: 'Admin', path: 'patients/access-log',
@@ -461,7 +456,6 @@ const ANALYTICS = [
   { key: 'surveillance',  label: 'Outbreak Alerts',   path: '/api/analytics/surveillance/', who: PRESCRIBERS },
   { key: 'idsr',          label: 'IDSR Report',       path: '/api/analytics/idsr/', days: true, csv: true, who: PRESCRIBERS },
   { key: 'sources',       label: 'Report Sources',    path: '/api/analytics/sources/' },
-  { key: 'on-duty',       label: 'On Duty Now',       path: '/api/shifts/on_duty/' },
   { key: 'adr',           label: 'ADR Stats',         path: '/api/analytics/adr/', dates: true, who: [...PRESCRIBERS, 'pharmacist'] },
   { key: 'labs',          label: 'Lab Stats',         path: '/api/analytics/labs/', dates: true, who: ['doctor', 'nurse'] },
   { key: 'immunizations', label: 'Immunization Stats', path: '/api/analytics/immunizations/', dates: true, who: ['nurse', 'midwife', 'chew'] },
@@ -707,13 +701,10 @@ function navHtml() {
     : r.group === 'Clinical' ? 'activity' : slug.startsWith('tenants') ? 'shield'
     : r.group === 'Reports' ? 'file' : r.group === 'Pharmacy' ? 'pill' : 'book';
   const groups = {};
-  // A prescriber's desk is their caseload: the roster is the administrator's,
-  // so it is not in their menu.
   const prescriber = isClinicalStaff() || isIndependent();
   for (const [slug, r] of Object.entries(RESOURCES)) {
     if (r.superOnly && ME?.role !== 'super_admin') continue;
     if (isIndependent() && !INDEPENDENT_OPEN.has(slug)) continue;
-    if (slug === 'shifts' && prescriber) continue;
     // Only a pharmacy admin with no user list of their own needs this one: the
     // facility's admin and the holders of the user list have the Users screen.
     if (slug === 'pharmacy-staff' && (!isPharmacyAdmin() || ['super_admin', 'tenant_admin'].includes(ME?.role)

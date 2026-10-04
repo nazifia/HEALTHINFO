@@ -205,28 +205,6 @@ national count, and a raced double-capture is refused by the database rather
 than by the capture code. Hand-filed rows carry no source at all (NULL, so the
 plain unique index works on every backend, MySQL included).
 
-## Staff roster
-Who is rostered where, so "on duty" is a fact rather than a number somebody
-typed into a report.
-
-- `GET/POST /api/shifts/` — one staff member at one branch, `starts_at` to
-  `ends_at` (a blank `branch` is the whole facility). Every tenant member reads
-  it — a nurse needs to know who else is on — but only the tenant admin writes
-  it. Filter with `?branch=`, `?user=` and the window a calendar asks for,
-  `?starts_at__gte=&starts_at__lt=`; a shift is listed by when someone comes
-  on, so one starting before the window and running into it is outside it.
-  A shift must end after it starts (checked in the serializer and by a database
-  constraint).
-- `GET /api/shifts/on_duty/` — who is on right now: `{count, results}`, where
-  `count` is distinct people, so a double booking counts once. `?branch=<id>`
-  narrows it to one site. The window is half-open: a shift ending at 14:00 and
-  the next starting at 14:00 hand over without both counting at 14:00.
-
-A `FacilityMetric` snapshot filed with `staff_on_duty` left blank takes its
-count from the roster instead. A typed number still wins — the roster says who
-was meant to be on, the reporter knows who actually was — and the fallback only
-applies when the row is first created, so editing one back down to 0 stays an
-answer rather than a blank.
 
 ## Pharmacy (stock, sales, HMO claims)
 Operational pharmacy for one facility, tenant-scoped like everything else.
@@ -360,7 +338,7 @@ and no print server.
 ```bash
 python manage.py seed_pharmacy            # demo pharmacy (idempotent)
 python manage.py seed_pharmacy --reset    # wipe this tenant's pharmacy first
-python manage.py seed_ops                 # roster, customers, stocktake, transfers, pre-auths, POS, scripts
+python manage.py seed_ops                 # customers, stocktake, transfers, pre-auths, POS, scripts
 ```
 
 ### Clients
