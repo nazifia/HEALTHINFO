@@ -72,7 +72,19 @@ def _period_range(period):
 
 
 def _resolve_range(request, default="month"):
-    """Honour explicit ?from=&to=; else fall back to ?period=."""
+    """Honour ?from=&to=, then ?year=[&month=], else fall back to ?period=."""
+    year_raw = request.query_params.get("year")
+    month_raw = request.query_params.get("month")
+    if (year_raw or month_raw) and not request.query_params.get("from"):
+        try:
+            year = int(year_raw or timezone.localdate().year)
+            month = int(month_raw) if month_raw else None
+            if month is None:
+                return "year", date(year, 1, 1), date(year, 12, 31)
+            start = date(year, month, 1)  # ValueError on a bad month or year
+        except ValueError:
+            raise ValidationError({"month": "Year and month must be valid numbers."})
+        return "month", start, date(year, month, calendar.monthrange(year, month)[1])
     start_raw = request.query_params.get("from")
     end_raw = request.query_params.get("to")
     if start_raw and end_raw:

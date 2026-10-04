@@ -28,7 +28,28 @@ class _PharmacyReportsScreenState extends State<PharmacyReportsScreen> with Live
   void refresh() => _reload();
 
   String _period = 'month';
+  // A named month or year (?year=&month=) overrides the period chips.
+  Map<String, String>? _picked;
+  String? _pickedLabel;
   late Future<_Reports> _future = _load();
+
+  Future<void> _pick({required bool wholeYear}) async {
+    final now = DateTime.now();
+    final d = await showDatePicker(
+      context: context,
+      initialDate: now,
+      firstDate: DateTime(2000),
+      lastDate: now,
+      initialDatePickerMode: wholeYear ? DatePickerMode.year : DatePickerMode.day,
+      helpText: wholeYear ? 'Pick any day in the year' : 'Pick any day in the month',
+    );
+    if (d == null) return;
+    setState(() {
+      _picked = {'year': '${d.year}', if (!wholeYear) 'month': '${d.month}'};
+      _pickedLabel = wholeYear ? '${d.year}' : '${d.month}/${d.year}';
+    });
+    _reload();
+  }
 
   // The named month behind the monthly card. It steps on its own arrows rather
   // than off the period chips: the other reports answer "this quarter", this
@@ -46,7 +67,7 @@ class _PharmacyReportsScreenState extends State<PharmacyReportsScreen> with Live
 
   Future<dynamic> _one(String path) async {
     try {
-      return await api.get(path, {'period': _period});
+      return await api.get(path, _picked ?? {'period': _period});
     } catch (_) {
       return null;
     }
@@ -137,14 +158,30 @@ class _PharmacyReportsScreenState extends State<PharmacyReportsScreen> with Live
                   for (final p in _periods.entries) ...[
                     ChoiceChip(
                       label: Text(p.value),
-                      selected: _period == p.key,
+                      selected: _picked == null && _period == p.key,
                       onSelected: (_) {
-                        setState(() => _period = p.key);
+                        setState(() {
+                          _period = p.key;
+                          _picked = null;
+                        });
                         _reload();
                       },
                     ),
                     const SizedBox(width: 8),
                   ],
+                  ActionChip(
+                    label: Text(_picked?.containsKey('month') == true
+                        ? 'Month: $_pickedLabel'
+                        : 'Pick month'),
+                    onPressed: () => _pick(wholeYear: false),
+                  ),
+                  const SizedBox(width: 8),
+                  ActionChip(
+                    label: Text(_picked != null && !_picked!.containsKey('month')
+                        ? 'Year: $_pickedLabel'
+                        : 'Pick year'),
+                    onPressed: () => _pick(wholeYear: true),
+                  ),
                 ]),
               ),
               const SizedBox(height: 12),
