@@ -139,3 +139,13 @@ def test_days_window_accepts_the_legacy_weeks_param():
     assert _days(req({"days": "10", "weeks": "4"})) == 10  # days wins
     with pytest.raises(ValidationError):
         _days(req({"weeks": "0"}))
+
+
+def test_daily_summary_calendar_window(db_clean):
+    tenant = Tenant.objects.create(name="Clinic W", slug="w")
+    flu = Disease.objects.create(name="Flu", icd10_code="J11", status="published")
+    CaseReport.objects.create(tenant=tenant, disease=flu)
+    today = timezone.localdate()
+    assert len(daily_summary(CaseReport.all_objects.all(), start=today, end=today)) == 1
+    old = today - timedelta(days=400)
+    assert daily_summary(CaseReport.all_objects.all(), start=old, end=old) == []

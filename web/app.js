@@ -454,8 +454,8 @@ const ANALYTICS = [
   { key: 'prescriptions', label: 'Prescribing Stats', path: '/api/analytics/prescriptions/', dates: true, who: [...PRESCRIBERS, 'pharmacist'] },
   { key: 'cases',         label: 'Case Stats',        path: '/api/analytics/cases/', dates: true, exportPath: '/api/analytics/cases/export/', who: PRESCRIBERS },
   { key: 'surveillance',  label: 'Outbreak Alerts',   path: '/api/analytics/surveillance/', who: PRESCRIBERS },
-  { key: 'idsr',          label: 'IDSR Report',       path: '/api/analytics/idsr/', days: true, csv: true, who: PRESCRIBERS },
-  { key: 'sources',       label: 'Report Sources',    path: '/api/analytics/sources/' },
+  { key: 'idsr',          label: 'IDSR Report',       path: '/api/analytics/idsr/', days: true, dates: true, full: 'Integrated Disease Surveillance and Response', csv: true, who: PRESCRIBERS },
+  { key: 'sources',       label: 'Report Sources',    path: '/api/analytics/sources/', dates: true },
   { key: 'adr',           label: 'ADR Stats',         path: '/api/analytics/adr/', dates: true, who: [...PRESCRIBERS, 'pharmacist'] },
   { key: 'labs',          label: 'Lab Stats',         path: '/api/analytics/labs/', dates: true, who: ['doctor', 'nurse'] },
   { key: 'immunizations', label: 'Immunization Stats', path: '/api/analytics/immunizations/', dates: true, who: ['nurse', 'midwife', 'chew'] },
@@ -466,7 +466,7 @@ const ANALYTICS = [
   { key: 'insurance',     label: 'Insurance Stats',   path: '/api/analytics/insurance/', dates: true, who: ['pharmacist'] },
   { key: 'appointments',  label: 'Appointment Stats', path: '/api/analytics/appointments/', dates: true, who: ['doctor', 'nurse', 'midwife'] },
   { key: 'consultations', label: 'Visit Stats',       path: '/api/analytics/consultations/', dates: true, who: PRESCRIBERS },
-  { key: 'funnel',        label: 'Funnel',            path: '/api/analytics/funnel/' },
+  { key: 'funnel',        label: 'Funnel',            path: '/api/analytics/funnel/', dates: true },
   { key: 'retention',     label: 'Retention',         path: '/api/analytics/retention/' },
 ];
 
@@ -481,8 +481,8 @@ const PLATFORM = [
   { key: 'prescriptions', label: 'Prescribing Stats', path: '/api/analytics/platform/prescriptions/', dates: true },
   { key: 'cases',         label: 'Collated Reports',   path: '/api/analytics/platform/cases/', dates: true, exportPath: '/api/analytics/platform/cases/export/' },
   { key: 'surveillance',  label: 'Outbreak Alerts',    path: '/api/analytics/platform/surveillance/' },
-  { key: 'idsr',          label: 'IDSR Report',        path: '/api/analytics/platform/idsr/', days: true, csv: true },
-  { key: 'sources',       label: 'Report Sources',     path: '/api/analytics/platform/sources/' },
+  { key: 'idsr',          label: 'IDSR Report',        path: '/api/analytics/platform/idsr/', days: true, dates: true, full: 'Integrated Disease Surveillance and Response', csv: true },
+  { key: 'sources',       label: 'Report Sources',     path: '/api/analytics/platform/sources/', dates: true },
   { key: 'adr',           label: 'ADR Collation',      path: '/api/analytics/platform/adr/', dates: true },
   { key: 'labs',          label: 'Lab Stats',          path: '/api/analytics/platform/labs/', dates: true, clinical: true },
   { key: 'immunizations', label: 'Immunization Stats', path: '/api/analytics/platform/immunizations/', dates: true, clinical: true },
@@ -3781,7 +3781,7 @@ async function viewAnalytics(registry, prefix, key) {
     controls.push(`<label>Year <input type="number" name="year" min="2000" value="${now.getFullYear()}"></label>`,
                   `<label>Month <input type="number" name="month" min="1" max="12" value="${now.getMonth() + 1}"></label>`);
   }
-  render(`<div class="page-head"><h2>${esc(m.label)}</h2>
+  render(`<div class="page-head"><h2>${esc(m.label)}</h2>${m.full ? `<span class="muted">${esc(m.full)}</span>` : ''}
       <a class="btn ghost" href="#${prefix}">&larr; All metrics</a></div>
     <form id="f" class="toolbar">${controls.join('')}
       ${controls.length ? '<button>Load</button>' : ''}

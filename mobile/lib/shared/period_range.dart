@@ -54,3 +54,33 @@ Future<DateTimeRange?> pickPeriodRange(
   final last = choice == 'year' ? DateTime(d.year, 12, 31) : DateTime(d.year, d.month + 1, 0);
   return DateTimeRange(start: start, end: last.isAfter(today) ? today : last);
 }
+
+/// Month/year/range filter for a report screen's State. Add the mixin, pass
+/// [periodQuery] to the API call, and put [periodButton] atop the list; the
+/// button's callback reloads the screen's future.
+mixin PeriodFilter<T extends StatefulWidget> on State<T> {
+  DateTimeRange? range; // null = all time
+
+  Map<String, String>? get periodQuery => range == null
+      ? null
+      : {
+          'from': range!.start.toIso8601String().substring(0, 10),
+          'to': range!.end.toIso8601String().substring(0, 10),
+        };
+
+  Widget periodButton(VoidCallback reload) => Align(
+        alignment: Alignment.centerRight,
+        child: TextButton.icon(
+          onPressed: () async {
+            final picked = await pickPeriodRange(context, range);
+            if (picked == null) return;
+            setState(() => range = picked);
+            reload();
+          },
+          icon: const Icon(Icons.date_range),
+          label: Text(range == null
+              ? 'All time'
+              : '${periodQuery!['from']} → ${periodQuery!['to']}'),
+        ),
+      );
+}

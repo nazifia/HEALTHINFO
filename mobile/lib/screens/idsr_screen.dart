@@ -10,6 +10,7 @@ import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/stats_kit.dart';
 import 'report_scaffold.dart';
 import '../shared/live_refresh.dart';
+import '../shared/period_range.dart';
 
 /// IDSR daily epidemiological summary — GET /api/analytics/idsr/.
 ///
@@ -32,7 +33,7 @@ class IdsrScreen extends StatefulWidget {
   State<IdsrScreen> createState() => _IdsrScreenState();
 }
 
-class _IdsrScreenState extends State<IdsrScreen> with LiveRefresh {
+class _IdsrScreenState extends State<IdsrScreen> with LiveRefresh, PeriodFilter {
   @override
   void refresh() => _reload();
 
@@ -49,8 +50,11 @@ class _IdsrScreenState extends State<IdsrScreen> with LiveRefresh {
   // per day.
   List<Map<String, dynamic>> _immediate = const [];
 
+  // A picked month/year/range replaces the trailing-days window.
+  Map<String, String> get _query => periodQuery ?? {'days': '$_days'};
+
   Future<List<Map<String, dynamic>>> _load() async {
-    final q = {'days': '$_days'};
+    final q = _query;
     // Platform view mirrors IsPlatformReader: a super-admin or government seat
     // outside any organization. Picked up front, not probed — a probe logs a
     // 403 in the browser console on every load for everyone else.
@@ -112,23 +116,26 @@ class _IdsrScreenState extends State<IdsrScreen> with LiveRefresh {
             children: [
               DashTitleBar(
                 title: 'IDSR daily summary',
-                subtitle: 'Cases, deaths and case-fatality by day',
+                subtitle: 'Integrated Disease Surveillance and Response — cases, deaths and case-fatality by day',
                 trailing: CsvExportButton(
                   path: _path,
-                  filename: 'idsr_${_days}d.csv',
-                  query: {'days': '$_days'},
+                  filename: range == null ? 'idsr_${_days}d.csv' : 'idsr_${periodQuery!['from']}.csv',
+                  query: _query,
                 ),
               ),
-              const SizedBox(height: 8),
+              periodButton(_reload),
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(children: [
                   for (final w in _windows.entries) ...[
                     ChoiceChip(
                       label: Text(w.value),
-                      selected: _days == w.key,
+                      selected: range == null && _days == w.key,
                       onSelected: (_) {
-                        setState(() => _days = w.key);
+                        setState(() {
+                          _days = w.key;
+                          range = null;
+                        });
                         _reload();
                       },
                     ),

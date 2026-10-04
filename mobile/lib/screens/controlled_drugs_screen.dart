@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../main.dart';
+import '../shared/period_range.dart';
 import '../pharmacy.dart' show units;
 import '../core/theme/enhanced_theme.dart';
 import '../shared/controlled_stats.dart';
@@ -22,7 +23,7 @@ class ControlledDrugsScreen extends StatefulWidget {
   State<ControlledDrugsScreen> createState() => _ControlledDrugsScreenState();
 }
 
-class _ControlledDrugsScreenState extends State<ControlledDrugsScreen> with LiveRefresh {
+class _ControlledDrugsScreenState extends State<ControlledDrugsScreen> with LiveRefresh , PeriodFilter{
   @override
   void refresh() => setState(() { _future = _load(); });
 
@@ -37,7 +38,7 @@ class _ControlledDrugsScreenState extends State<ControlledDrugsScreen> with Live
   /// Platform rollup only — a pharmacy reads its own register, not the
   /// state's, so there is no tenant-scoped twin to fall back to.
   Future<Map<String, dynamic>> _load() async {
-    final r = await api.get('/api/analytics/platform/controlled/');
+    final r = await api.get('/api/analytics/platform/controlled/', periodQuery);
     return (r as Map).cast<String, dynamic>();
   }
 
@@ -69,7 +70,10 @@ class _ControlledDrugsScreenState extends State<ControlledDrugsScreen> with Live
           }
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-            children: controlledCards(snap.data),
+            children: [
+              periodButton(() => setState(() { _future = _load(); })),
+              ...controlledCards(snap.data),
+            ],
           );
         },
       ),

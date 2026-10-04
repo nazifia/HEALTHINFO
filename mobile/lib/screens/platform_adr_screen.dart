@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../main.dart';
+import '../shared/period_range.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/bar_chart.dart';
 import '../shared/widgets/breakdown_card.dart';
@@ -19,7 +20,7 @@ class PlatformAdrScreen extends StatefulWidget {
   State<PlatformAdrScreen> createState() => _PlatformAdrScreenState();
 }
 
-class _PlatformAdrScreenState extends State<PlatformAdrScreen> {
+class _PlatformAdrScreenState extends State<PlatformAdrScreen> with PeriodFilter {
   late Future<Map<String, dynamic>> _future;
 
   @override
@@ -31,10 +32,10 @@ class _PlatformAdrScreenState extends State<PlatformAdrScreen> {
   Future<Map<String, dynamic>> _load() async {
     // Platform view is super-admin only; a 403/non-200 scopes down to tenant.
     try {
-      final r = await api.get('/api/analytics/platform/adr/');
+      final r = await api.get('/api/analytics/platform/adr/', periodQuery);
       return (r as Map).cast<String, dynamic>();
     } catch (_) {
-      final r = await api.get('/api/analytics/adr/');
+      final r = await api.get('/api/analytics/adr/', periodQuery);
       return (r as Map).cast<String, dynamic>();
     }
   }
@@ -74,6 +75,7 @@ class _PlatformAdrScreenState extends State<PlatformAdrScreen> {
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             children: [
+              periodButton(() => setState(() { _future = _load(); })),
               GlassCard(
                 padding: const EdgeInsets.all(20),
                 child: Row(

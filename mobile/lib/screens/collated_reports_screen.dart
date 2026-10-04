@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../main.dart';
+import '../shared/period_range.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/bar_chart.dart';
 import '../shared/widgets/breakdown_card.dart';
@@ -20,7 +21,7 @@ class CollatedReportsScreen extends StatefulWidget {
   State<CollatedReportsScreen> createState() => _CollatedReportsScreenState();
 }
 
-class _CollatedReportsScreenState extends State<CollatedReportsScreen> with LiveRefresh {
+class _CollatedReportsScreenState extends State<CollatedReportsScreen> with LiveRefresh , PeriodFilter{
   @override
   void refresh() => setState(() { _future = _load(); });
 
@@ -35,10 +36,10 @@ class _CollatedReportsScreenState extends State<CollatedReportsScreen> with Live
   Future<Map<String, dynamic>> _load() async {
     // Platform view is super-admin only; a 403/non-200 means scope down to tenant.
     try {
-      final r = await api.get('/api/analytics/platform/cases/');
+      final r = await api.get('/api/analytics/platform/cases/', periodQuery);
       return (r as Map).cast<String, dynamic>();
     } catch (_) {
-      final r = await api.get('/api/analytics/cases/');
+      final r = await api.get('/api/analytics/cases/', periodQuery);
       return (r as Map).cast<String, dynamic>();
     }
   }
@@ -82,6 +83,7 @@ class _CollatedReportsScreenState extends State<CollatedReportsScreen> with Live
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             children: [
+              periodButton(() => setState(() { _future = _load(); })),
               GlassCard(
                 padding: const EdgeInsets.all(20),
                 child: Row(

@@ -41,17 +41,25 @@ SUMMARY_COLUMNS = (
 # notifying the next tier up.
 
 
-def daily_summary(reports, days=30):
-    """IDSR daily epidemiological summary rows over the trailing `days`.
+def daily_summary(reports, days=30, start=None, end=None):
+    """IDSR daily epidemiological summary rows over the trailing `days`, or over
+    the calendar window [start, end] (dates) when either is given.
 
     `reports` is any CaseReport queryset (tenant-scoped or ``all_objects``), so
     the same logic serves a facility's own return and the central NCDC pool.
     Ordered newest day first, then highest case load — the order an epidemiologist
     scans.
     """
-    since = timezone.now() - timedelta(days=days)
+    if start or end:
+        window = reports
+        if start:
+            window = window.filter(created_at__date__gte=start)
+        if end:
+            window = window.filter(created_at__date__lte=end)
+    else:
+        window = reports.filter(created_at__gte=timezone.now() - timedelta(days=days))
     rows = (
-        reports.filter(created_at__gte=since)
+        window
         .exclude(disease=None)
         .annotate(day=TruncDay("created_at"))
         .values(
@@ -169,18 +177,22 @@ def timeliness(reports, hours=72):
     }
 
 
-def tenant_idsr_report(days=30):
-    """One facility's (tenant's) IDSR daily return, plus its 24-hour worklist."""
+def tenant_idsr_report(days=30, start=None, end=None):
+    """One facility's (tenant's) IDSR daily return, plus its 24-hour worklist.
+
+    ``start``/``end`` swap the trailing window for a calendar one; the worklist
+    stays live, because its 24-hour clock is running now whatever month is read.
+    """
     reports = CaseReport.objects.all()
     return {
         "days": days,
-        "summary": daily_summary(reports, days),
+        "summary": daily_summary(reports, days, start, end),
         "immediate": immediate_alerts(reports),
         "timeliness": timeliness(reports),
     }
 
 
-def platform_idsr_report(days=30, jurisdiction=None):
+def platform_idsr_report(days=30, jurisdiction=None, start=None, end=None):
     """Central (NCDC) collation: pool every tenant, then roll case totals all the
     way up the gov hierarchy — LGA → state → national.
 
@@ -190,7 +202,7 @@ def platform_idsr_report(days=30, jurisdiction=None):
     reports = _scoped(CaseReport, True, jurisdiction)
     return {
         "days": days,
-        "summary": daily_summary(reports, days),
+        "summary": daily_summary(reports, days, start, end),
         # Centrally the window is 48 hours, not 24: what the tiers below missed
         # yesterday is exactly what the centre is watching for.
         "immediate": immediate_alerts(reports, hours=48),

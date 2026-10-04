@@ -838,7 +838,8 @@ def _idsr_response(report, request):
 class IdsrReportView(APIView):
     """This facility's (tenant's) IDSR daily epidemiological summary.
 
-    ?days=N windows the trailing period (default 30). ?format=csv downloads the
+    ?days=N windows the trailing period (default 30); ?from=&to= or
+    ?year=[&month=] take a calendar window instead. ?format=csv downloads the
     line-list public-health authorities expect, and ?section=immediate switches
     that download to the 24-hour immediate-notification worklist.
     """
@@ -847,7 +848,8 @@ class IdsrReportView(APIView):
 
     def get(self, request):
         days = _days(request)
-        return _idsr_response(tenant_idsr_report(days), request)
+        start, end = _range(request)  # ?from/to or ?year[&month] beat ?days
+        return _idsr_response(tenant_idsr_report(days, start, end), request)
 
 
 class PlatformIdsrReportView(APIView):
@@ -858,8 +860,9 @@ class PlatformIdsrReportView(APIView):
 
     def get(self, request):
         days = _days(request)
+        start, end = _range(request)
         return _idsr_response(
-            platform_idsr_report(days, jurisdiction=_seat(request)), request
+            platform_idsr_report(days, _seat(request), start, end), request
         )
 
 

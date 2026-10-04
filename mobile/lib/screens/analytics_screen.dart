@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../main.dart';
+import '../shared/period_range.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/bar_chart.dart';
@@ -20,7 +21,7 @@ class AnalyticsScreen extends StatefulWidget {
   State<AnalyticsScreen> createState() => _AnalyticsScreenState();
 }
 
-class _AnalyticsScreenState extends State<AnalyticsScreen> with LiveRefresh {
+class _AnalyticsScreenState extends State<AnalyticsScreen> with LiveRefresh , PeriodFilter{
   @override
   void refresh() => setState(() { _future = _load(); });
 
@@ -36,7 +37,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with LiveRefresh {
   /// just hides its card instead of failing the page.
   Future<dynamic> _one(String path) async {
     try {
-      return await api.get(path);
+      return await api.get(path, periodQuery);
     } catch (_) {
       return null;
     }
@@ -93,6 +94,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with LiveRefresh {
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             children: [
+              periodButton(() => setState(() { _future = _load(); })),
               const DashTitleBar(
                 title: 'Analytics',
                 subtitle: 'Funnel & signals',
