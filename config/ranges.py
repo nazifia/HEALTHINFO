@@ -13,7 +13,10 @@ def date_range(request):
     the whole year when month is omitted. Bad numbers are a 400, not a 500.
     """
     q = request.query_params
-    start, end = parse_date(q.get("from", "") or ""), parse_date(q.get("to", "") or "")
+    try:
+        start, end = parse_date(q.get("from", "") or ""), parse_date(q.get("to", "") or "")
+    except ValueError:  # well-formed but impossible, e.g. 2026-02-30
+        raise ValidationError({"from": "From and to must be real dates (YYYY-MM-DD)."})
     if start or end or not (q.get("year") or q.get("month")):
         return start, end
     try:
