@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../api.dart';
 import '../main.dart';
-import '../nigeria.dart';
 import '../core/theme/enhanced_theme.dart';
 import '../shared/widgets/glass_card.dart';
 import '../shared/widgets/snack.dart';
@@ -428,14 +427,14 @@ class DrugOrderForm extends StatefulWidget {
 
 /// A drug stacked onto the prescription being written.
 class _DrugDraft {
-  final int medication;
+  final int? medication;
   final String name;
   final String dose;
   final String frequency;
   final int? durationDays;
 
   const _DrugDraft({
-    required this.medication,
+    this.medication,
     required this.name,
     required this.dose,
     required this.frequency,
@@ -443,7 +442,8 @@ class _DrugDraft {
   });
 
   Map<String, dynamic> get body => {
-        'medication': medication,
+        // A drug off the catalog goes as the name the prescriber typed.
+        if (medication != null) 'medication': medication else 'medication_text': name,
         'dose': dose,
         'frequency': frequency,
         // Blank means open-ended, which is null on the model, not zero days.
@@ -459,6 +459,7 @@ class _DrugDraft {
 
 class _DrugOrderFormState extends State<DrugOrderForm> {
   final _drugs = <_DrugDraft>[];
+  final _drugText = TextEditingController();
   final _dose = TextEditingController();
   final _frequency = TextEditingController();
   final _duration = TextEditingController();
@@ -467,7 +468,6 @@ class _DrugOrderFormState extends State<DrugOrderForm> {
   String? _medicationName;
   int? _patientId;
   String? _patientLabel;
-  String _region = '';
   // The consultation band (A-E) this visit is charged at, or blank for none.
   // Shared by every drug on the prescription: the patient was consulted once.
   bool _saving = false;
@@ -482,24 +482,27 @@ class _DrugOrderFormState extends State<DrugOrderForm> {
     if (e != null) {
       _patientId = e['patient'] as int?;
       _patientLabel = '${e['patient_name'] ?? ''}';
-      _medication = {'id': e['medication']};
-      _medicationName = '${e['medication_name'] ?? ''}';
+      if (e['medication'] != null) {
+        _medication = {'id': e['medication']};
+        _medicationName = '${e['medication_name'] ?? ''}';
+      } else {
+        _drugText.text = '${e['medication_name'] ?? ''}';
+      }
       _dose.text = '${e['dose'] ?? ''}';
       _frequency.text = '${e['frequency'] ?? ''}';
       _duration.text = '${e['duration_days'] ?? ''}';
       _notes.text = '${e['notes'] ?? ''}';
-      _region = '${e['region'] ?? ''}';
     }
     final p = widget.patient;
     if (p != null) {
       _patientId = p['id'] as int?;
       _patientLabel = '${p['full_name'] ?? ''} · ${p['hospital_number'] ?? ''}';
-      _region = '${p['region'] ?? ''}';
     }
   }
 
   @override
   void dispose() {
+    _drugText.dispose();
     _dose.dispose();
     _frequency.dispose();
     _duration.dispose();
@@ -523,16 +526,18 @@ class _DrugOrderFormState extends State<DrugOrderForm> {
     setState(() {
       _medication = row;
       _medicationName = '${row['generic_name']}';
+      _drugText.clear();
     });
   }
 
-  /// The drug in the fields right now, or null when none is picked.
+  /// The drug in the fields right now (picked, else typed), or null when none.
   _DrugDraft? _pending() {
     final med = _medication;
-    if (med == null) return null;
+    final typed = _drugText.text.trim();
+    if (med == null && typed.isEmpty) return null;
     return _DrugDraft(
-      medication: med['id'] as int,
-      name: _medicationName ?? '',
+      medication: med?['id'] as int?,
+      name: med == null ? typed : (_medicationName ?? ''),
       dose: _dose.text.trim(),
       frequency: _frequency.text.trim(),
       durationDays: int.tryParse(_duration.text.trim()),
@@ -543,13 +548,14 @@ class _DrugOrderFormState extends State<DrugOrderForm> {
   void _addAnother() {
     final drug = _pending();
     if (drug == null) {
-      setState(() => _error = 'Pick the drug being prescribed.');
+      setState(() => _error = 'Pick or type the drug being prescribed.');
       return;
     }
     setState(() {
       _drugs.add(drug);
       _medication = null;
       _medicationName = null;
+      _drugText.clear();
       _dose.clear();
       _frequency.clear();
       _duration.clear();
@@ -562,7 +568,7 @@ class _DrugOrderFormState extends State<DrugOrderForm> {
     // another drug" to write the only one they wanted.
     final drugs = [..._drugs, if (_pending() != null) _pending()!];
     if (drugs.isEmpty) {
-      setState(() => _error = 'Pick the drug being prescribed.');
+      setState(() => _error = 'Pick or type the drug being prescribed.');
       return;
     }
     setState(() {
@@ -572,7 +578,6 @@ class _DrugOrderFormState extends State<DrugOrderForm> {
     try {
       final shared = {
         'patient': _patientId,
-        'region': _region,
         'notes': _notes.text.trim(),
         // Only when the caller knows it: sending null on an edit would strip
         // the case off an order that already has one.
@@ -653,6 +658,15 @@ class _DrugOrderFormState extends State<DrugOrderForm> {
                 child: Text(_medicationName == null ? 'Pick' : 'Change')),
           ]),
         ),
+        if (_medication == null) ...[
+          const SizedBox(height: 12),
+          TextField(
+            controller: _drugText,
+            decoration: const InputDecoration(
+                labelText: 'Or type the drug name',
+                helperText: 'Not in the list? Write it here.'),
+          ),
+        ],
         const SizedBox(height: 12),
         TextField(
           controller: _dose,
@@ -685,10 +699,6 @@ class _DrugOrderFormState extends State<DrugOrderForm> {
               label: const Text('Add another drug'),
             ),
           ),
-        RegionPicker(
-            initial: _region.isEmpty ? null : _region,
-            onChanged: (r) => _region = r),
-        const SizedBox(height: 12),
         TextField(
           controller: _notes,
           maxLines: 3,

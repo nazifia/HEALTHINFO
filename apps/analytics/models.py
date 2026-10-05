@@ -534,9 +534,12 @@ class Prescription(PatientLinkedModel, TenantOwnedModel):
         "analytics.CaseReport", null=True, blank=True, on_delete=models.SET_NULL,
         related_name="prescriptions",
     )
+    # A drug the catalog does not carry is written in plain words instead.
     medication = models.ForeignKey(
-        "catalog.Medication", on_delete=models.CASCADE, related_name="prescriptions"
+        "catalog.Medication", null=True, blank=True, on_delete=models.CASCADE,
+        related_name="prescriptions",
     )
+    medication_text = models.CharField(max_length=200, blank=True)
     dose = models.CharField(max_length=120, blank=True)  # e.g. "500 mg"
     frequency = models.CharField(max_length=120, blank=True)  # e.g. "twice daily"
     duration_days = models.PositiveSmallIntegerField(null=True, blank=True)

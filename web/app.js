@@ -196,11 +196,11 @@ const VISIT_SHEET = {
 };
 const ORDER_SHEET = {
   form: { title: 'Prescribe', submit: 'Send' },
-  layout: ['patient', 'medication', 'dose', 'frequency', 'duration_days', 'region', 'notes'],
-  labels: { medication: 'Drug', duration_days: 'Duration in days', patient: 'Patient (optional)' },
+  layout: ['patient', 'medication', 'medication_text', 'dose', 'frequency', 'duration_days', 'notes'],
+  labels: { medication: 'Drug', medication_text: 'Or type the drug name', duration_days: 'Duration in days', patient: 'Patient (optional)' },
   // The counter moves the status and stamps the dispensing, not the prescriber.
-  hide: ['patient_age_group', 'patient_sex', 'status', 'dispensed_at'],
-  hints: { duration_days: 'Leave blank for an open-ended course' },
+  hide: ['patient_age_group', 'patient_sex', 'status', 'dispensed_at', 'region'],
+  hints: { duration_days: 'Leave blank for an open-ended course', medication_text: 'Not in the list? Write the drug here.' },
 };
 
 const ORG_FILTERS = [
@@ -434,7 +434,7 @@ const FIELD_HINTS = {
 // The drug fields of a clinical drug order. Everything else on that form —
 // the patient, the region, the notes — is about the prescription as a whole,
 // so an extra drug row repeats these and inherits the rest.
-const RX_DRUG_FIELDS = ['medication', 'dose', 'frequency', 'duration_days'];
+const RX_DRUG_FIELDS = ['medication', 'medication_text', 'dose', 'frequency', 'duration_days'];
 
 // Content workflow edges (mirrors apps/governance/workflow.py TRANSITIONS).
 const TRANSITIONS = {
@@ -2933,7 +2933,7 @@ function collectRow(row, fields) {
  * about the drug — the patient, the diagnosis, the notes — go on every row; a
  * row with no drug picked is an untouched blank and is dropped, not posted. */
 function prescriptionPayload(body, extras) {
-  const drugs = extras.filter((d) => d.medication);
+  const drugs = extras.filter((d) => d.medication || d.medication_text);
   if (!drugs.length) return body;
   const shared = { ...body };
   for (const name of RX_DRUG_FIELDS) delete shared[name];

@@ -172,3 +172,11 @@ def test_cannot_link_another_clinicians_records(world):
                    format="json")
     assert order.status_code == 400
     assert "case_report" in str(order.content)
+
+
+def test_a_drug_the_catalog_lacks_is_written_in_words(world):
+    doctor, here, _away, _drug = world
+    c = _client(doctor, here)
+    ok = c.post("/api/prescriptions/", {"medication_text": "Ringer"}, format="json")
+    assert ok.status_code == 201 and ok.json()["medication_name"] == "Ringer"
+    assert c.post("/api/prescriptions/", {"dose": "1 g"}, format="json").status_code == 400

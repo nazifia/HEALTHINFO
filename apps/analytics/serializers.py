@@ -204,9 +204,20 @@ class PrescriptionSerializer(
     # The writer is named the way a script names them — with their licence —
     # and the bare user pk behind that is not carried.
     prescriber = serializers.CharField(read_only=True)
-    medication_name = serializers.CharField(
-        source="medication.generic_name", read_only=True
-    )
+    medication_name = serializers.SerializerMethodField()
+
+    def get_medication_name(self, obj):
+        return obj.medication.generic_name if obj.medication_id else obj.medication_text
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        text = (attrs.get("medication_text") or "").strip()
+        if "medication_text" in attrs:
+            attrs["medication_text"] = text
+        picked = attrs.get("medication") or (self.instance and self.instance.medication)
+        if not picked and not text and not (self.instance and self.instance.medication_text):
+            raise serializers.ValidationError({"medication": "Pick a drug or type its name."})
+        return attrs
 
     class Meta:
         model = Prescription

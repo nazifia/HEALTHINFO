@@ -16,7 +16,7 @@ from django.db.models import (
     Q,
     Sum,
 )
-from django.db.models.functions import TruncDate, TruncDay, TruncMonth, TruncYear
+from django.db.models.functions import Coalesce, TruncDate, TruncDay, TruncMonth, TruncYear
 from django.utils import timezone
 
 from apps.accounts.models import User
@@ -181,6 +181,11 @@ def _prescriptions_for(reports):
     return Prescription.all_objects.filter(case_report__in=reports)
 
 
+def _drug_named(rx):
+    """Orders with ``drug``: the catalog name, or what the prescriber typed."""
+    return rx.annotate(drug=Coalesce("medication__generic_name", "medication_text"))
+
+
 def _prescribed_for(reports, limit=10):
     """What was actually prescribed against these diagnoses.
 
@@ -189,8 +194,8 @@ def _prescribed_for(reports, limit=10):
     written, with a status saying whether it was dispensed.
     """
     rows = (
-        _prescriptions_for(reports)
-        .values("medication__generic_name")
+        _drug_named(_prescriptions_for(reports))
+        .values("drug")
         .annotate(
             count=Count("id"),
             dispensed=Count("id", filter=Q(status__in=_RX_FILLED)),
@@ -198,7 +203,7 @@ def _prescribed_for(reports, limit=10):
         .order_by("-count")[:limit]
     )
     return [
-        {"medication": r["medication__generic_name"], "count": r["count"],
+        {"medication": r["drug"], "count": r["count"],
          "dispensed": r["dispensed"]}
         for r in rows
     ]
@@ -216,10 +221,10 @@ def _diagnosis_pairs(rx, limit=20):
     "what is prescribed for this diagnosis" total correct.
     """
     rows = (
-        rx.values(
+        _drug_named(rx).values(
             "case_report__disease__name",
             "case_report__disease__icd10_code",
-            "medication__generic_name",
+            "drug",
         )
         .annotate(
             count=Count("id"),
@@ -230,7 +235,7 @@ def _diagnosis_pairs(rx, limit=20):
     return [
         {"diagnosis": r["case_report__disease__name"] or "—",
          "icd10_code": r["case_report__disease__icd10_code"] or "",
-         "medication": r["medication__generic_name"],
+         "medication": r["drug"],
          "count": r["count"],
          "dispensed": r["dispensed"]}
         for r in rows
@@ -920,7 +925,10 @@ def prescription_stats(start=None, end=None, platform=False, jurisdiction=None):
         "total": total,
         "dispensed": dispensed,
         "dispense_rate": round(dispensed / due, 4) if due else None,
-        "top_medications": _grouped(rx, "medication__generic_name", 10),
+        "top_medications": [
+            {"medication__generic_name": r["drug"], "count": r["count"]}
+            for r in _grouped(_drug_named(rx), "drug", 10)
+        ],
         # Prescribing collated against the reason it was written for.
         # ``linked`` is the share of orders that carry a diagnosis at all:
         # below 1, the pair rows describe only part of the prescribing.
