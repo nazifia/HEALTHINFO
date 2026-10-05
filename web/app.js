@@ -2369,6 +2369,8 @@ async function viewDetail(slug, id) {
       ${actsHtml ? `<div class="card"><h3>Actions</h3><div class="actions">${actsHtml}</div></div>` : ''}
       ${sendHtml}${fileHtml}
       ${withPatient ? '<div class="card"><h3>Patient</h3><div id="rec-patient"><p class="loading">Loading…</p></div></div>' : ''}
+      ${slug === 'prescriptions' && obj.medication ? `<div class="card"><h3>Medicine</h3>
+        <div id="rx-med"><p class="loading">Loading…</p></div></div>` : ''}
       <div class="card">${dlHtml(obj)}</div>
       ${slug === 'prescriptions' && obj.group ? `<div class="card"><h3>Prescribed together</h3>
         <div id="rx-group"><p class="loading">Loading…</p></div></div>` : ''}
@@ -2508,6 +2510,15 @@ async function viewDetail(slug, id) {
     // The other drugs written with this one. A prescription is one decision
     // and the rows are one drug each, so the drug on screen is only part of
     // what the patient was given — and cancelling stops all of them together.
+    if ($('#rx-med')) {
+      try {
+        const m = await Api.get(`${rpath('medications')}${obj.medication}/`);
+        const keep = ['generic_name', 'brand_name', 'drug_class', 'description', 'indications', 'dosage',
+          'side_effects', 'warnings', 'contraindications', 'storage_information'];
+        $('#rx-med').innerHTML = `<dl class="detail">${keep.filter((k) => m[k]).map((k) =>
+          `<dt>${esc(label(k))}</dt><dd>${esc(m[k])}</dd>`).join('')}</dl>`;
+      } catch (e) { $('#rx-med').innerHTML = `<p class="err">${esc(e.message)}</p>`; }
+    }
     if ($('#rx-group')) {
       try {
         const { rows } = await Api.list(rpath(slug), { group: obj.group, page_size: 50 });

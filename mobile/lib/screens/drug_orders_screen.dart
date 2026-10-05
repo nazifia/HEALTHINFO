@@ -54,6 +54,13 @@ class DrugOrdersScreen extends StatelessWidget {
         header: (items) => _Header(items: items),
         collapse: collapseByGroup,
         card: (row, reload, edit) => _Card(row: row, reload: reload),
+        onTap: (row) => showModalBottomSheet<void>(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (_) => _MedicineSheet(
+              drugs: ((row['drugs'] ?? [row]) as List).cast<Map<String, dynamic>>()),
+        ),
         form: (existing) => DrugOrderForm(existing: existing),
       ),
     );
@@ -97,6 +104,104 @@ Future<bool> prescribeFor(BuildContext context, Map<String, dynamic> patient,
     builder: (_) => DrugOrderForm(patient: patient, caseReport: caseReport),
   );
   return saved == true;
+}
+
+/// Every drug on a prescription in full: the order's own directions plus the
+/// catalog entry (class, indications, side effects, warnings…).
+class _MedicineSheet extends StatelessWidget {
+  final List<Map<String, dynamic>> drugs;
+  const _MedicineSheet({required this.drugs});
+
+  static const _fields = {
+    'brand_name': 'Brand',
+    'drug_class': 'Class',
+    'description': 'Description',
+    'indications': 'Indications',
+    'dosage': 'Standard dosage',
+    'side_effects': 'Side effects',
+    'warnings': 'Warnings',
+    'contraindications': 'Contraindications',
+    'storage_information': 'Storage',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints:
+          BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
+      decoration: BoxDecoration(
+        color: context.scaffoldBg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+      child: ListView(shrinkWrap: true, children: [
+        for (final d in drugs) _DrugDetail(drug: d, fields: _fields),
+      ]),
+    );
+  }
+}
+
+class _DrugDetail extends StatelessWidget {
+  final Map<String, dynamic> drug;
+  final Map<String, String> fields;
+  const _DrugDetail({required this.drug, required this.fields});
+
+  @override
+  Widget build(BuildContext context) {
+    final order = [
+      '${drug['dose'] ?? ''}',
+      '${drug['frequency'] ?? ''}',
+      if (drug['duration_days'] != null) 'for ${drug['duration_days']} day(s)',
+    ].where((v) => v.trim().isNotEmpty).join(' · ');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('${drug['medication_name'] ?? 'Drug'}',
+            style: TextStyle(
+                color: context.labelColor,
+                fontSize: 18,
+                fontWeight: FontWeight.w800)),
+        if (order.isNotEmpty)
+          Text(order, style: TextStyle(color: context.labelColor, fontSize: 13)),
+        if ('${drug['notes'] ?? ''}'.trim().isNotEmpty)
+          Text('${drug['notes']}',
+              style: TextStyle(color: context.hintColor, fontSize: 13)),
+        const Divider(),
+        FutureBuilder<dynamic>(
+          future: api.get('/api/medications/${drug['medication']}/'),
+          builder: (context, snap) {
+            if (snap.connectionState != ConnectionState.done) {
+              return const LinearProgressIndicator(minHeight: 2);
+            }
+            if (snap.hasError || snap.data is! Map) {
+              return Text('Medicine details unavailable.',
+                  style: TextStyle(color: context.hintColor, fontSize: 13));
+            }
+            final m = (snap.data as Map).cast<String, dynamic>();
+            return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              for (final e in fields.entries)
+                if ('${m[e.key] ?? ''}'.trim().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(e.value,
+                              style: TextStyle(
+                                  color: context.hintColor,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700)),
+                          Text('${m[e.key]}',
+                              style: TextStyle(
+                                  color: context.labelColor, fontSize: 14)),
+                        ]),
+                  ),
+            ]);
+          },
+        ),
+      ]),
+    );
+  }
 }
 
 class _Header extends StatelessWidget {
