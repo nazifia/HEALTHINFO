@@ -386,7 +386,12 @@ class _DispenseSheetState extends State<DispenseSheet> {
             // written with it are marked off by the basket lines that match.
             RadioGroup<String?>(
               groupValue: _fillingKey,
-              onChanged: (v) => setState(() => _fillingKey = v),
+              onChanged: (v) => setState(() {
+                _fillingKey = v;
+                // Prefill the Item field with the first stocked match.
+                final shelf = prescribedFirst(_items, _filling);
+                if (shelf.matched > 0) _itemId = shelf.items.first['id'] as int?;
+              }),
               child: Column(children: [
                 for (final o in _orders!)
                   RadioListTile<String?>(

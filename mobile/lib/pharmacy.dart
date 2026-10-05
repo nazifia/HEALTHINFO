@@ -563,9 +563,10 @@ String fillableLabel(Map<String, dynamic> o) {
 ///
 /// ponytail: matched by name (item name contains the drug, or its linked
 /// medication is the drug); tighten to ids if brand names start colliding.
-({List<Map<String, dynamic>> items, List<String> unstocked}) prescribedFirst(
-    List<Map<String, dynamic>> items, Map<String, dynamic>? picked) {
-  if (picked == null) return (items: items, unstocked: const []);
+({List<Map<String, dynamic>> items, List<String> unstocked, int matched})
+    prescribedFirst(
+        List<Map<String, dynamic>> items, Map<String, dynamic>? picked) {
+  if (picked == null) return (items: items, unstocked: const [], matched: 0);
   final names = [
     if (picked['kind'] == 'script')
       for (final l in (picked['lines'] ?? []) as List) '${(l as Map)['name'] ?? ''}'
@@ -584,6 +585,7 @@ String fillableLabel(Map<String, dynamic> o) {
   ];
   return (
     items: [...first, for (final i in items) if (!first.contains(i)) i],
+    matched: first.length,
     unstocked: [
       for (final n in names)
         if (!items.any((i) => hit(i, n))) n,
