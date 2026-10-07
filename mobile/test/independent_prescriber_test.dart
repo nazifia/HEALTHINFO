@@ -7,7 +7,10 @@ import 'package:health_info_app/api.dart';
 /// menu has to wait for them to pick one: every tenant-scoped screen answers
 /// 403 until they do. Mirrors tests/test_independent_prescriber.py.
 void main() {
-  final home = File('lib/screens/home_screen.dart').readAsStringSync();
+  // CRLF checkouts (core.autocrlf) would break the multi-line contains() below.
+  final home = File('lib/screens/home_screen.dart')
+      .readAsStringSync()
+      .replaceAll('\r\n', '\n');
   final picker = File('lib/screens/facility_picker_screen.dart').readAsStringSync();
   final apiSrc = File('lib/api.dart').readAsStringSync();
 
