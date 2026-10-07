@@ -123,7 +123,7 @@ class User(AbstractUser):
     # an unset one filters to no rows rather than to every insurer's.
     # String reference: pharmacy imports accounts, so a real import would cycle.
     hmo = models.ForeignKey(
-        "pharmacy.HMO", null=True, blank=True, on_delete=models.SET_NULL,
+        "hmos.HMO", null=True, blank=True, on_delete=models.SET_NULL,
         related_name="seats",
     )
     # Which patch of the country a government seat answers for. NULL for

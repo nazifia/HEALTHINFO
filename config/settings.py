@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     "apps.branches",
     "apps.customers",
     "apps.inventory",
+    "apps.hmos",
     "apps.pharmacy",
     "apps.pos",
     "apps.prescriptions",
