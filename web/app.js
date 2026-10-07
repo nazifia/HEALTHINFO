@@ -402,7 +402,10 @@ const RESOURCES = {
   // read-only for them too — the API writes it, nobody edits it.
   'patient-access-log':{ title: 'Patient Access Log', group: 'Admin', path: 'patients/access-log',
                           adminOnly: true, readOnly: true, noLink: true },
-  'tenants-hospitals': { title: 'Hospitals',          group: 'Admin', path: 'tenants/hospitals',  superOnly: true, tenantActions: true, hide: ['logo'] },
+  // Every scheme on the platform, across organizations (the HMOs screen is one tenant's).
+  'platform-hmos':     { title: 'All HMOs',           group: 'Admin', path: 'pharmacy/hmos/platform', superOnly: true,
+                          search: true, readOnly: true, noLink: true, signUp: true },
+  'tenants-hospitals': { title: 'Hospitals',         group: 'Admin', path: 'tenants/hospitals',  superOnly: true, tenantActions: true, hide: ['logo'] },
   'tenants-pharmacies':{ title: 'Pharmacies',         group: 'Admin', path: 'tenants/pharmacies', superOnly: true, tenantActions: true, hide: ['logo'] },
 };
 
@@ -1847,7 +1850,7 @@ async function viewSchemeRegister() {
       toast(r?.message || 'Scheme registered. Its admin can now sign in.');
       // The scheme list is one organization's; a platform admin with none open
       // would land on an empty page, so send them to the list that spans them.
-      location.hash = Api.tenant ? '#/r/pharmacy-hmos' : '#/r/scheme-users';
+      location.hash = Api.tenant ? '#/r/pharmacy-hmos' : '#/r/platform-hmos';
     } catch (err) {
       toast(err.message, true);
       showFieldErrors(e.target, flattenSchemeErrors(err.errors));

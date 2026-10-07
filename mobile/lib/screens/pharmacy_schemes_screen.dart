@@ -82,6 +82,32 @@ class HmosScreen extends StatelessWidget {
       );
 }
 
+/// Every scheme on the platform, whichever organization holds it — the
+/// super-admin's list (GET /api/pharmacy/hmos/platform/). Read-only; the
+/// organization's own HMOs screen edits.
+class PlatformHmosScreen extends StatelessWidget {
+  const PlatformHmosScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => ReportListScreen(
+        path: '/api/pharmacy/hmos/platform/',
+        searchHint: 'Insurer name or code…',
+        fabLabel: 'Register scheme',
+        emptyIcon: Icons.health_and_safety_outlined,
+        emptyTitle: 'No schemes yet',
+        emptyMessage: 'Register the first scheme with the + button.',
+        savedMessage: 'Scheme saved.',
+        filters: const [
+          ReportFilter(param: 'is_active', anyLabel: 'Any state', options: {
+            'true': 'Active',
+            'false': 'Retired',
+          }),
+        ],
+        card: (row, reload, edit) => _HmoCard(row: row, admin: false, edit: edit),
+        form: (_) => const _SchemeSignUpForm(),
+      );
+}
+
 class _HmosTab extends StatelessWidget {
   final bool admin;
 
@@ -151,6 +177,9 @@ class _HmoCard extends StatelessWidget {
                     ? 'Clears an insured sale above ${money(threshold)} first'
                     : 'No authorisation asked for',
                 style: TextStyle(color: context.hintColor, fontSize: 12)),
+            if (row['tenant_name'] != null)
+              Text('${row['tenant_name']}',
+                  style: TextStyle(color: context.hintColor, fontSize: 12)),
           ]),
         ),
         if (row['is_active'] != true)

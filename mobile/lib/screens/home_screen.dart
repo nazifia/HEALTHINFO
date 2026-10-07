@@ -338,6 +338,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           _Section('Schemes', Icons.health_and_safety_outlined,
               const PharmacySchemesScreen()),
           if (platform)
+            const _Section('All HMOs', Icons.domain_outlined, PlatformHmosScreen()),
+          if (platform)
             const _Section('Scheme users', Icons.manage_accounts_outlined,
                 UserManagementScreen(role: 'hmo')),
           _Section('HMO claims', Icons.request_quote_outlined,

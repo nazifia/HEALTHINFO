@@ -20,6 +20,9 @@ from .models import (
 
 
 class HMOSerializer(serializers.ModelSerializer):
+    # Which organization holds the row — what the platform list shows.
+    tenant_name = serializers.CharField(source="tenant.name", read_only=True)
+
     class Meta:
         model = HMO
         exclude = ("tenant",)

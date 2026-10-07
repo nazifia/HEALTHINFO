@@ -112,6 +112,17 @@ class HMOViewSet(PharmacyViewSet):
     def get_queryset(self):
         return insurer_scope(HMO.objects.all(), self.request.user, field="pk")
 
+    @action(detail=False, methods=["get"], permission_classes=[IsSuperAdmin])
+    def platform(self, request):
+        """Every scheme on the platform, whichever organization holds the row.
+
+        The ordinary list is one tenant's, and a platform admin with none open
+        gets nothing from it. Read-only: edits still go through a tenant.
+        """
+        qs = self.filter_queryset(HMO.all_objects.select_related("tenant"))
+        page = self.paginate_queryset(qs)
+        return self.get_paginated_response(self.get_serializer(page, many=True).data)
+
     @action(detail=False, methods=["post"], permission_classes=[IsSuperAdmin])
     def register(self, request):
         """Sign a scheme up, with the seat that will run its desk.

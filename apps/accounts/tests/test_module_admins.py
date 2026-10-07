@@ -268,6 +268,20 @@ def test_register_scheme_folds_phone_and_name(world):
     assert post("LEADWAY", "08030000043").status_code == 400        # name, other case
 
 
+def test_platform_scheme_list_spans_tenants_for_super_admin_only(world):
+    boss = seat(phone="08030000050", role=Role.SUPER_ADMIN)
+    c = APIClient()
+    c.force_authenticate(user=boss)
+    resp = c.get("/api/pharmacy/hmos/platform/")
+    assert resp.status_code == 200, resp.content
+    rows = resp.json()["results"]
+    assert world["hmo"].id in [r["id"] for r in rows]
+    assert {r["tenant_name"] for r in rows} == {world["tenant"].name}
+
+    admin = seat(phone="08030000051", tenant=world["tenant"], role=Role.TENANT_ADMIN)
+    assert client_for(admin).get("/api/pharmacy/hmos/platform/").status_code == 403
+
+
 def test_pharmacy_admin_cannot_register_a_scheme(world):
     admin = seat(phone="08030000033", tenant=world["tenant"],
                  role=Role.TENANT_ADMIN)
