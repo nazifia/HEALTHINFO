@@ -317,7 +317,7 @@ const RESOURCES = {
   // (extra: 'preauth') rather than a chain of prompts.
   'pharmacy-preauths':      { title: 'Authorisations',  group: 'Pharmacy', hmo: true, path: 'pharmacy/pre-authorizations', roles: 'staff', search: true, extra: 'preauth',
                               actions: [{ name: 'cancel', label: 'Withdraw request', ask: 'reason', danger: true, when: ['requested', 'approved'] }] },
-  'pharmacy-sales':         { title: 'Sales',           group: 'Pharmacy', path: 'pharmacy/sales',           roles: 'staff', search: true, readOnly: true, receipt: true,
+  'pharmacy-sales':         { title: 'Sales',           group: 'Pharmacy', path: 'pharmacy/sales',           roles: 'staff', search: true, readOnly: true, receipt: true, dates: true,
                               actions: [{ name: 'pay', label: 'Take payment', when: ['pending'] },
                                         { name: 'cancel', label: 'Cancel sale', danger: true, when: ['pending', 'paid'] }] },
   'pharmacy-claims':        { title: 'Claims',          group: 'Pharmacy', hmo: true, path: 'pharmacy/claims',          roles: 'staff', search: true, readOnly: true,
@@ -350,7 +350,7 @@ const RESOURCES = {
                                         { name: 'reject', label: 'Refuse', ask: 'reason', danger: true, when: ['pending'] },
                                         { name: 'receive', label: 'Confirm received', when: ['approved'] }] },
   'pharmacy-returns':       { title: 'Returns',         group: 'Pharmacy', path: 'pharmacy/returns',         roles: 'staff', readOnly: true, noLink: true },
-  'pharmacy-dispensing-log':{ title: 'Dispensing Log',  group: 'Pharmacy', path: 'pharmacy/dispensing-log',  roles: 'staff', search: true, readOnly: true, noLink: true },
+  'pharmacy-dispensing-log':{ title: 'Dispensing Log',  group: 'Pharmacy', path: 'pharmacy/dispensing-log',  roles: 'staff', search: true, readOnly: true, noLink: true, dates: true },
   // The pharmacy admin's own people: the API narrows /api/users/ to the pharmacy's
   // pharmacists for them, so this is the list of who they run (read-only — adding
   // staff is the facility admin's, or a holder of the user list).
@@ -2201,6 +2201,7 @@ async function viewList(slug) {
     const query = { page: st.page, ...res.query };
     if (st.search) query.search = st.search;
     for (const [k, v] of Object.entries(st.filters)) if (v) query[k] = v;
+    if (res.dates) for (const k of ['from', 'to']) if (st.filters[k]) query[k] = st.filters[k];
     const seq = ++st.seq;
     const filters = (res.filters || []).filter((f) => !f.when || f.when());
     const [{ rows, count }, ...options] = await Promise.all([
@@ -2225,6 +2226,8 @@ async function viewList(slug) {
             <option value="">All</option>
             ${options[i].map((r) => `<option value="${r.id}"${String(st.filters[f.param] || '') === String(r.id) ? ' selected' : ''}>${esc(f.text(r, options[i]) ?? r.id)}</option>`).join('')}
           </select></label>`).join('')}
+        ${res.dates ? ['from', 'to'].map((k) => `<label>${k === 'from' ? 'From' : 'To'}
+          <input type="date" name="${k}" value="${esc(st.filters[k] || '')}"></label>`).join('') : ''}
         <button>Search</button>
       </form>
       ${res.report ? reportSummaryHtml(slug, rows) : ''}
@@ -2256,7 +2259,7 @@ async function viewList(slug) {
       st.timer = setTimeout(run, 300);
     };
     $('#search-form').onsubmit = (e) => { e.preventDefault(); run(); };
-    for (const f of filters) {
+    for (const f of [...filters, ...(res.dates ? [{ param: 'from' }, { param: 'to' }] : [])]) {
       $('#search-form')[f.param].onchange = (e) => {
         st.filters[f.param] = e.target.value;
         st.page = 1;

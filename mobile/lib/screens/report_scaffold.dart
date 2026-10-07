@@ -84,6 +84,8 @@ class ReportListScreen extends StatefulWidget {
   // prescription. The header still counts the rows as they came.
   final List<Map<String, dynamic>> Function(List<Map<String, dynamic>>)?
   collapse;
+  // Show From/To date pickers that send ?from=&to= (YYYY-MM-DD).
+  final bool dateRange;
 
   const ReportListScreen({
     super.key,
@@ -101,6 +103,7 @@ class ReportListScreen extends StatefulWidget {
     this.onTap,
     this.showFab = true,
     this.collapse,
+    this.dateRange = false,
   });
 
   @override
@@ -169,6 +172,60 @@ class _ReportListScreenState extends State<ReportListScreen>
     });
   }
 
+  Future<void> _pickDate(String param) async {
+    final now = DateTime.now();
+    final current = DateTime.tryParse(_picked[param] ?? '');
+    final d = await showDatePicker(
+      context: context,
+      initialDate: current ?? now,
+      firstDate: DateTime(2000),
+      lastDate: now,
+    );
+    if (d == null) return;
+    _picked[param] = d.toIso8601String().split('T').first;
+    _reload();
+  }
+
+  Widget _dateChip(String param, String label) {
+    final v = _picked[param];
+    final active = v != null;
+    final accent = active ? EnhancedTheme.primaryTeal : context.hintColor;
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: () => _pickDate(param),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: accent.withValues(alpha: active ? 1 : 0.4)),
+          color: active
+              ? EnhancedTheme.primaryTeal.withValues(alpha: 0.12)
+              : Colors.transparent,
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.calendar_today_outlined, size: 14, color: accent),
+          const SizedBox(width: 6),
+          Text(active ? '$label $v' : label,
+              style: TextStyle(
+                  color: context.labelColor,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600)),
+          if (active)
+            GestureDetector(
+              onTap: () {
+                _picked.remove(param);
+                _reload();
+              },
+              child: Padding(
+                padding: const EdgeInsets.only(left: 6),
+                child: Icon(Icons.close, size: 16, color: accent),
+              ),
+            ),
+        ]),
+      ),
+    );
+  }
+
   Future<void> _openForm([Map<String, dynamic>? existing]) async {
     // Anything but null counts as saved: most sheets pop `true`, but one that
     // creates a record (the dispensing counter) pops the record itself.
@@ -219,12 +276,18 @@ class _ReportListScreenState extends State<ReportListScreen>
                 ),
               ),
             ),
-          if (widget.filters.isNotEmpty)
+          if (widget.filters.isNotEmpty || widget.dateRange)
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
               child: Row(
                 children: [
+                  if (widget.dateRange) ...[
+                    _dateChip('from', 'From'),
+                    const SizedBox(width: 8),
+                    _dateChip('to', 'To'),
+                    const SizedBox(width: 8),
+                  ],
                   for (final f in widget.filters) ...[
                     FilterDropdown(
                       filter: f,

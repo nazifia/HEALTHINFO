@@ -22,6 +22,7 @@ class PharmacySalesScreen extends StatelessWidget {
     return ReportListScreen(
       path: '/api/pharmacy/sales/',
       searchHint: 'Search by receipt number…',
+      dateRange: true,
       fabLabel: 'Dispense',
       emptyIcon: Icons.point_of_sale_outlined,
       emptyTitle: 'No sales yet',

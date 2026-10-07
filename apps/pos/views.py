@@ -106,7 +106,7 @@ class SaleViewSet(mixins.CreateModelMixin, mixins.ListModelMixin,
         if self.request.query_params.get("kept") == "1":
             qs = qs.filter(receipt_kept_at__isnull=False,
                            receipt_printed_at__isnull=True)
-        return qs
+        return _apply_range(qs, *_range(self.request))
 
     def perform_create(self, serializer):
         # One transaction for the basket: a line that can't be filled rolls back
@@ -288,7 +288,10 @@ class DispensingLogViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
     ordering_fields = ("created_at",)
 
     def get_queryset(self):
-        return DispensingLog.objects.select_related("item", "user", "sale")
+        return _apply_range(
+            DispensingLog.objects.select_related("item", "user", "sale"),
+            *_range(self.request),
+        )
 
 
 class PaymentRequestViewSet(PharmacyViewSet):

@@ -20,6 +20,7 @@ class DispensingLogScreen extends StatelessWidget {
     return ReportListScreen(
       path: '/api/pos/dispensing-log/',
       searchHint: 'Drug or brand…',
+      dateRange: true,
       fabLabel: '',
       showFab: false,
       emptyIcon: Icons.medication_outlined,
