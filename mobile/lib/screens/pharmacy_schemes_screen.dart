@@ -830,8 +830,8 @@ class _MemberFormState extends State<_MemberForm> {
     final row = await pickRow(
       context,
       path: '/api/pharmacy/hmos/',
-      title: 'Which insurer?',
-      hint: 'Insurer name…',
+      title: 'Which HMO?',
+      hint: 'HMO name…',
       query: const {'is_active': 'true'},
       label: (r) => '${r['name']}',
       subtitle: (r) => 'pays ${r['coverage_percent']}% by default',
@@ -859,7 +859,7 @@ class _MemberFormState extends State<_MemberForm> {
 
   Future<void> _submit() async {
     if (_patientId == null || _hmoId == null) {
-      setState(() => _error = 'Pick the patient and the insurer.');
+      setState(() => _error = 'Pick the patient and the HMO.');
       return;
     }
     if (_number.text.trim().isEmpty) {
@@ -930,7 +930,7 @@ class _MemberFormState extends State<_MemberForm> {
         _picker('Patient', _patientName,
             widget.patient == null ? _pickPatient : () {}),
         const SizedBox(height: 12),
-        _picker('Insurer', _hmoName, _pickHmo),
+        _picker('HMO', _hmoName, _pickHmo),
         const SizedBox(height: 12),
         TextField(
           controller: _number,
@@ -947,7 +947,7 @@ class _MemberFormState extends State<_MemberForm> {
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           decoration: const InputDecoration(
             labelText: 'Cover % for this member',
-            helperText: "Blank uses the insurer's default",
+            helperText: "Blank uses the HMO's default",
           ),
         ),
         const SizedBox(height: 12),
@@ -1163,8 +1163,8 @@ class _RuleFormState extends State<_RuleForm> {
     final row = await pickRow(
       context,
       path: '/api/pharmacy/hmos/',
-      title: 'Which insurer?',
-      hint: 'Insurer name…',
+      title: 'Which HMO?',
+      hint: 'HMO name…',
       query: const {'is_active': 'true'},
       label: (r) => '${r['name']}',
       subtitle: (r) => 'pays ${r['coverage_percent']}% by default',
@@ -1264,7 +1264,7 @@ class _RuleFormState extends State<_RuleForm> {
         // An insurer has one scheme to price, so it is told which rather than
         // asked — the picker would offer a list of one.
         if (!widget.insurer) ...[
-          _picker('Insurer', _hmoName, _pickHmo),
+          _picker('HMO', _hmoName, _pickHmo),
           const SizedBox(height: 12),
         ],
         _picker('Drug', _itemName, _pickItem),
