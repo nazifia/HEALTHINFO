@@ -2369,7 +2369,8 @@ async function viewDetail(slug, id) {
       <div class="actions">${actions}</div>
       ${tenantHtml}${workflowHtml}
       ${actsHtml ? `<div class="card"><h3>Actions</h3><div class="actions">${actsHtml}</div></div>` : ''}
-      ${sendHtml}${fileHtml}
+      ${sendHtml}${fileHtml}${slug === 'patients' && isPharmacyStaff()
+        ? `<div class="card"><h3>Scheme</h3><div class="actions"><a class="btn ghost" href="#/r/pharmacy-enrollments/new?patient=${id}&back=${encodeURIComponent('#/r/patients/' + id)}">+ Add to scheme</a></div></div>` : ''}
       ${withPatient ? '<div class="card"><h3>Patient</h3><div id="rec-patient"><p class="loading">Loading…</p></div></div>' : ''}
       ${slug === 'prescriptions' && obj.medication ? `<div class="card"><h3>Medicine</h3>
         <div id="rx-med"><p class="loading">Loading…</p></div></div>` : ''}

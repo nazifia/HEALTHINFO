@@ -736,9 +736,22 @@ class _DependentCard extends StatelessWidget {
   }
 }
 
+/// Enrol [patient] in a scheme from their record. True once saved.
+Future<bool> enrolPatient(BuildContext context, Map<String, dynamic> patient) async {
+  final saved = await showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => _MemberForm(patient: patient),
+  );
+  return saved == true;
+}
+
 class _MemberForm extends StatefulWidget {
   final Map<String, dynamic>? existing;
-  const _MemberForm({this.existing});
+  // Patient fixed by the caller (the record being viewed); the picker locks.
+  final Map<String, dynamic>? patient;
+  const _MemberForm({this.existing, this.patient});
 
   @override
   State<_MemberForm> createState() => _MemberFormState();
@@ -765,6 +778,11 @@ class _MemberFormState extends State<_MemberForm> {
   void initState() {
     super.initState();
     final e = widget.existing;
+    final pre = widget.patient;
+    if (pre != null) {
+      _patientId = pre['id'] as int?;
+      _patientName = '${pre['full_name']}';
+    }
     if (e != null) {
       _number.text = '${e['member_number'] ?? ''}';
       _plan.text = '${e['plan'] ?? ''}';
@@ -909,7 +927,8 @@ class _MemberFormState extends State<_MemberForm> {
       submitLabel: _isEdit ? 'Save changes' : 'Enrol',
       onSubmit: _submit,
       children: [
-        _picker('Patient', _patientName, _pickPatient),
+        _picker('Patient', _patientName,
+            widget.patient == null ? _pickPatient : () {}),
         const SizedBox(height: 12),
         _picker('Insurer', _hmoName, _pickHmo),
         const SizedBox(height: 12),

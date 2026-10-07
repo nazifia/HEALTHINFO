@@ -14,6 +14,7 @@ import '../shared/widgets/searchable_dropdown.dart';
 import 'report_scaffold.dart';
 import 'drug_orders_screen.dart';
 import 'patient_access_log_screen.dart';
+import 'pharmacy_schemes_screen.dart' show enrolPatient;
 import 'prescriptions_screen.dart';
 
 /// Patient registry — GET/POST /api/patients/.
@@ -951,6 +952,12 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
     _say('Script written. It lands here once the counter dispenses it.');
   }
 
+  Future<void> _addToScheme() async {
+    if (await enrolPatient(context, widget.patient)) {
+      _say('${widget.patient['full_name']} added to scheme.');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = widget.patient;
@@ -978,6 +985,12 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
                     tooltip: 'Prescribe medications',
                     icon: const Icon(Icons.medication_outlined),
                     onPressed: _prescribe,
+                  ),
+                if (isPharmacyStaff(role))
+                  IconButton(
+                    tooltip: 'Add to scheme',
+                    icon: const Icon(Icons.badge_outlined),
+                    onPressed: _addToScheme,
                   ),
                 if (isPharmacyStaff(role))
                   IconButton(

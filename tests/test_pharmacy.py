@@ -1650,3 +1650,29 @@ def test_uncatalogued_item_shows_on_the_portal_under_its_own_name(pharmacy):
     # A cancelled sale was never handed over.
     staff.post(f"/api/pharmacy/sales/{sale_id}/cancel/", {}, format="json")
     assert _client(user, tenant).get("/api/portal/medications/").json() == []
+
+
+def test_enrolling_patient_in_scheme_rules(pharmacy):
+    tenant = pharmacy["tenant"]
+    c = _client(pharmacy["staff"], tenant)
+    patient = Patient.all_objects.create(tenant=tenant, first_name="Ife",
+                                         last_name="Ola")
+    hmo = HMO.all_objects.create(tenant=tenant, name="AXA")
+    body = {"patient": patient.id, "hmo": hmo.id, "member_number": "M1"}
+
+    assert c.post("/api/pharmacy/enrollments/", body, format="json").status_code == 201
+    # same patient, same scheme, new card number: refused while the first is live
+    dup = c.post("/api/pharmacy/enrollments/", {**body, "member_number": "M2"},
+                 format="json")
+    assert dup.status_code == 400
+    # backwards dates refused
+    bad = c.post("/api/pharmacy/enrollments/", {
+        **body, "member_number": "M3", "valid_from": "2026-02-01",
+        "valid_to": "2026-01-01", "is_active": False}, format="json")
+    assert bad.status_code == 400
+    # inactive scheme refused
+    hmo.is_active = False
+    hmo.save()
+    off = c.post("/api/pharmacy/enrollments/", {**body, "member_number": "M4"},
+                 format="json")
+    assert off.status_code == 400

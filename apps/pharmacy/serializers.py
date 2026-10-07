@@ -86,6 +86,29 @@ class HmoEnrollmentSerializer(serializers.ModelSerializer):
             )
         return value
 
+    def validate(self, attrs):
+        """Rules for putting a patient on a scheme."""
+        get = lambda k: attrs.get(k, getattr(self.instance, k, None))  # noqa: E731
+        hmo, patient = get("hmo"), get("patient")
+        start, end = get("valid_from"), get("valid_to")
+        if start and end and end < start:
+            raise serializers.ValidationError(
+                {"valid_to": "Cover cannot end before it starts."})
+        if hmo and not hmo.is_active and (
+                self.instance is None or "hmo" in attrs):
+            raise serializers.ValidationError(
+                {"hmo": "This scheme is inactive - pick another."})
+        # One live card per patient per scheme; end or deactivate the old one.
+        if hmo and patient and get("is_active") is not False:
+            clash = HmoEnrollment.objects.filter(
+                patient=patient, hmo=hmo, is_active=True)
+            if self.instance is not None:
+                clash = clash.exclude(pk=self.instance.pk)
+            if clash.exists():
+                raise serializers.ValidationError(
+                    "This patient is already a member of that scheme.")
+        return attrs
+
 
 class ClaimSerializer(serializers.ModelSerializer):
     hmo_name = serializers.CharField(source="hmo.name", read_only=True)
