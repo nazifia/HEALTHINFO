@@ -110,6 +110,10 @@ String? schemeSignUpProblem(
   if ('${body['admin_phone']}'.isEmpty) {
     return "Give the admin's phone number — it is how they sign in.";
   }
+  if (!RegExp(r'^(?:\+234|0)[789]\d{9}$')
+      .hasMatch('${body['admin_phone']}'.replaceAll(RegExp(r'[\s\-()]'), ''))) {
+    return 'Enter a valid Nigerian phone number (e.g. 08031234567 or +2348031234567).';
+  }
   if ('${body['admin_password']}'.length < 8) {
     return 'The admin password needs 8 characters or more.';
   }

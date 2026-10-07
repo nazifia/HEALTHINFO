@@ -1893,6 +1893,9 @@ function schemeSignUpProblem(body) {
   if (!body.admin_phone) {
     return "Give the admin's phone number — it is how they sign in.";
   }
+  if (!/^(?:\+234|0)[789]\d{9}$/.test(body.admin_phone.replace(/[\s\-()]/g, ''))) {
+    return 'Enter a valid Nigerian phone number (e.g. 08031234567 or +2348031234567).';
+  }
   if (body.admin_password.length < 8) {
     return 'The admin password needs 8 characters or more.';
   }

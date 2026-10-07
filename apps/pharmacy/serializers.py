@@ -1,10 +1,10 @@
 from decimal import Decimal
 
 from django.contrib.auth.password_validation import validate_password
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from rest_framework import serializers
 
-from apps.accounts.models import Role, User
+from apps.accounts.models import Role, User, normalize_phone, phone_validator
 from apps.accounts.permissions import INSURER_ROLES
 from apps.tenants.models import Tenant
 
@@ -181,8 +181,16 @@ class SchemeRegistrationSerializer(serializers.Serializer):
     )
 
     def validate_admin_phone(self, value):
+        # Fold to the shape User.save stores, or "+234 803..." slips past the
+        # uniqueness check and dies on the DB constraint.
+        value = normalize_phone(value)
+        phone_validator(value)
         if User.objects.filter(phone=value).exists():
             raise serializers.ValidationError("This phone number is already taken.")
+        return value
+
+    def validate_scheme(self, value):
+        value["name"] = value["name"].strip()
         return value
 
     def validate(self, attrs):
@@ -195,7 +203,7 @@ class SchemeRegistrationSerializer(serializers.Serializer):
                           "answers for.",
             })
         if HMO.all_objects.filter(
-            tenant=tenant, name=attrs["scheme"]["name"]
+            tenant=tenant, name__iexact=attrs["scheme"]["name"]
         ).exists():
             # unique_together would raise this as a 500 from the manager's own
             # scoped queryset when the admin is working outside the tenant.
@@ -205,8 +213,17 @@ class SchemeRegistrationSerializer(serializers.Serializer):
         attrs["tenant"] = tenant
         return attrs
 
-    @transaction.atomic
     def create(self, validated_data):
+        # A concurrent twin can pass validate() and lose on the unique
+        # constraint; answer 400 rather than 500.
+        try:
+            with transaction.atomic():
+                return self._create(validated_data)
+        except IntegrityError:
+            raise serializers.ValidationError(
+                "That scheme or phone number was just registered.")
+
+    def _create(self, validated_data):
         tenant = validated_data["tenant"]
         hmo = HMO.objects.create(tenant=tenant, **validated_data["scheme"])
         admin = User(

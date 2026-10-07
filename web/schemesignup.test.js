@@ -77,6 +77,13 @@ for (const [field, says] of [
 assert.match(
   schemeSignUpProblem(schemeSignUpBody(form({ ...filled, admin_password: 'short' }))),
   /8 characters/);
+// A phone the API would refuse is named here; other shapes of a real one pass.
+assert.match(
+  schemeSignUpProblem(schemeSignUpBody(form({ ...filled, admin_phone: 'abc' }))),
+  /valid Nigerian phone/);
+assert.strictEqual(
+  schemeSignUpProblem(schemeSignUpBody(form({ ...filled, admin_phone: '+234 803 123 4567' }))),
+  null);
 
 // The scheme's own errors arrive nested; the form is flat, so they are lifted
 // to sit beside the admin's.

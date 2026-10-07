@@ -78,6 +78,12 @@ void main() {
         schemeSignUpProblem(ready(adminPassword: 'short')), contains('8 characters'));
   });
 
+  test('a phone the API would refuse is named; other shapes of a real one pass', () {
+    expect(schemeSignUpProblem(ready(adminPhone: 'abc')),
+        contains('valid Nigerian phone'));
+    expect(schemeSignUpProblem(ready(adminPhone: '+234 803 123 4567')), isNull);
+  });
+
   test('an insurer filed without a seat is only checked on the scheme half', () {
     final bare = ready(adminPhone: '', adminPassword: '');
     expect(schemeSignUpProblem(bare, withAdmin: false), isNull);

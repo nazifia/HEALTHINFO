@@ -247,6 +247,27 @@ def test_super_admin_registers_a_scheme_and_its_admin(world):
     assert User.objects.get(phone="08030000032").hmo_id == scheme.id
 
 
+def test_register_scheme_folds_phone_and_name(world):
+    boss = seat(phone="08030000040", role=Role.SUPER_ADMIN)
+    taken = seat(phone="08030000041", tenant=world["tenant"], role=Role.PHARMACIST)
+    c = APIClient()
+    c.force_authenticate(user=boss)
+
+    def post(name, phone):
+        return c.post(
+            "/api/pharmacy/hmos/register/",
+            {"tenant": world["tenant"].id, "scheme": {"name": name},
+             "admin_phone": phone, "admin_password": PASSWORD},
+            format="json",
+        )
+
+    assert post("Leadway", "+234 803 000 0041").status_code == 400  # taken, other shape
+    assert post("Leadway", "abc").status_code == 400                # not a phone
+    assert post(" Leadway ", "+234 803 000 0042").status_code == 201
+    assert User.objects.filter(phone="08030000042").exists()
+    assert post("LEADWAY", "08030000043").status_code == 400        # name, other case
+
+
 def test_pharmacy_admin_cannot_register_a_scheme(world):
     admin = seat(phone="08030000033", tenant=world["tenant"],
                  role=Role.TENANT_ADMIN)
