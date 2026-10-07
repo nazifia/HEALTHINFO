@@ -2559,6 +2559,8 @@ async function viewForm(slug, id, query) {
   const res = RESOURCES[slug];
   if (!res) return errorBox(new Error('Unknown resource: ' + slug));
   if (!await ensureChrome()) return;
+  // A typed-in /new must land where the "+ Register scheme" button does.
+  if (!id && res.signUp && ME?.role === 'super_admin') { location.hash = '#/scheme-register'; return; }
   spinner();
   // Nothing to fill in before counting: raise the check and open its sheet.
   if (!id && res.quickCreate) {
