@@ -297,7 +297,10 @@ const RESOURCES = {
                               defaults: { is_active: true, coverage_percent: '100.00', preauth_threshold: '0.00' } },
   'scheme-users':           { title: 'Scheme Users',    group: 'Pharmacy', hmo: true, path: 'users', superOnly: true,
                               search: true, query: { role: 'hmo' }, filters: ORG_FILTERS, signUp: true },
-  'pharmacy-enrollments':   { title: 'Scheme Members',  group: 'Pharmacy', hmo: true, path: 'pharmacy/enrollments',     roles: 'staff', search: true },
+  'pharmacy-enrollments':   { title: 'Scheme Members',  group: 'Pharmacy', hmo: true, path: 'pharmacy/enrollments',     roles: 'staff', search: true,
+                              layout: ['hmo', 'member_number', 'plan', ['coverage_percent', 'annual_limit'],
+                                ['valid_from', 'valid_to'], 'is_active'],
+                              labels: { hmo: 'HMO', is_active: 'Active' } },
   // People a principal member asked to have covered under their card. Raised
   // from the patient portal; the scheme's seat answers, and may change its
   // answer at any time — so both buttons show whichever way it stands.
@@ -2666,7 +2669,7 @@ async function viewForm(slug, id, query) {
         <button type="submit" form="f" class="btn">${id ? 'Save' : sheet ? esc(sheet.submit) : 'Create'}</button>
         ${withDx && !PRESCRIBERS.includes(ME?.role) ? `<a class="btn ghost" href="#/r/prescriptions/new?${new URLSearchParams(
           Object.fromEntries(['patient', 'case_report'].filter((k) => prefill[k]).map((k) => [k, prefill[k]])))}">Prescribe only — no visit</a>` : ''}
-        ${prefill.back ? `<a class="btn ghost" href="${esc(prefill.back)}">Skip — nothing to prescribe</a>`
+        ${prefill.back ? `<a class="btn ghost" href="${esc(prefill.back)}">${slug === 'prescriptions' ? 'Skip — nothing to prescribe' : 'Cancel'}</a>`
           : `<a class="btn ghost" href="#/r/${slug}${id ? '/' + id : ''}">Cancel</a>`}
       </div></div>`);
     if (withDx) {
