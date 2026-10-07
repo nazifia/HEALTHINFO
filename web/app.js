@@ -4938,19 +4938,6 @@ const PORTAL_FIELDS = [
   'next_of_kin_name', 'next_of_kin_phone', 'next_of_kin_relationship',
 ];
 
-/* The browser's own geolocation, asked once. Resolves to null when the
-   patient declines it, the device has no fix, or it takes too long — the
-   pharmacy list still answers, it just can't be sorted by distance.
-   ponytail: getCurrentPosition, not watchPosition; a shop list doesn't move. */
-const myPosition = () => new Promise((resolve) => {
-  if (!navigator.geolocation) return resolve(null);
-  navigator.geolocation.getCurrentPosition(
-    (p) => resolve({ lat: p.coords.latitude.toFixed(6), lng: p.coords.longitude.toFixed(6) }),
-    () => resolve(null),
-    { timeout: 8000, maximumAge: 300000 },
-  );
-});
-
 // One table for both lists: what the pharmacy has handed over and what it
 // still owes. The API sorts a row into one or the other, so `empty` says
 // what an empty table means here — nothing collected, or nothing waiting.
@@ -4958,50 +4945,12 @@ function portalMedsHtml(rows, empty = 'You have not collected any medication yet
   if (!rows.length) return `<p class="muted">${esc(empty)}</p>`;
   return `<div class="table-wrap"><table><thead><tr>
       <th>Medication</th><th>Dose</th><th>How often</th><th>Days</th>
-      <th>Status</th><th></th></tr></thead><tbody>${rows.map((r) => `<tr>
+      <th>Status</th></tr></thead><tbody>${rows.map((r) => `<tr>
       <td>${esc(r.medication_name || '—')}</td>
       <td>${esc(r.dose || '—')}</td>
       <td>${esc(r.frequency || '—')}</td>
       <td>${esc(r.duration_days ?? '—')}</td>
-      <td>${cellHtml('status', r.status)}</td>
-      <td>${r.medication ? `<button class="btn find-drug" data-medication="${esc(r.medication)}"
-        >Where to get it</button>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
-}
-
-function pharmaciesHtml(rows) {
-  if (!rows.length) {
-    return '<p class="muted">No pharmacy listed for that. Try the full list.</p>';
-  }
-  // The map link hands the coordinates to whatever maps app the phone has,
-  // which is the one that can actually navigate there.
-  const map = (r) => r.latitude && r.longitude
-    ? `<a href="https://www.google.com/maps/search/?api=1&query=${r.latitude},${r.longitude}"
-         target="_blank" rel="noopener">Directions</a>`
-    : '<span class="muted">—</span>';
-  return `<div class="table-wrap"><table><thead><tr>
-      <th>Pharmacy</th><th>Branch</th><th>Address</th><th>Phone</th>
-      <th>Distance</th><th></th></tr></thead><tbody>${rows.map((r) => `<tr>
-      <td>${esc(r.pharmacy || '—')}</td>
-      <td>${esc(r.name || '—')}</td>
-      <td>${esc(r.address || '—')}</td>
-      <td>${r.phone ? `<a href="tel:${esc(r.phone)}">${esc(r.phone)}</a>` : '—'}</td>
-      <td>${r.distance_km == null ? '<span class="muted">—</span>' : esc(r.distance_km) + ' km'}</td>
-      <td>${map(r)}</td></tr>`).join('')}</tbody></table></div>`;
-}
-
-async function loadPharmacies(medication) {
-  const box = $('#pharmacies');
-  if (!box) return;
-  box.innerHTML = '<div class="loading">Loading…</div>';
-  const pos = await myPosition();
-  if (!pos) toast('Location off — pharmacies are listed unsorted.');
-  try {
-    box.innerHTML = pharmaciesHtml(
-      await Api.get('/api/portal/pharmacies/', { ...(pos || {}), medication })
-    );
-  } catch (e) {
-    box.innerHTML = `<p class="muted">${esc(e.message)}</p>`;
-  }
+      <td>${cellHtml('status', r.status)}</td></tr>`).join('')}</tbody></table></div>`;
 }
 
 // What a patient may change about themselves (see portal.SELF_EDITABLE).
@@ -5110,10 +5059,7 @@ async function viewPortal() {
       <p>${esc(pending.map((p) => p.medication_name).join(', '))}</p></div>` : ''}
     ${portalHeroHtml(me, meds, cards)}
     <div class="card"><h3>My medications</h3>${portalMedsHtml(meds)}</div>
-    <div class="card"><h3>My dependents</h3>${dependentsHtml(cards, deps)}</div>
-    <div class="card"><h3>Where to get them</h3>
-      <div class="actions"><button id="find-pharmacies" class="btn">Find pharmacies near me</button></div>
-      <div id="pharmacies"></div></div>`);
+    <div class="card"><h3>My dependents</h3>${dependentsHtml(cards, deps)}</div>`);
 
   const form = $('#dependent-form');
   if (form) form.onsubmit = async (e) => {
@@ -5125,13 +5071,6 @@ async function viewPortal() {
       viewPortal();
     } catch (err) { toast(err.message, true); }
   };
-  $('#find-pharmacies').onclick = () => loadPharmacies();
-  for (const b of document.querySelectorAll('.find-drug')) {
-    b.onclick = () => {
-      loadPharmacies(b.dataset.medication);
-      $('#pharmacies').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    };
-  }
 }
 
 /* What the app is telling this user: low stock, an expiry, an insurer's answer

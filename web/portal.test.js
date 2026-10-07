@@ -9,7 +9,7 @@ const { readFileSync } = require('fs');
 
 const src = readFileSync(`${__dirname}/app.js`, 'utf8');
 const from = src.indexOf('function portalMedsHtml');
-const to = src.indexOf('async function loadPharmacies');
+const to = src.indexOf('// What a patient may change');
 assert.ok(from > 0 && to > from, 'portal block not found in app.js');
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g,
@@ -19,34 +19,15 @@ const fmtVal = (v) => (v == null || v === '' ? '—' : String(v));
 const label = (k) => k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 const load = new Function('esc', 'cellHtml', 'fmtVal', 'label',
   `${src.slice(from, to)};
-   return { portalMedsHtml, pharmaciesHtml };`);
-const { portalMedsHtml, pharmaciesHtml } = load(esc, cellHtml, fmtVal, label);
+   return { portalMedsHtml };`);
+const { portalMedsHtml } = load(esc, cellHtml, fmtVal, label);
 
-// A prescription carries the medication id the pharmacy list filters on, so
-// "where to get it" asks about the drug in that row and not the first one.
 const meds = portalMedsHtml([
   { medication: 7, medication_name: 'Amoxicillin', dose: '500 mg',
     frequency: 'twice daily', duration_days: 5, status: 'dispensed' },
 ]);
-assert.ok(meds.includes('data-medication="7"'), 'medication id missing');
 assert.ok(meds.includes('Amoxicillin'));
 // The list is dispensed drugs only, so empty means nothing collected.
 assert.ok(portalMedsHtml([]).includes('not collected any medication'));
-
-// A branch nobody has geocoded is still listed and still phoneable — it just
-// has no distance and no directions link.
-const rows = pharmaciesHtml([
-  { name: 'Ikeja', pharmacy: 'Near Pharmacy', address: '1 Allen', phone: '08031234567',
-    latitude: '6.60', longitude: '3.35', distance_km: 2.4 },
-  { name: 'Main', pharmacy: 'Clinic', address: '', phone: '', distance_km: null },
-]);
-assert.ok(rows.includes('2.4 km'));
-assert.ok(rows.includes('query=6.60,3.35'), 'map link missing');
-assert.ok(rows.includes('tel:08031234567'));
-assert.strictEqual(rows.match(/Directions/g).length, 1, 'un-geocoded row got a map link');
-assert.ok(pharmaciesHtml([]).includes('No pharmacy listed'));
-
-// Names come from other tenants' rows, so they are escaped like anything else.
-assert.ok(pharmaciesHtml([{ name: '<script>', pharmacy: 'x' }]).includes('&lt;script&gt;'));
 
 console.log('portal: ok');

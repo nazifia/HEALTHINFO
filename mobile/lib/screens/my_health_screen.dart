@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 
 import '../main.dart';
 import '../api.dart';
@@ -29,28 +28,6 @@ class MyHealthScreen extends StatefulWidget {
 
   @override
   State<MyHealthScreen> createState() => _MyHealthScreenState();
-}
-
-/// The device's position, or null when the patient refuses it, location is
-/// switched off, or no fix arrives in time. Never throws: the pharmacy list
-/// still answers without one, it just isn't sorted by distance.
-Future<Position?> myPosition() async {
-  try {
-    if (!await Geolocator.isLocationServiceEnabled()) return null;
-    var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-    if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
-      return null;
-    }
-    return await Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(timeLimit: Duration(seconds: 8)),
-    );
-  } catch (_) {
-    return null;
-  }
 }
 
 // What a patient is shown about themselves, in the order they read it. Not
@@ -87,12 +64,6 @@ class _MyHealthScreenState extends State<MyHealthScreen>
 
   late Future<List<dynamic>> _future;
 
-  // The pharmacy list is loaded on demand, not with the page: it asks for the
-  // device's location, and a patient reading their prescriptions has not
-  // asked to be located yet.
-  List<Map<String, dynamic>>? _pharmacies;
-  bool _findingPharmacies = false;
-
   @override
   bool get wantKeepAlive => true;
 
@@ -113,32 +84,8 @@ class _MyHealthScreenState extends State<MyHealthScreen>
       ]);
 
   void _reload() => setState(() {
-        _pharmacies = null;
         _future = _load();
       });
-
-  /// Load the nearby pharmacies, optionally only those holding one drug.
-  Future<void> _findPharmacies({Object? medication}) async {
-    setState(() => _findingPharmacies = true);
-    final position = await myPosition();
-    if (!mounted) return;
-    if (position == null) {
-      showError(context, 'Location is off — pharmacies are listed unsorted.');
-    }
-    try {
-      final rows = await api.portalPharmacies(
-        lat: position?.latitude,
-        lng: position?.longitude,
-        medication: medication,
-      );
-      if (!mounted) return;
-      setState(() => _pharmacies = rows.cast<Map<String, dynamic>>());
-    } on ApiException catch (e) {
-      if (mounted) showError(context, e.friendly);
-    } finally {
-      if (mounted) setState(() => _findingPharmacies = false);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -191,18 +138,9 @@ class _MyHealthScreenState extends State<MyHealthScreen>
                 _HeroCard(me: me, meds: meds, cards: cards,
                     onOpenProfile: widget.onOpenProfile),
                 const SizedBox(height: 12),
-                _MedicationsCard(
-                  meds: meds,
-                  onFind: (medication) => _findPharmacies(medication: medication),
-                ),
+                _MedicationsCard(meds: meds),
                 const SizedBox(height: 12),
                 _DependentsCard(cards: cards, rows: deps, onAdded: _reload),
-                const SizedBox(height: 12),
-                _PharmaciesCard(
-                  rows: _pharmacies,
-                  busy: _findingPharmacies,
-                  onFind: _findPharmacies,
-                ),
               ],
             );
           },
@@ -362,11 +300,7 @@ class PatientDetailsCard extends StatelessWidget {
 /// so an empty card means nothing collected yet.
 class _MedicationsCard extends StatelessWidget {
   final List<Map<String, dynamic>> meds;
-  final ValueChanged<Object?> onFind;
-  const _MedicationsCard({
-    required this.meds,
-    required this.onFind,
-  });
+  const _MedicationsCard({required this.meds});
 
   @override
   Widget build(BuildContext context) {
@@ -392,12 +326,6 @@ class _MedicationsCard extends StatelessWidget {
                   if (m['duration_days'] != null) '${m['duration_days']} days',
                   _text(m['status']).replaceAll('_', ' '),
                 ].where((s) => s != '—').join(' · ')),
-                trailing: m['medication'] == null
-                    ? null
-                    : TextButton(
-                  onPressed: () => onFind(m['medication']),
-                  child: const Text('Where to get it'),
-                ),
               ),
         ],
       ),
@@ -619,60 +547,6 @@ class _DependentFormState extends State<_DependentForm> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _PharmaciesCard extends StatelessWidget {
-  final List<Map<String, dynamic>>? rows;
-  final bool busy;
-  final VoidCallback onFind;
-  const _PharmaciesCard(
-      {required this.rows, required this.busy, required this.onFind});
-
-  @override
-  Widget build(BuildContext context) {
-    final found = rows;
-    return GlassCard(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Where to get them',
-              style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          FilledButton.icon(
-            onPressed: busy ? null : onFind,
-            icon: const Icon(Icons.my_location),
-            label: Text(busy ? 'Looking…' : 'Find pharmacies near me'),
-          ),
-          if (found != null) ...[
-            const SizedBox(height: 8),
-            if (found.isEmpty)
-              const Text('No pharmacy listed for that. Try the full list.',
-                  style: TextStyle(color: Colors.grey))
-            else
-              for (final p in found)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.local_pharmacy_outlined,
-                      color: EnhancedTheme.accentCyan),
-                  title: Text(_text(p['pharmacy'])),
-                  subtitle: Text([
-                    _text(p['name']),
-                    _text(p['address']),
-                    _text(p['phone']),
-                  ].where((s) => s != '—').join(' · ')),
-                  // ponytail: distance only. Opening a maps app needs a
-                  // url_launcher dependency — add it when someone asks to
-                  // navigate rather than to phone ahead.
-                  trailing: Text(p['distance_km'] == null
-                      ? '—'
-                      : '${p['distance_km']} km'),
-                ),
-          ],
-        ],
       ),
     );
   }
