@@ -292,7 +292,7 @@ const RESOURCES = {
   // ``signUp``: a scheme joins the platform with the seat that will run its
   // desk, so the two are made together on a page of their own (#/scheme-register)
   // rather than by minting a scheme here and then hunting for its admin.
-  'pharmacy-hmos':          { title: 'Schemes',         group: 'Pharmacy', hmo: true, path: 'pharmacy/hmos',            roles: 'admin', search: true, signUp: true,
+  'pharmacy-hmos':          { title: 'HMOs',            group: 'Pharmacy', hmo: true, path: 'pharmacy/hmos',            roles: 'admin', search: true, signUp: true,
                               // An unticked box would mint a scheme that is switched off.
                               defaults: { is_active: true, coverage_percent: '100.00', preauth_threshold: '0.00' } },
   'scheme-users':           { title: 'Scheme Users',    group: 'Pharmacy', hmo: true, path: 'users', superOnly: true,

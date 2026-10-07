@@ -66,6 +66,22 @@ class PharmacySchemesScreen extends StatelessWidget {
 
 /* ------------------------------------------------------------- insurers */
 
+/// Just the insurer list, as its own menu row (the same list as the Insurers
+/// tab of [PharmacySchemesScreen]).
+class HmosScreen extends StatelessWidget {
+  const HmosScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<Map<String, dynamic>?>(
+        future: api.me(),
+        builder: (context, snap) {
+          final role = snap.data?['role']?.toString();
+          return _HmosTab(
+              admin: isPharmacyAdmin(role), platform: role == 'super_admin');
+        },
+      );
+}
+
 class _HmosTab extends StatelessWidget {
   final bool admin;
 

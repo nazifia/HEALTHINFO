@@ -334,6 +334,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         _Group('HMO', [
           _Section('HMO desk', Icons.health_and_safety_outlined,
               HmoDashboardScreen(onOpen: _openSection)),
+          _Section('HMOs', Icons.business_outlined, const HmosScreen()),
           _Section('Schemes', Icons.health_and_safety_outlined,
               const PharmacySchemesScreen()),
           if (platform)
