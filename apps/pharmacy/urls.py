@@ -16,6 +16,7 @@ from apps.pos.urls import register as register_pos
 from .views import (
     ClaimViewSet,
     HMOViewSet,
+    PlatformHMOViewSet,
     HmoEnrollmentViewSet,
     HmoItemRuleViewSet,
     PreAuthorizationItemViewSet,
@@ -24,6 +25,9 @@ from .views import (
 )
 
 router = SimpleRouter()
+# Before pharmacy/hmos, or its detail route would read "platform" as an id.
+router.register("pharmacy/hmos/platform", PlatformHMOViewSet,
+                basename="pharmacy-hmo-platform")
 router.register("pharmacy/hmos", HMOViewSet, basename="pharmacy-hmo")
 router.register("pharmacy/enrollments", HmoEnrollmentViewSet,
                 basename="pharmacy-enrollment")

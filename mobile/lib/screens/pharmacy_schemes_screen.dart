@@ -33,31 +33,35 @@ class PharmacySchemesScreen extends StatelessWidget {
         final myHmo = snap.data?['hmo'];
         return DefaultTabController(
           length: 4,
-          child: Column(children: [
-            const TabBar(
-              labelColor: EnhancedTheme.primaryTeal,
-              indicatorColor: EnhancedTheme.primaryTeal,
-              isScrollable: true,
-              tabs: [
-                Tab(text: 'Insurers'),
-                Tab(text: 'Members'),
-                Tab(text: 'Dependents'),
-                Tab(text: 'Price list'),
-              ],
-            ),
-            Expanded(
-              child: TabBarView(children: [
-                _HmosTab(admin: admin, platform: role == 'super_admin'),
-                _MembersTab(admin: admin),
-                _DependentsTab(answers: answersForInsurer(role)),
-                _RulesTab(
-                  canEdit: canEditPriceList(role, hmoId: myHmo),
-                  insurer: role == 'hmo',
-                  myHmoId: myHmo is int ? myHmo : null,
+          child: Column(
+            children: [
+              const TabBar(
+                labelColor: EnhancedTheme.primaryTeal,
+                indicatorColor: EnhancedTheme.primaryTeal,
+                isScrollable: true,
+                tabs: [
+                  Tab(text: 'Insurers'),
+                  Tab(text: 'Members'),
+                  Tab(text: 'Dependents'),
+                  Tab(text: 'Price list'),
+                ],
+              ),
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    _HmosTab(admin: admin, platform: role == 'super_admin'),
+                    _MembersTab(admin: admin),
+                    _DependentsTab(answers: answersForInsurer(role)),
+                    _RulesTab(
+                      canEdit: canEditPriceList(role, hmoId: myHmo),
+                      insurer: role == 'hmo',
+                      myHmoId: myHmo is int ? myHmo : null,
+                    ),
+                  ],
                 ),
-              ]),
-            ),
-          ]),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -73,39 +77,84 @@ class HmosScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => FutureBuilder<Map<String, dynamic>?>(
-        future: api.me(),
-        builder: (context, snap) {
-          final role = snap.data?['role']?.toString();
-          return _HmosTab(
-              admin: isPharmacyAdmin(role), platform: role == 'super_admin');
-        },
+    future: api.me(),
+    builder: (context, snap) {
+      final role = snap.data?['role']?.toString();
+      return _HmosTab(
+        admin: isPharmacyAdmin(role),
+        platform: role == 'super_admin',
       );
+    },
+  );
 }
 
 /// Every scheme on the platform, whichever organization holds it — the
-/// super-admin's list (GET /api/pharmacy/hmos/platform/). Read-only; the
-/// organization's own HMOs screen edits.
+/// super-admin's list (/api/pharmacy/hmos/platform/): edit and delete any
+/// scheme; register a new one with the + button.
 class PlatformHmosScreen extends StatelessWidget {
   const PlatformHmosScreen({super.key});
 
   @override
   Widget build(BuildContext context) => ReportListScreen(
-        path: '/api/pharmacy/hmos/platform/',
-        searchHint: 'Insurer name or code…',
-        fabLabel: 'Register scheme',
-        emptyIcon: Icons.health_and_safety_outlined,
-        emptyTitle: 'No schemes yet',
-        emptyMessage: 'Register the first scheme with the + button.',
-        savedMessage: 'Scheme saved.',
-        filters: const [
-          ReportFilter(param: 'is_active', anyLabel: 'Any state', options: {
-            'true': 'Active',
-            'false': 'Retired',
-          }),
+    path: '/api/pharmacy/hmos/platform/',
+    searchHint: 'Insurer name or code…',
+    fabLabel: 'Register scheme',
+    emptyIcon: Icons.health_and_safety_outlined,
+    emptyTitle: 'No schemes yet',
+    emptyMessage: 'Register the first scheme with the + button.',
+    savedMessage: 'Scheme saved.',
+    filters: const [
+      ReportFilter(
+        param: 'is_active',
+        anyLabel: 'Any state',
+        options: {'true': 'Active', 'false': 'Retired'},
+      ),
+    ],
+    card: (row, reload, edit) => _HmoCard(
+      row: row,
+      admin: true,
+      edit: edit,
+      onDelete: () => _dropHmo(context, row, reload),
+    ),
+    form: (existing) => existing == null
+        ? const _SchemeSignUpForm()
+        : _HmoForm(existing: existing, platform: true),
+  );
+
+  /// A scheme with members or claims is refused by the API; the message says
+  /// to retire it instead, so it is shown as is.
+  Future<void> _dropHmo(
+    BuildContext context,
+    Map<String, dynamic> row,
+    VoidCallback reload,
+  ) async {
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Delete ${row['name']}?'),
+        content: const Text('This removes the scheme for good.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep it'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
         ],
-        card: (row, reload, edit) => _HmoCard(row: row, admin: false, edit: edit),
-        form: (_) => const _SchemeSignUpForm(),
-      );
+      ),
+    );
+    if (go != true || !context.mounted) return;
+    try {
+      await api.delete('/api/pharmacy/hmos/platform/${row['id']}/');
+      if (!context.mounted) return;
+      showSuccess(context, 'Scheme deleted.');
+      reload();
+    } catch (e) {
+      if (context.mounted) showError(context, '$e');
+    }
+  }
 }
 
 class _HmosTab extends StatelessWidget {
@@ -132,10 +181,11 @@ class _HmosTab extends StatelessWidget {
           : 'The pharmacy admin keeps the list of insurers.',
       savedMessage: platform ? 'Scheme saved.' : 'Insurer saved.',
       filters: const [
-        ReportFilter(param: 'is_active', anyLabel: 'Any state', options: {
-          'true': 'Active',
-          'false': 'Retired',
-        }),
+        ReportFilter(
+          param: 'is_active',
+          anyLabel: 'Any state',
+          options: {'true': 'Active', 'false': 'Retired'},
+        ),
       ],
       card: (row, reload, edit) => _HmoCard(row: row, admin: admin, edit: edit),
       form: (existing) => platform && existing == null
@@ -149,7 +199,13 @@ class _HmoCard extends StatelessWidget {
   final Map<String, dynamic> row;
   final bool admin;
   final VoidCallback edit;
-  const _HmoCard({required this.row, required this.admin, required this.edit});
+  final VoidCallback? onDelete;
+  const _HmoCard({
+    required this.row,
+    required this.admin,
+    required this.edit,
+    this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -159,42 +215,62 @@ class _HmoCard extends StatelessWidget {
     return GlassCard(
       borderRadius: 16,
       padding: const EdgeInsets.all(14),
-      child: Row(children: [
-        Expanded(
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('${row['name']}',
-                style: TextStyle(
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${row['name']}',
+                  style: TextStyle(
                     color: context.labelColor,
                     fontWeight: FontWeight.w700,
-                    fontSize: 15)),
-            Text(
-                '${row['code']?.toString().isNotEmpty == true ? '${row['code']} · ' : ''}'
-                'pays ${row['coverage_percent']}% by default',
-                style: TextStyle(color: context.hintColor, fontSize: 13)),
-            Text(
-                threshold > 0
-                    ? 'Clears an insured sale above ${money(threshold)} first'
-                    : 'No authorisation asked for',
-                style: TextStyle(color: context.hintColor, fontSize: 12)),
-            if (row['tenant_name'] != null)
-              Text('${row['tenant_name']}',
-                  style: TextStyle(color: context.hintColor, fontSize: 12)),
-          ]),
-        ),
-        if (row['is_active'] != true)
-          const ReportBadge(text: 'retired', color: EnhancedTheme.errorRed),
-        if (admin)
-          IconButton(
-              icon: const Icon(Icons.edit_outlined, size: 18), onPressed: edit),
-      ]),
+                    fontSize: 15,
+                  ),
+                ),
+                Text(
+                  '${row['code']?.toString().isNotEmpty == true ? '${row['code']} · ' : ''}'
+                  'pays ${row['coverage_percent']}% by default',
+                  style: TextStyle(color: context.hintColor, fontSize: 13),
+                ),
+                Text(
+                  threshold > 0
+                      ? 'Clears an insured sale above ${money(threshold)} first'
+                      : 'No authorisation asked for',
+                  style: TextStyle(color: context.hintColor, fontSize: 12),
+                ),
+                if (row['tenant_name'] != null)
+                  Text(
+                    '${row['tenant_name']}',
+                    style: TextStyle(color: context.hintColor, fontSize: 12),
+                  ),
+              ],
+            ),
+          ),
+          if (row['is_active'] != true)
+            const ReportBadge(text: 'retired', color: EnhancedTheme.errorRed),
+          if (admin)
+            IconButton(
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              onPressed: edit,
+            ),
+          if (onDelete != null)
+            IconButton(
+              icon: const Icon(Icons.delete_outline, size: 18),
+              onPressed: onDelete,
+            ),
+        ],
+      ),
     );
   }
 }
 
 class _HmoForm extends StatefulWidget {
   final Map<String, dynamic>? existing;
-  const _HmoForm({this.existing});
+  // Super admin editing across organizations goes through the platform route.
+  final bool platform;
+  const _HmoForm({this.existing, this.platform = false});
 
   @override
   State<_HmoForm> createState() => _HmoFormState();
@@ -264,7 +340,10 @@ class _HmoFormState extends State<_HmoForm> {
         'is_active': _active,
       };
       if (_isEdit) {
-        await api.patch('/api/pharmacy/hmos/${widget.existing!['id']}/', body);
+        await api.patch(
+          '/api/pharmacy/hmos/${widget.platform ? 'platform/' : ''}${widget.existing!['id']}/',
+          body,
+        );
       } else {
         await api.post('/api/pharmacy/hmos/', body);
       }
@@ -311,7 +390,8 @@ class _HmoFormState extends State<_HmoForm> {
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           decoration: const InputDecoration(
             labelText: 'Default cover %',
-            helperText: 'What the insurer pays where no drug rule says otherwise',
+            helperText:
+                'What the insurer pays where no drug rule says otherwise',
           ),
         ),
         const SizedBox(height: 12),
@@ -320,7 +400,8 @@ class _HmoFormState extends State<_HmoForm> {
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           decoration: const InputDecoration(
             labelText: 'Pre-authorisation threshold',
-            helperText: 'Insured amount above which a sale is cleared first. '
+            helperText:
+                'Insured amount above which a sale is cleared first. '
                 '0 asks for no authorisation.',
           ),
         ),
@@ -598,10 +679,11 @@ class _MembersTab extends StatelessWidget {
       emptyMessage: 'Register the card a patient presents at the counter.',
       savedMessage: 'Membership saved.',
       filters: const [
-        ReportFilter(param: 'is_active', anyLabel: 'Any state', options: {
-          'true': 'Active',
-          'false': 'Lapsed',
-        }),
+        ReportFilter(
+          param: 'is_active',
+          anyLabel: 'Any state',
+          options: {'true': 'Active', 'false': 'Lapsed'},
+        ),
       ],
       card: (row, reload, edit) => _MemberCard(row: row, edit: edit),
       form: (existing) => _MemberForm(existing: existing),
@@ -620,30 +702,42 @@ class _MemberCard extends StatelessWidget {
     return GlassCard(
       borderRadius: 16,
       padding: const EdgeInsets.all(14),
-      child: Row(children: [
-        Expanded(
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('${row['patient_name'] ?? 'Patient'}',
-                style: TextStyle(
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${row['patient_name'] ?? 'Patient'}',
+                  style: TextStyle(
                     color: context.labelColor,
                     fontWeight: FontWeight.w700,
-                    fontSize: 15)),
-            Text('${row['hmo_name']} · ${row['member_number']}',
-                style: TextStyle(color: context.hintColor, fontSize: 13)),
-            Text(
-                'Covered at ${row['effective_coverage']}%'
-                // Null is an uncapped plan, which is not the same as nothing
-                // left — say which.
-                '${remaining == null ? ' · uncapped' : ' · ${money(remaining)} left this year'}',
-                style: TextStyle(color: context.hintColor, fontSize: 12)),
-          ]),
-        ),
-        if (row['is_valid'] != true)
-          const ReportBadge(text: 'not valid', color: EnhancedTheme.errorRed),
-        IconButton(
-            icon: const Icon(Icons.edit_outlined, size: 18), onPressed: edit),
-      ]),
+                    fontSize: 15,
+                  ),
+                ),
+                Text(
+                  '${row['hmo_name']} · ${row['member_number']}',
+                  style: TextStyle(color: context.hintColor, fontSize: 13),
+                ),
+                Text(
+                  'Covered at ${row['effective_coverage']}%'
+                  // Null is an uncapped plan, which is not the same as nothing
+                  // left — say which.
+                  '${remaining == null ? ' · uncapped' : ' · ${money(remaining)} left this year'}',
+                  style: TextStyle(color: context.hintColor, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          if (row['is_valid'] != true)
+            const ReportBadge(text: 'not valid', color: EnhancedTheme.errorRed),
+          IconButton(
+            icon: const Icon(Icons.edit_outlined, size: 18),
+            onPressed: edit,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -670,11 +764,15 @@ class _DependentsTab extends StatelessWidget {
       emptyMessage: 'Members add them from their own portal.',
       savedMessage: '',
       filters: const [
-        ReportFilter(param: 'status', anyLabel: 'Any state', options: {
-          'pending': 'Awaiting approval',
-          'approved': 'Approved',
-          'declined': 'Declined',
-        }),
+        ReportFilter(
+          param: 'status',
+          anyLabel: 'Any state',
+          options: {
+            'pending': 'Awaiting approval',
+            'approved': 'Approved',
+            'declined': 'Declined',
+          },
+        ),
       ],
       card: (row, reload, _) =>
           _DependentCard(row: row, reload: reload, answers: answers),
@@ -687,19 +785,25 @@ class _DependentCard extends StatelessWidget {
   final Map<String, dynamic> row;
   final VoidCallback reload;
   final bool answers;
-  const _DependentCard(
-      {required this.row, required this.reload, required this.answers});
+  const _DependentCard({
+    required this.row,
+    required this.reload,
+    required this.answers,
+  });
 
   Future<void> _answer(BuildContext context, String action) async {
     final typed = await askText(
-        context,
-        action == 'approve' ? 'Approve dependent' : 'Decline dependent',
-        action == 'approve' ? 'Member number (optional)' : 'Reason');
+      context,
+      action == 'approve' ? 'Approve dependent' : 'Decline dependent',
+      action == 'approve' ? 'Member number (optional)' : 'Reason',
+    );
     if (typed == null || !context.mounted) return;
     final body = {action == 'approve' ? 'member_number' : 'reason': typed};
     try {
       final r = await api.post(
-          '/api/pharmacy/dependents/${row['id']}/$action/', body);
+        '/api/pharmacy/dependents/${row['id']}/$action/',
+        body,
+      );
       if (context.mounted) {
         showSuccess(context, '${(r as Map?)?['message'] ?? 'Done.'}');
       }
@@ -723,50 +827,72 @@ class _DependentCard extends StatelessWidget {
     return GlassCard(
       borderRadius: 16,
       padding: const EdgeInsets.all(14),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Expanded(
-            child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('${row['full_name'] ?? 'Dependent'}',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${row['full_name'] ?? 'Dependent'}',
                       style: TextStyle(
-                          color: context.labelColor,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 15)),
-                  Text(
+                        color: context.labelColor,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
+                    Text(
                       '${row['relationship']} of ${row['principal_name']}'
                       ' · ${row['hmo_name']} ${row['principal_number']}',
-                      style:
-                          TextStyle(color: context.hintColor, fontSize: 13)),
-                  if (note.isNotEmpty)
-                    Text(note,
-                        style:
-                            TextStyle(color: context.hintColor, fontSize: 12)),
-                ]),
+                      style: TextStyle(color: context.hintColor, fontSize: 13),
+                    ),
+                    if (note.isNotEmpty)
+                      Text(
+                        note,
+                        style: TextStyle(
+                          color: context.hintColor,
+                          fontSize: 12,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              ReportBadge(text: badge, color: color),
+            ],
           ),
-          ReportBadge(text: badge, color: color),
-        ]),
-        if (answers)
-          Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-            if (status != 'approved')
-              TextButton(
-                  onPressed: () => _answer(context, 'approve'),
-                  child: const Text('Approve')),
-            if (status != 'declined')
-              TextButton(
-                  onPressed: () => _answer(context, 'decline'),
-                  style: TextButton.styleFrom(
-                      foregroundColor: EnhancedTheme.errorRed),
-                  child: const Text('Decline')),
-          ]),
-      ]),
+          if (answers)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                if (status != 'approved')
+                  TextButton(
+                    onPressed: () => _answer(context, 'approve'),
+                    child: const Text('Approve'),
+                  ),
+                if (status != 'declined')
+                  TextButton(
+                    onPressed: () => _answer(context, 'decline'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: EnhancedTheme.errorRed,
+                    ),
+                    child: const Text('Decline'),
+                  ),
+              ],
+            ),
+        ],
+      ),
     );
   }
 }
 
 /// Enrol [patient] in a scheme from their record. True once saved.
-Future<bool> enrolPatient(BuildContext context, Map<String, dynamic> patient) async {
+Future<bool> enrolPatient(
+  BuildContext context,
+  Map<String, dynamic> patient,
+) async {
   final saved = await showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
@@ -907,8 +1033,9 @@ class _MemberFormState extends State<_MemberForm> {
         'plan': _plan.text.trim(),
         // Blank means "the scheme default applies" and "no cap" — null, not 0,
         // which would mean covered at nothing and capped at nothing.
-        'coverage_percent':
-            _coverage.text.trim().isEmpty ? null : _coverage.text.trim(),
+        'coverage_percent': _coverage.text.trim().isEmpty
+            ? null
+            : _coverage.text.trim(),
         'annual_limit': _limit.text.trim().isEmpty ? null : _limit.text.trim(),
         'valid_from': _from?.toIso8601String().split('T').first,
         'valid_to': _to?.toIso8601String().split('T').first,
@@ -916,7 +1043,9 @@ class _MemberFormState extends State<_MemberForm> {
       };
       if (_isEdit) {
         await api.patch(
-            '/api/pharmacy/enrollments/${widget.existing!['id']}/', body);
+          '/api/pharmacy/enrollments/${widget.existing!['id']}/',
+          body,
+        );
       } else {
         await api.post('/api/pharmacy/enrollments/', body);
       }
@@ -931,16 +1060,23 @@ class _MemberFormState extends State<_MemberForm> {
   Widget _picker(String label, String? value, VoidCallback onTap) {
     return InputDecorator(
       decoration: InputDecoration(labelText: label),
-      child: Row(children: [
-        Expanded(
-          child: Text(value ?? 'Not picked',
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              value ?? 'Not picked',
               style: TextStyle(
-                  color: value == null ? context.hintColor : context.labelColor),
-              overflow: TextOverflow.ellipsis),
-        ),
-        TextButton(
-            onPressed: onTap, child: Text(value == null ? 'Pick' : 'Change')),
-      ]),
+                color: value == null ? context.hintColor : context.labelColor,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          TextButton(
+            onPressed: onTap,
+            child: Text(value == null ? 'Pick' : 'Change'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -956,8 +1092,11 @@ class _MemberFormState extends State<_MemberForm> {
       submitLabel: _isEdit ? 'Save changes' : 'Enrol',
       onSubmit: _submit,
       children: [
-        _picker('Patient', _patientName,
-            widget.patient == null ? _pickPatient : () {}),
+        _picker(
+          'Patient',
+          _patientName,
+          widget.patient == null ? _pickPatient : () {},
+        ),
         const SizedBox(height: 12),
         _picker('HMO', _hmoName, _pickHmo),
         const SizedBox(height: 12),
@@ -985,20 +1124,31 @@ class _MemberFormState extends State<_MemberForm> {
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           decoration: const InputDecoration(
             labelText: 'Annual limit',
-            helperText: 'Most this plan pays out in a calendar year. '
+            helperText:
+                'Most this plan pays out in a calendar year. '
                 'Blank is uncapped.',
           ),
         ),
         const SizedBox(height: 12),
-        Row(children: [
-          Expanded(
-            child: _picker('Valid from', _dateLabel(_from), () => _pickDate(true)),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: _picker('Valid to', _dateLabel(_to), () => _pickDate(false)),
-          ),
-        ]),
+        Row(
+          children: [
+            Expanded(
+              child: _picker(
+                'Valid from',
+                _dateLabel(_from),
+                () => _pickDate(true),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _picker(
+                'Valid to',
+                _dateLabel(_to),
+                () => _pickDate(false),
+              ),
+            ),
+          ],
+        ),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           title: const Text('Active'),
@@ -1045,11 +1195,12 @@ class _RuleCard extends StatelessWidget {
   final bool canEdit;
   final VoidCallback edit;
   final VoidCallback reload;
-  const _RuleCard(
-      {required this.row,
-      required this.canEdit,
-      required this.edit,
-      required this.reload});
+  const _RuleCard({
+    required this.row,
+    required this.canEdit,
+    required this.edit,
+    required this.reload,
+  });
 
   /// Dropping a row is not editing it: the drug goes back to the scheme's own
   /// default, which is a different cover from the one on screen. The
@@ -1061,15 +1212,18 @@ class _RuleCard extends StatelessWidget {
       builder: (ctx) => AlertDialog(
         title: Text('Stop pricing ${row['item_name'] ?? 'this drug'}?'),
         content: Text(
-            "It goes back to ${row['hmo_name']}'s scheme default. Sales "
-            'already made keep what they were covered at.'),
+          "It goes back to ${row['hmo_name']}'s scheme default. Sales "
+          'already made keep what they were covered at.',
+        ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Keep it')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep it'),
+          ),
           TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Take it off')),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Take it off'),
+          ),
         ],
       ),
     );
@@ -1091,42 +1245,57 @@ class _RuleCard extends StatelessWidget {
     return GlassCard(
       borderRadius: 16,
       padding: const EdgeInsets.all(14),
-      child: Row(children: [
-        Expanded(
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('${row['item_name'] ?? 'Drug'}',
-                style: TextStyle(
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${row['item_name'] ?? 'Drug'}',
+                  style: TextStyle(
                     color: context.labelColor,
                     fontWeight: FontWeight.w700,
-                    fontSize: 15)),
-            Text('${row['hmo_name']} pays $cover%',
-                style: TextStyle(color: context.hintColor, fontSize: 13)),
-            // The tariff is the other half of the row, and it only reads
-            // against the shelf price: a pharmacy charging above it keeps the
-            // sale, the excess simply stays with the patient.
-            if (tariff != null)
-              Text(
-                  'up to ${money(tariff)} a unit'
-                  '${row['item_price'] == null ? '' : ' · shelf ${money(row['item_price'])}'}',
-                  style: TextStyle(color: context.hintColor, fontSize: 12)),
-            if ('${row['note'] ?? ''}'.isNotEmpty)
-              Text('${row['note']}',
-                  style: TextStyle(color: context.hintColor, fontSize: 12)),
-          ]),
-        ),
-        // 0% is the exclusion, and the one rule worth spotting from across the
-        // list: the drug falls entirely to the patient even on a covered sale.
-        if (cover == 0)
-          const ReportBadge(text: 'excluded', color: EnhancedTheme.errorRed),
-        if (canEdit) ...[
-          IconButton(
-              icon: const Icon(Icons.edit_outlined, size: 18), onPressed: edit),
-          IconButton(
+                    fontSize: 15,
+                  ),
+                ),
+                Text(
+                  '${row['hmo_name']} pays $cover%',
+                  style: TextStyle(color: context.hintColor, fontSize: 13),
+                ),
+                // The tariff is the other half of the row, and it only reads
+                // against the shelf price: a pharmacy charging above it keeps the
+                // sale, the excess simply stays with the patient.
+                if (tariff != null)
+                  Text(
+                    'up to ${money(tariff)} a unit'
+                    '${row['item_price'] == null ? '' : ' · shelf ${money(row['item_price'])}'}',
+                    style: TextStyle(color: context.hintColor, fontSize: 12),
+                  ),
+                if ('${row['note'] ?? ''}'.isNotEmpty)
+                  Text(
+                    '${row['note']}',
+                    style: TextStyle(color: context.hintColor, fontSize: 12),
+                  ),
+              ],
+            ),
+          ),
+          // 0% is the exclusion, and the one rule worth spotting from across the
+          // list: the drug falls entirely to the patient even on a covered sale.
+          if (cover == 0)
+            const ReportBadge(text: 'excluded', color: EnhancedTheme.errorRed),
+          if (canEdit) ...[
+            IconButton(
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              onPressed: edit,
+            ),
+            IconButton(
               icon: const Icon(Icons.delete_outline, size: 18),
-              onPressed: () => _drop(context)),
+              onPressed: () => _drop(context),
+            ),
+          ],
         ],
-      ]),
+      ),
     );
   }
 }
@@ -1253,7 +1422,9 @@ class _RuleFormState extends State<_RuleForm> {
       };
       if (_isEdit) {
         await api.patch(
-            '/api/pharmacy/item-rules/${widget.existing!['id']}/', body);
+          '/api/pharmacy/item-rules/${widget.existing!['id']}/',
+          body,
+        );
       } else {
         await api.post('/api/pharmacy/item-rules/', body);
       }
@@ -1268,16 +1439,23 @@ class _RuleFormState extends State<_RuleForm> {
   Widget _picker(String label, String? value, VoidCallback onTap) {
     return InputDecorator(
       decoration: InputDecoration(labelText: label),
-      child: Row(children: [
-        Expanded(
-          child: Text(value ?? 'Not picked',
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              value ?? 'Not picked',
               style: TextStyle(
-                  color: value == null ? context.hintColor : context.labelColor),
-              overflow: TextOverflow.ellipsis),
-        ),
-        TextButton(
-            onPressed: onTap, child: Text(value == null ? 'Pick' : 'Change')),
-      ]),
+                color: value == null ? context.hintColor : context.labelColor,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          TextButton(
+            onPressed: onTap,
+            child: Text(value == null ? 'Pick' : 'Change'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1312,7 +1490,8 @@ class _RuleFormState extends State<_RuleForm> {
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           decoration: InputDecoration(
             labelText: 'Tariff (optional)',
-            helperText: 'Most the scheme pays for one unit, whatever the '
+            helperText:
+                'Most the scheme pays for one unit, whatever the '
                 'pharmacy charges. Blank covers the shelf price.'
                 '${_shelfPrice == null ? '' : ' Charged today: ${money(_shelfPrice)}.'}',
             helperMaxLines: 3,

@@ -404,7 +404,7 @@ const RESOURCES = {
                           adminOnly: true, readOnly: true, noLink: true },
   // Every scheme on the platform, across organizations (the HMOs screen is one tenant's).
   'platform-hmos':     { title: 'All HMOs',           group: 'Admin', path: 'pharmacy/hmos/platform', superOnly: true,
-                          search: true, readOnly: true, noLink: true, signUp: true },
+                          search: true, signUp: true },
   'tenants-hospitals': { title: 'Hospitals',         group: 'Admin', path: 'tenants/hospitals',  superOnly: true, tenantActions: true, hide: ['logo'] },
   'tenants-pharmacies':{ title: 'Pharmacies',         group: 'Admin', path: 'tenants/pharmacies', superOnly: true, tenantActions: true, hide: ['logo'] },
 };
@@ -4187,6 +4187,8 @@ async function viewPharmacy() {
    narrow the money — the summary endpoint takes from/to (config.ranges). */
 async function viewHmo() {
   if (!await ensureChrome()) return;
+  // The platform admin has no counter: this URL is their list of schemes.
+  if (ME?.role === 'super_admin') { location.hash = '#/r/platform-hmos'; return; }
   if (!isPharmacyStaff()) return errorBox(new Error('Pharmacy staff only.'));
   render(`<div class="page-head"><h2>Insurance</h2>
       <a class="btn ghost" href="#/r/pharmacy-claims">All claims</a></div>

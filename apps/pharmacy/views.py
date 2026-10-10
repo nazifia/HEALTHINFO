@@ -7,7 +7,7 @@ a client type an amount an insurer owes.
 from decimal import Decimal
 
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, ProtectedError, Q, Sum
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -112,17 +112,6 @@ class HMOViewSet(PharmacyViewSet):
     def get_queryset(self):
         return insurer_scope(HMO.objects.all(), self.request.user, field="pk")
 
-    @action(detail=False, methods=["get"], permission_classes=[IsSuperAdmin])
-    def platform(self, request):
-        """Every scheme on the platform, whichever organization holds the row.
-
-        The ordinary list is one tenant's, and a platform admin with none open
-        gets nothing from it. Read-only: edits still go through a tenant.
-        """
-        qs = self.filter_queryset(HMO.all_objects.select_related("tenant"))
-        page = self.paginate_queryset(qs)
-        return self.get_paginated_response(self.get_serializer(page, many=True).data)
-
     @action(detail=False, methods=["post"], permission_classes=[IsSuperAdmin])
     def register(self, request):
         """Sign a scheme up, with the seat that will run its desk.
@@ -137,6 +126,40 @@ class HMOViewSet(PharmacyViewSet):
         s.save()
         return success("Scheme registered. Its admin can now sign in.",
                        s.data, status=201)
+
+
+class PlatformHMOViewSet(viewsets.ModelViewSet):
+    """Every scheme on the platform, whichever organization holds the row.
+
+    The ordinary list is one tenant's, and a platform admin with none open
+    gets nothing from it. Super admin only; new schemes are signed up through
+    ``HMOViewSet.register`` so each arrives with the seat that runs its desk.
+    """
+
+    serializer_class = HMOSerializer
+    permission_classes = [IsSuperAdmin]
+    http_method_names = ["get", "patch", "put", "delete", "head", "options"]
+    filterset_fields = ("is_active",)
+    search_fields = ("name", "code")
+    ordering_fields = ("name", "created_at")
+
+    def get_queryset(self):
+        return HMO.all_objects.select_related("tenant")
+
+    def perform_update(self, serializer):
+        name = serializer.validated_data.get("name")
+        if name and HMO.all_objects.filter(
+            tenant_id=serializer.instance.tenant_id, name__iexact=name.strip()
+        ).exclude(pk=serializer.instance.pk).exists():
+            raise ValidationError({"name": "A scheme with this name already exists."})
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        try:
+            instance.delete()
+        except ProtectedError:
+            raise ValidationError(
+                "This scheme has members or claims; switch it off instead of deleting it.")
 
 
 class HmoItemRuleViewSet(PharmacyViewSet):

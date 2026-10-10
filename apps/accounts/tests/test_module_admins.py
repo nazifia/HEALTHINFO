@@ -282,6 +282,19 @@ def test_platform_scheme_list_spans_tenants_for_super_admin_only(world):
     assert client_for(admin).get("/api/pharmacy/hmos/platform/").status_code == 403
 
 
+def test_super_admin_edits_and_deletes_any_scheme(world):
+    boss = seat(phone="08030000052", role=Role.SUPER_ADMIN)
+    c = APIClient()
+    c.force_authenticate(user=boss)
+    url = f"/api/pharmacy/hmos/platform/{world['hmo'].id}/"
+    assert c.patch(url, {"coverage_percent": "80.00"}, format="json").status_code == 200
+    world["hmo"].refresh_from_db()
+    assert str(world["hmo"].coverage_percent) == "80.00"
+    assert c.delete(url).status_code in (204, 400)  # 400 when it has claims
+    admin = seat(phone="08030000053", tenant=world["tenant"], role=Role.TENANT_ADMIN)
+    assert client_for(admin).patch(url, {"name": "x"}, format="json").status_code == 403
+
+
 def test_pharmacy_admin_cannot_register_a_scheme(world):
     admin = seat(phone="08030000033", tenant=world["tenant"],
                  role=Role.TENANT_ADMIN)
